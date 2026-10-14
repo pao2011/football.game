@@ -17,5 +17,12 @@ function boot() {
   }
 }
 
+// Aplicación instalable (PWA) y juego sin conexión: solo en http(s) de producción (no en Electron ni en desarrollo)
+if ('serviceWorker' in navigator && location.protocol.startsWith('http') && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('Service worker no registrado:', e));
+  });
+}
+
 window.addEventListener('error', (e) => console.error('Error no controlado:', e.message));
 boot();

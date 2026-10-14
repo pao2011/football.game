@@ -15,6 +15,7 @@ export interface GameSettings {
   cameraStyle: CameraStyle;
   cameraZoom: number;
   replays: boolean;
+  touchControls: 'auto' | 'on' | 'off';
   // Audio
   masterVolume: number;
   musicVolume: number;
@@ -43,6 +44,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   cameraStyle: 'broadcast',
   cameraZoom: 1,
   replays: true,
+  touchControls: 'auto',
   masterVolume: 0.8,
   musicVolume: 0.5,
   sfxVolume: 0.9,
@@ -58,9 +60,15 @@ export const DEFAULT_SETTINGS: GameSettings = {
   difficulty: 'pro',
 };
 
+/** Valores por defecto para móviles y tabletas: prioriza la fluidez. */
+function mobileDefaults(): Partial<GameSettings> {
+  const coarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  return coarse ? { quality: 'low', shadows: false, resolutionScale: 0.8, antialias: false, halfMinutes: 3, cameraZoom: 1.2 } : {};
+}
+
 export function loadSettings(): GameSettings {
   const s = loadJSON<Partial<GameSettings>>('settings', {});
-  const merged = { ...structuredClone(DEFAULT_SETTINGS), ...s };
+  const merged = { ...structuredClone(DEFAULT_SETTINGS), ...mobileDefaults(), ...s };
   // completar asignaciones nuevas que no existían en guardados antiguos
   merged.bindings = { ...structuredClone(FIFA_CLASSIC), ...(s.bindings ?? {}) };
   return merged;

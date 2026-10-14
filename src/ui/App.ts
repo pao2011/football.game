@@ -14,6 +14,7 @@ import { Tournament } from '../modes/Tournament';
 import type { Fixture, StandingRow } from '../modes/Competition';
 import { crestSVG, kitSVG } from './Crest';
 import { Screen, el, esc, type Handlers } from './dom';
+import { isTouchDevice } from '../input/TouchControls';
 
 const DIFFS: Difficulty[] = ['amateur', 'pro', 'world', 'legend'];
 const HALF_OPTIONS = [2, 3, 4, 5, 6, 8, 10];
@@ -124,9 +125,19 @@ export class App {
     this.setMenuMode(true);
     const s = this.show(`
       <div class="logo"><div class="l1">FOOTBALL ELITE</div><div class="l2">3D</div></div>
-      <button class="press btn" data-act="go" style="background:none;border:none">PULSA ENTER PARA EMPEZAR</button>
-      <div class="version-tag">v${VERSION}</div>`, { go: () => this.mainMenu() }, null, 'title-screen');
+      <button class="press btn" data-act="go" style="background:none;border:none">${isTouchDevice() ? 'TOCA PARA EMPEZAR' : 'PULSA ENTER PARA EMPEZAR'}</button>
+      <div class="version-tag">v${VERSION}</div>`, { go: () => { this.enterMobileFullscreen(); this.mainMenu(); } }, null, 'title-screen');
     void s;
+  }
+
+  /** En móvil: pantalla completa y orientación horizontal (si el navegador lo permite). */
+  private enterMobileFullscreen() {
+    if (!isTouchDevice()) return;
+    const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
+    try {
+      const p = el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : (el.webkitRequestFullscreen?.(), null);
+      Promise.resolve(p).then(() => (screen.orientation as any)?.lock?.('landscape')).catch(() => {});
+    } catch { /* no soportado */ }
   }
 
   mainMenu() {
@@ -149,7 +160,7 @@ export class App {
           <div class="crest-row">${crests}</div>
         </div>
       </div>
-      <div class="version-tag">v${VERSION} · ↑↓ para navegar · Enter/S para elegir · Esc para volver</div>`, {
+      <div class="version-tag">v${VERSION} · ${isTouchDevice() ? 'Toca una opción para elegir' : '↑↓ para navegar · Enter/S para elegir · Esc para volver'}</div>`, {
       quick: () => this.quickMatchScreen(),
       tournament: () => this.tournamentHub(),
       career: () => this.careerHub(),
@@ -689,6 +700,7 @@ export class App {
           ${toggle('Radar', 'showRadar')}
           ${toggle('Indicadores y ayudas visuales', 'showIndicators')}
           ${toggle('Repeticiones de goles', 'replays')}
+          ${this.stepper('Controles táctiles', ({ auto: 'Automático', on: 'Siempre', off: 'Desactivados' } as const)[st.touchControls], 'touch')}
         </div>
         <div class="panel"><h3>Sonido</h3>
           ${this.stepper('Volumen general', pct(st.masterVolume), 'vmaster')}
@@ -724,6 +736,8 @@ export class App {
       qualPrev: () => { st.quality = cycleArr(Q, st.quality, -1); apply(); },
       qualNext: () => { st.quality = cycleArr(Q, st.quality, 1); apply(); },
       resPrev: () => step('resolutionScale', -1, 0.5, 1, 0.1), resNext: () => step('resolutionScale', 1, 0.5, 1, 0.1),
+      touchPrev: () => { st.touchControls = cycleArr(['auto', 'on', 'off'] as const, st.touchControls, -1); apply(); },
+      touchNext: () => { st.touchControls = cycleArr(['auto', 'on', 'off'] as const, st.touchControls, 1); apply(); },
       camPrev: () => { st.cameraStyle = cycleArr(CAMS, st.cameraStyle, -1); apply(); },
       camNext: () => { st.cameraStyle = cycleArr(CAMS, st.cameraStyle, 1); apply(); },
       zoomPrev: () => step('cameraZoom', -1, 0.7, 1.5, 0.1), zoomNext: () => step('cameraZoom', 1, 0.7, 1.5, 0.1),

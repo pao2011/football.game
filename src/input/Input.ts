@@ -128,6 +128,27 @@ export class Input {
     for (const [t, l] of this.listeners) window.removeEventListener(t, l);
   }
 
+  // --- Controles táctiles (móvil): botones y joystick virtuales ---
+  private virtualHeld = new Set<Action>();
+  private virtualTapped = new Set<Action>();
+  private virtualAxes = { x: 0, y: 0 };
+
+  /** Pulsa o suelta un botón virtual (pantalla táctil). */
+  setVirtual(a: Action, down: boolean) {
+    if (down) {
+      this.virtualHeld.add(a);
+      this.virtualTapped.add(a);
+    } else {
+      this.virtualHeld.delete(a);
+    }
+  }
+
+  /** Joystick virtual: x derecha, y arriba, magnitud 0..1. */
+  setVirtualAxes(x: number, y: number) {
+    this.virtualAxes.x = x;
+    this.virtualAxes.y = y;
+  }
+
   /** Simulación de teclas (pruebas automáticas). */
   setKey(code: string, down: boolean) {
     if (down) { this.keys.add(code); this.tapped.add(code); } else this.keys.delete(code);
@@ -142,6 +163,9 @@ export class Input {
       if (this.bindings[a].some((k) => this.keys.has(k) || this.tapped.has(k))) this.cur.add(a);
     }
     this.tapped.clear();
+    for (const a of this.virtualHeld) this.cur.add(a);
+    for (const a of this.virtualTapped) this.cur.add(a);
+    this.virtualTapped.clear();
     // Mando
     this.padActive = false;
     this.padAxes.x = 0;
@@ -199,6 +223,7 @@ export class Input {
   /** Vector de movimiento en pantalla (x derecha, y arriba), magnitud 0..1. */
   move(): { x: number; y: number } {
     if (this.padActive) return { ...this.padAxes };
+    if (Math.hypot(this.virtualAxes.x, this.virtualAxes.y) > 0.12) return { ...this.virtualAxes };
     let x = 0;
     let y = 0;
     if (this.cur.has('left')) x -= 1;

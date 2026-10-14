@@ -9,6 +9,7 @@ import { MatchView } from '../render/MatchView';
 import { HUD } from '../ui/HUD';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { MatchAudio } from '../audio/MatchAudio';
+import { TouchControls, isTouchDevice } from '../input/TouchControls';
 
 export interface MatchResultInfo {
   match: Match;
@@ -27,11 +28,12 @@ export class MatchRunner {
   readonly hud: HUD;
   readonly controller: HumanController | null;
   readonly audio: MatchAudio;
+  /** Controles táctiles (solo en móvil o si se activan en la configuración). */
+  readonly touch: TouchControls | null;
   private acc = 0;
   private last = 0;
   private raf = 0;
   paused = false;
-  private pauseGuard = 0;
   private finishedNotified = false;
   private fulltimeAt = -1;
   onPause: () => void = () => {};
@@ -69,6 +71,9 @@ export class MatchRunner {
     if (this.controller) this.match.controllers[config.humanTeam as 0 | 1] = this.controller;
     this.hud = new HUD(uiRoot, this.match, this.controller, settings.bindings);
     this.hud.showRadar = settings.showRadar;
+    const wantTouch = settings.touchControls === 'on' || (settings.touchControls === 'auto' && isTouchDevice());
+    this.touch = wantTouch && this.controller ? new TouchControls(uiRoot, input) : null;
+    document.body.classList.toggle('touch', !!this.touch);
     this.audio = new MatchAudio(audioEngine, this.match);
     this.audio.start();
     this.view.director.startIntro();
@@ -94,7 +99,7 @@ export class MatchRunner {
       let steps = 0;
       while (this.acc >= SIM_DT && steps < 8 * Math.max(1, this.timeScale)) {
         this.input.poll(SIM_DT);
-        if (this.input.pressed('pause') && performance.now() > this.pauseGuard) {
+        if (this.input.pressed('pause')) {
           this.pause();
           break;
         }
@@ -123,6 +128,11 @@ export class MatchRunner {
     this.view.update(this.paused ? 0 : dt, preview, showAim);
     this.audio.update(this.view.excitement);
     this.hud.update(dt);
+    if (this.touch && team) {
+      const pt = m.possessionTeam;
+      this.touch.setContext(pt === team.index || pt === -1 || m.gkHolding?.team === team.index);
+      this.touch.setVisible(!this.paused && m.phase !== 'replay' && !m.finished);
+    }
     this.view.render();
 
     if (m.finished && !this.finishedNotified) {
@@ -143,7 +153,9 @@ export class MatchRunner {
 
   resume() {
     this.paused = false;
-    this.pauseGuard = performance.now() + 350; // la misma pulsación de Esc no vuelve a pausar
+    // consumir la pulsación de Esc que cerró el menú para que no vuelva a pausar
+    this.input.poll(0);
+    this.input.poll(0);
     this.last = performance.now();
   }
 
@@ -156,6 +168,8 @@ export class MatchRunner {
     cancelAnimationFrame(this.raf);
     this.audio.stop();
     this.hud.dispose();
+    this.touch?.dispose();
+    document.body.classList.remove('touch');
     this.view.dispose();
   }
 }

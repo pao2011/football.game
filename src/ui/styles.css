@@ -15,7 +15,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--body); overflow: hidden; user-select: none; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--body); overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; touch-action: manipulation; }
 #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 #ui { position: fixed; inset: 0; pointer-events: none; }
 #ui > * { pointer-events: auto; }
@@ -224,4 +224,64 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
   .lineup { grid-template-columns: 1fr; }
   .scoreboard > div { font-size: 16px; padding: 0 8px; }
   .hint { display: none; }
+}
+
+/* ---------- Controles táctiles (móvil) ---------- */
+.touch-controls { position: fixed; inset: 0; pointer-events: none; z-index: 5; touch-action: none; user-select: none; -webkit-user-select: none; }
+.touch-controls > *, .touch-controls .tc-btn { pointer-events: auto; }
+.tc-stick-zone { position: absolute; left: 0; top: 18%; width: 45%; bottom: 0; touch-action: none; }
+.tc-stick { position: absolute; width: 128px; height: 128px; margin: -64px 0 0 -64px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.35); pointer-events: none !important; }
+.tc-knob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; border-radius: 50%; background: rgba(255,255,255,0.55); box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
+.tc-buttons { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); width: 270px; height: 250px; pointer-events: none; }
+.tc-btn { position: absolute; display: flex; align-items: center; justify-content: center; border-radius: 50%; touch-action: none;
+  font-family: var(--display); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; color: #fff; text-align: center;
+  background: rgba(14, 20, 36, 0.62); border: 2px solid rgba(255,255,255,0.45); box-shadow: 0 4px 14px rgba(0,0,0,0.35); transition: transform 0.06s, background 0.06s; }
+.tc-btn.down { transform: scale(0.9); background: rgba(25,230,140,0.55); }
+.tc-btn.def { border-color: rgba(255,120,120,0.7); }
+.tb-shoot { width: 92px; height: 92px; right: 0; bottom: 70px; font-size: 15px; border-color: rgba(255,90,100,0.9); }
+.tb-pass { width: 82px; height: 82px; right: 98px; bottom: 6px; font-size: 14px; border-color: rgba(25,230,140,0.9); }
+.tb-lob { width: 70px; height: 70px; right: 104px; bottom: 100px; border-color: rgba(47,180,255,0.9); }
+.tb-through { width: 66px; height: 66px; right: 14px; bottom: 172px; border-color: rgba(255,207,63,0.9); }
+.tb-sprint { width: 70px; height: 70px; right: 192px; bottom: 0; }
+.tb-finesse { width: 54px; height: 54px; right: 186px; bottom: 92px; font-size: 10px; }
+.tb-switch { width: 58px; height: 58px; right: 92px; bottom: 186px; font-size: 10px; }
+.tc-pause { width: 46px; height: 46px; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); font-size: 16px; }
+
+/* HUD en pantallas táctiles: dejar sitio a los controles */
+body.touch .player-tag { display: none; }
+body.touch .hint { top: 70px; bottom: auto; right: 70px; max-width: 260px; font-size: 11px; line-height: 1.6; }
+body.touch .radar { width: 150px; height: 97px; bottom: 6px; }
+body.touch .powerbar { bottom: 112px; width: 200px; }
+body.touch .scoreboard { top: 10px; left: 10px; height: 32px; }
+body.touch .scoreboard > div { font-size: 15px; padding: 0 8px; }
+
+/* Aviso de orientación */
+.rotate-hint { display: none; }
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate-hint { display: flex; position: fixed; inset: 0; z-index: 50; background: #070b14; color: #fff; flex-direction: column; align-items: center; justify-content: center; gap: 18px; font-family: var(--display); font-size: 22px; letter-spacing: 0.08em; text-align: center; padding: 30px; }
+  .rotate-hint .phone { width: 60px; height: 100px; border: 4px solid #fff; border-radius: 12px; animation: rot 1.8s ease-in-out infinite; }
+}
+@keyframes rot { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+
+/* Pantallas pequeñas (móvil apaisado) */
+@media (max-height: 520px) {
+  .screen { padding: 12px 18px; }
+  .screen-header { margin-bottom: 8px; }
+  .screen-header h2 { font-size: 22px; }
+  .menu-item { padding: 8px 16px; font-size: 16px; }
+  .menu-list { gap: 6px; }
+  .team-picker { padding: 10px; gap: 6px; }
+  .team-picker .crest { width: 70px; height: 70px; }
+  .team-picker .crest svg { width: 70px; height: 70px; }
+  .team-picker .tname { font-size: 20px; }
+  .kits svg { width: 38px; height: 38px; }
+  .vs { font-size: 30px; }
+  .btn { padding: 9px 18px; font-size: 15px; }
+  .row { padding: 5px 0; }
+  .stepper button { width: 38px; height: 38px; }
+  .logo .l1 { font-size: 54px; }
+  .press { margin-top: 4vh; }
+  .modal h2 { font-size: 26px; margin-bottom: 8px; }
+  .result-score .t svg { width: 60px; height: 60px; }
+  .result-score .big { font-size: 54px; }
 }

@@ -55,6 +55,26 @@ Luego elige una de estas opciones:
 
 En Windows, tras `npm run package`, abre `release\FootballElite3D-win32-x64\FootballElite3D.exe`. En Linux, ejecuta `release/FootballElite3D-linux-x64/FootballElite3D`. **F11** alterna la pantalla completa en la aplicación de escritorio.
 
+## 3b. Versión para móvil (Android / iPhone / tabletas)
+
+![Versión móvil](docs/capturas/movil-partido.png)
+
+El mismo juego funciona en móviles con **controles táctiles**, una interfaz adaptada a pantallas pequeñas y valores gráficos ligeros (calidad baja, sin sombras, resolución reducida).
+
+| Forma de instalar | Cómo |
+|---|---|
+| **App instalable (PWA)** | Publica `dist/` en cualquier hosting HTTPS (GitHub Pages, Netlify…), abre la página en Chrome o Safari del móvil y elige *Instalar aplicación* / *Añadir a pantalla de inicio*. Se abre a pantalla completa en horizontal y **funciona sin conexión** después de la primera carga. |
+| **APK de Android** | El flujo de GitHub Actions (`.github/workflows/ci.yml`) compila el APK automáticamente en cada push: descárgalo desde la pestaña *Actions* → ejecución → artefacto **FootballElite3D-android-apk**. Localmente: `npm run android:apk` (requiere Android Studio / Android SDK y JDK 17) o abre la carpeta `android/` en Android Studio. |
+| **Probar en la red local** | `npm run build && npm start` y abre `http://IP-del-ordenador:8080` desde el móvil. |
+
+**Controles táctiles** (estilo de los juegos de fútbol para móvil):
+- **Joystick flotante**: toca y arrastra en cualquier lugar de la mitad izquierda de la pantalla.
+- **Botones a la derecha**: **TIRO**, **PASE**, **ELEVADO**, **AL HUECO**, **SPRINT**, **ROSCA** (tiro colocado) y **CAMBIAR**. Mantén pulsado TIRO o PASE para cargar la potencia.
+- **En defensa los botones cambian solos** a PRESIÓN, ENTRADA, BARRIDA, ARQUERO y AYUDA (presión de un compañero).
+- **Botón ⏸** para pausar.
+- En vertical aparece un aviso para girar el dispositivo.
+- Los controles táctiles se pueden forzar o desactivar en *Configuración → Controles táctiles*.
+
 ## 4. Controles (idénticos al esquema clásico de FIFA)
 
 Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y suéltalo para golpear. Si lo pulsas antes de que llegue el balón, el jugador lo golpea **de primera** (volea o cabezazo si el balón llega alto).
@@ -164,6 +184,7 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Comprobación de tipos (TypeScript estricto) | `npx tsc --noEmit` | ✅ sin errores |
 | Unitarias y de simulación | `npm test` | ✅ **29/29** |
 | Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **14/14** |
+| Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **9/9** |
 | Ejecutable de Linux bajo Xvfb | — | ✅ sin errores (detalle abajo) |
 
 **Unitarias y de simulación (29 pruebas)**
@@ -184,6 +205,8 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 - Configuración y reasignación de teclas.
 - **Ningún error de JavaScript** durante toda la sesión.
 
+**Móvil (9 pruebas)**: valores por defecto para móvil, menús con toques, controles táctiles visibles, saque con PASE, movimiento con el joystick, tiro con potencia con TIRO, pausa táctil, aviso de orientación vertical, PWA (manifiesto, service worker y **carga sin conexión**) y ningún error de JavaScript.
+
 **Ejecutable de Linux**: se lanzó bajo Xvfb, se inició un partido desde el menú sin errores y no hizo ninguna conexión de red externa (se desactivaron las conexiones en segundo plano de Chromium y la descarga de diccionarios).
 
 **Estadísticas medias de la IA** (partidos IA contra IA de 2 × 2 min, dificultad *Clase mundial*): unas 75–110 acciones de pase con un 55–75 % completadas, 3–4 tiros, 0,5–1 goles y algunas faltas, tarjetas y atajadas por partido.
@@ -199,3 +222,4 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 - **Animaciones procedurales**: más simples que una captura de movimiento real; las caras son estilizadas.
 - **IA**: tiende a jugar mucho por el centro del campo y a generar pocas ocasiones claras en dificultades bajas. Es funcional y táctica, pero mejorable.
 - Los ejecutables de Windows se generaron pero **solo se probó el de Linux** (no había Windows disponible).
+- **Móvil**: probado con emulación táctil en Chromium, no en un teléfono físico. El APK **no se pudo compilar en el entorno de desarrollo**: la política de red bloquea la descarga del Android SDK (dl.google.com). Se compila en GitHub Actions o con Android Studio. El rendimiento en teléfonos de gama baja no está medido; si va lento, reduce la escala de resolución.

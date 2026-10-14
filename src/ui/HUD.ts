@@ -194,6 +194,10 @@ export class HUD {
   }
 
   private k(action: keyof Bindings) {
+    if (document.body.classList.contains('touch')) {
+      const t: Partial<Record<keyof Bindings, string>> = { pass: 'PASE', shoot: 'TIRO', lob: 'ELEVADO', through: 'AL HUECO', finesse: 'ROSCA', sprint: 'SPRINT', switch: 'CAMBIAR' };
+      return `<span class="keycap">${t[action] ?? keyLabel(this.bindings[action][0])}</span>`;
+    }
     return `<span class="keycap">${keyLabel(this.bindings[action][0])}</span>`;
   }
 
@@ -213,12 +217,12 @@ export class HUD {
           goalkick: `${this.k('pass')} Pase corto · ${this.k('lob')} Despeje largo`,
           freekick: `${this.k('shoot')} Tiro (+${this.k('finesse')} con rosca) · ${this.k('pass')} Pase · ${this.k('lob')} Centro`,
           indirect: `${this.k('pass')} Pase · ${this.k('lob')} Pase elevado`,
-          penalty: `Apunta con las flechas y mantén ${this.k('shoot')} para la potencia`,
+          penalty: `Apunta con ${document.body.classList.contains('touch') ? 'el joystick' : 'las flechas'} y mantén ${this.k('shoot')} para la potencia`,
           dropball: `${this.k('pass')} Pase`,
         };
         html = `<b>${label.toUpperCase()}</b><br>${map[r.type] ?? ''}`;
       } else if (!mine && r.type === 'penalty') {
-        html = `<b>PENAL EN CONTRA</b><br>Mantén ← / → (o ↑ ↓) para elegir el lado de la estirada del arquero`;
+        html = `<b>PENAL EN CONTRA</b><br>Mantén ${document.body.classList.contains('touch') ? 'el joystick' : '← / → (o ↑ ↓)'} hacia un lado para elegir la estirada del arquero`;
       }
     }
     this.show(this.hint, !!html);
