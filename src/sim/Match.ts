@@ -70,7 +70,12 @@ interface ShootoutState {
   lastResult: boolean | null;
 }
 
+/** Velocidad de reproducción de las repeticiones (cámara lenta). */
+export const REPLAY_SPEED = 0.6;
+
 export interface ReplayFrame {
+  /** Instante del partido (s). */
+  tm: number;
   ball: [number, number, number];
   players: { id: string; x: number; z: number; f: number; s: string; t: number; sp: number; d: number; v: number; ft: number }[];
 }
@@ -121,6 +126,13 @@ export class Match {
   lastGoal: { team: 0 | 1; scorer: Player | null; minute: number; ownGoal: boolean } | null = null;
   /** Último disparo a puerta (para contar atajadas). */
   lastShot: { team: 0 | 1; time: number; onTarget: boolean } | null = null;
+  /** Instante del último disparo (no se borra con las atajadas; sirve para encuadrar la repetición). */
+  private shotKickTime = -1;
+  private goalTime = 0;
+  /** Fotogramas de la repetición del último gol (desde antes del disparo hasta el balón en la red). */
+  replayClip: ReplayFrame[] = [];
+  /** Duración (s) de la fase de repetición: el clip completo a cámara lenta. */
+  replayLength = 6.5;
   finished = false;
   /** Contadores para pruebas automáticas. */
   readonly debug = { kicks: 0, controls: 0, tackles: 0, fouls: 0, offsides: 0, outs: 0, saves: 0, stuckTime: 0 };
@@ -226,10 +238,15 @@ export class Match {
         break;
       case 'goal':
         this.stepCelebration(dt);
-        if (this.phaseTimer > 3.6) this.enterPhase('replay');
+        // se sigue grabando un momento para que la repetición muestre el balón en la red
+        if (this.phaseTimer < 1.4) this.recordReplay(dt);
+        if (this.phaseTimer > 3.6) {
+          this.buildReplayClip();
+          this.enterPhase('replay');
+        }
         break;
       case 'replay':
-        if (this.phaseTimer > 6.5) this.afterGoal();
+        if (this.phaseTimer > this.replayLength) this.afterGoal();
         break;
       case 'halftime':
         this.stepCelebration(dt);
@@ -395,6 +412,12 @@ export class Match {
     let ahead = 0.42 + sp * 0.06;
     let tx = o.pos.x + f.x * ahead + o.vel.x * 0.05;
     let tz = o.pos.z + f.z * ahead + o.vel.z * 0.05;
+    if (o.action.kind === 'kick') {
+      // armando el golpeo en carrera: el balón se acomoda al pie
+      ahead = 0.5;
+      tx = o.pos.x + f.x * ahead;
+      tz = o.pos.z + f.z * ahead;
+    }
     if (o.action.kind === 'skill') {
       // durante el regate el balón sigue el gesto: pegado al pie, arrastrado o hacia la salida
       const a = o.action;
@@ -623,7 +646,8 @@ export class Match {
     if (!header && !handsKick) {
       const d = dist2D(p.pos, this.ball.pos);
       if (restartTaker && d < 3.5) runup = Math.max(0, d - 0.75) / 2.4; // carrera previa en balón parado
-      else if (d > 1.3 || this.ball.pos.y > 1.2) return false;
+      // en conducción (también a toda velocidad) el balón va algo adelantado: se puede golpear igual
+      else if (d > (this.owner === p ? 2.3 : 1.3) || this.ball.pos.y > 1.2) return false;
     }
     const strong = req.kind === 'shoot' || req.kind === 'clear' || req.kind === 'penalty';
     const anim = header ? 'header'
@@ -686,7 +710,7 @@ export class Match {
       else b.pos.set(p.pos.x + f.x * 0.6, 0.7, p.pos.z + f.z * 0.6);
     } else if (req.kind !== 'header') {
       const d = Math.hypot(b.pos.x - p.pos.x, b.pos.z - p.pos.z);
-      if (d > 1.35 || b.pos.y > 1.25) return; // golpeo al aire
+      if (d > (this.owner === p ? 2.3 : 1.35) || b.pos.y > 1.25) return; // golpeo al aire
     }
     if (this.offsideTeam === p.team && this.offsideSet.has(p.id)) {
       this.callOffside(p);
@@ -742,6 +766,7 @@ export class Match {
       const onTarget = this.predictOnTarget(team);
       if (onTarget) team.stats.shotsOnTarget++;
       this.lastShot = { team: p.team as 0 | 1, time: this.time, onTarget };
+      this.shotKickTime = this.time;
     }
     this.intendedReceiver = req.targetId ? this.playersAll.find((x) => x.id === req.targetId) ?? null : null;
     this.emit({ type: 'kick', power: req.power, playerId: p.id, team: p.team, kind: req.kind });
@@ -1100,6 +1125,7 @@ export class Match {
       this.trainingReset();
       return;
     }
+    this.goalTime = this.time;
     this.enterPhase('goal');
     // Celebración
     for (const p of t.active) {
@@ -1506,11 +1532,27 @@ export class Match {
     if (this.replayAcc < 1 / 30) return;
     this.replayAcc = 0;
     const frame: ReplayFrame = {
+      tm: this.time,
       ball: [this.ball.pos.x, this.ball.pos.y, this.ball.pos.z],
       players: this.active.map((p) => ({ id: p.id, x: p.pos.x, z: p.pos.z, f: p.facing, s: p.anim.state, t: p.anim.time, sp: p.anim.speed, d: p.anim.duration, v: p.anim.variant, ft: p.anim.foot })),
     };
     this.replay.push(frame);
     if (this.replay.length > 30 * 8) this.replay.shift();
+  }
+
+  /**
+   * Recorta la repetición: empieza un poco antes del disparo (o de la jugada si no hubo disparo
+   * reciente, p. ej. un gol en contra) y termina con el balón en la red.
+   */
+  private buildReplayClip() {
+    const g = this.goalTime;
+    const shot = this.shotKickTime >= 0 && g - this.shotKickTime < 6 ? this.shotKickTime : -1;
+    let start = shot >= 0 ? shot - 2.2 : g - 3.5;
+    start = Math.max(start, g - 5.5);
+    this.replayClip = this.replay.filter((f) => f.tm >= start);
+    if (this.replayClip.length < 2) this.replayClip = this.replay.slice(-90);
+    const len = this.replayClip.length > 1 ? this.replayClip[this.replayClip.length - 1].tm - this.replayClip[0].tm : 3;
+    this.replayLength = len / REPLAY_SPEED + 0.8;
   }
 
   /** Avanza la simulación en modo rápido (sin render) — usado en pruebas y simulación de partidos de la IA. */

@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import { GOAL_HALF_WIDTH, HALF_LENGTH, HALF_WIDTH, PENALTY_AREA_DEPTH } from '../config/constants';
-import type { Input, Action } from '../input/Input';
+import type { Input, Action, TouchGesture } from '../input/Input';
 import type { Match, TeamController } from '../sim/Match';
 import type { Player } from '../sim/Player';
 import type { Team } from '../sim/Team';
@@ -186,8 +186,8 @@ export class HumanController implements TeamController {
     }
 
     // ----- Movimiento -----
-    // con el joystick virtual al máximo se esprinta solo (no hace falta un tercer dedo)
-    p.sprinting = input.held('sprint') || (!!this.settings.assist && input.virtualMagnitude() > 0.88);
+    // en el móvil se corre solo: con el joystick virtual pasado de la mitad se esprinta (no hay botón de sprint)
+    p.sprinting = input.held('sprint') || input.virtualMagnitude() > 0.6;
     const owner = m.owner === p || m.gkHolding === p;
     const defending = !owner && m.possessionTeam !== team.index && m.possessionTeam !== -1;
     // recepción tras el cambio inmediato: hasta que el jugador mueva el stick hacia otro lado
@@ -250,8 +250,11 @@ export class HumanController implements TeamController {
   // ------------------------------------------------------------------
 
   /** Tipo de disparo según los modificadores pulsados (estilo FIFA) y el gesto táctil sobre TIRO. */
-  private currentStyle(gesture: { x: number; y: number } | null = null): ShotStyle {
+  private currentStyle(g: TouchGesture | null = null): ShotStyle {
     const input = this.input;
+    const gesture = g && Math.hypot(g.dir.x, g.dir.y) > 0.5 ? g.dir : null;
+    // botones táctiles de tipo de tiro: los que se mantienen ahora o los que se usaron en este disparo
+    const t = g?.style ?? input.touchShot;
     const q = input.held('switch');
     const sh = input.held('finesse');
     const st: ShotStyle = {
@@ -260,7 +263,11 @@ export class HumanController implements TeamController {
       power: (q && sh) || input.held('jockey'), // Q + Shift (LB + RB) o Ctrl/LT/POTENTE = potente
       low: false,
     };
-    if (gesture && Math.hypot(gesture.x, gesture.y) > 0.5) {
+    if (t.chip) st.chip = true;
+    if (t.finesse) st.finesse = true;
+    if (t.power) st.power = true;
+    if (t.low) st.low = true;
+    if (gesture) {
       const up = gesture.y > 0.38;
       const down = gesture.y < -0.38;
       const side = Math.abs(gesture.x) > 0.38;
@@ -348,7 +355,7 @@ export class HumanController implements TeamController {
         if (a === 'pass' && this.cancelPassRelease) { this.cancelPassRelease = false; continue; }
         let power = clamp(rel / this.settings.powerBarTime, 0.08, 1);
         const dir = hasStick ? stick.clone().normalize() : p.forward();
-        const style = a === 'shoot' ? this.currentStyle(input.takeGesture('shot')?.dir ?? null) : undefined;
+        const style = a === 'shoot' ? this.currentStyle(input.takeGesture('shot')) : undefined;
         // modo asistido: un toque rápido (sin cargar la barra) golpea con potencia automática
         if (this.settings.assist && rel < 0.28) power = this.autoPower(m, team, p, a, style);
         this.lastCharge = { action: a, value: power, at: m.time, label: style ? shotStyleName(style) : undefined };
@@ -624,7 +631,7 @@ export class HumanController implements TeamController {
         const z = clamp(lat.z * 3.4 + (mv.x === 0 && mv.y === 0 ? 0 : 0), -(GOAL_HALF_WIDTH - 0.3), GOAL_HALF_WIDTH - 0.3);
         const y = 0.2 + power * power * 2.1;
         // Q (LB) + tiro en el penal: vaselina a lo Panenka
-        const st = this.currentStyle(input.takeGesture('shot')?.dir ?? null);
+        const st = this.currentStyle(input.takeGesture('shot'));
         m.requestKick(p, buildShot(m, p, z, y, power, st.chip ? { ...NORMAL_SHOT, chip: true } : false, 1, 'penalty'));
         return;
       }
@@ -638,7 +645,7 @@ export class HumanController implements TeamController {
         return;
       }
       if (a === 'shoot') {
-        const st = this.currentStyle(input.takeGesture('shot')?.dir ?? null);
+        const st = this.currentStyle(input.takeGesture('shot'));
         const { z, y } = this.shotAim(m, team, p, dir, power, st.finesse);
         const near = dist2D(p.pos, goal) < 35;
         if (near) {

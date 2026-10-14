@@ -92,6 +92,15 @@ export interface TouchGesture {
   dir: { x: number; y: number };
   /** Toque doble en la zona de regates (ruleta). */
   tap?: boolean;
+  /** Tipo de tiro elegido con los botones táctiles de tiro (ROSCA, VASELINA, RASO, POTENTE). */
+  style?: TouchShotStyle;
+}
+
+export interface TouchShotStyle {
+  chip: boolean;
+  finesse: boolean;
+  power: boolean;
+  low: boolean;
 }
 
 export interface InputSettings {
@@ -153,6 +162,8 @@ export class Input {
 
   // --- Gestos táctiles (deslizamientos) ---
   private gestures: TouchGesture[] = [];
+  /** Botones táctiles de tipo de tiro pulsados ahora mismo (para la ayuda visual mientras se carga). */
+  readonly touchShot: TouchShotStyle = { chip: false, finesse: false, power: false, low: false };
 
   /** Encola un gesto (regate deslizando, tipo de tiro deslizando sobre TIRO). */
   pushGesture(g: TouchGesture) {
@@ -162,8 +173,14 @@ export class Input {
 
   /** Extrae el gesto pendiente más antiguo de un tipo. */
   takeGesture(type: TouchGesture['type']): TouchGesture | null {
-    const i = this.gestures.findIndex((g) => g.type === type);
-    return i >= 0 ? this.gestures.splice(i, 1)[0] : null;
+    // el más reciente de ese tipo; los anteriores sin usar (p. ej. un ROBAR en defensa) se descartan
+    let found: TouchGesture | null = null;
+    this.gestures = this.gestures.filter((g) => {
+      if (g.type !== type) return true;
+      found = g;
+      return false;
+    });
+    return found;
   }
 
   // --- Controles táctiles (móvil): botones y joystick virtuales ---

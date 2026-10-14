@@ -173,6 +173,45 @@ describe('Modo asistido (móvil): tiros', () => {
     expect(Math.abs(cross!.z)).toBeLessThan(GOAL_HALF_WIDTH);
   });
 
+  const STYLES = [
+    { name: 'ROSCA', st: { finesse: true } },
+    { name: 'VASELINA', st: { chip: true } },
+    { name: 'RASO', st: { low: true } },
+    { name: 'POTENTE', st: { power: true } },
+    { name: 'POTENTE + RASO', st: { power: true, low: true } },
+    { name: 'ROSCA + VASELINA', st: { finesse: true, chip: true } },
+  ] as const;
+  for (const { name, st } of STYLES) {
+    it(`botón táctil ${name}: un toque dispara con ese tipo de tiro`, () => {
+      const { m, team, input, step } = setup(true);
+      const p = giveBall(m, team, HALF_LENGTH - 20, 0);
+      // lo que hace TouchControls: marca el tipo mientras se mantiene y lo envía con el gesto al soltar
+      const style = { chip: false, finesse: false, power: false, low: false, ...st };
+      Object.assign(input.touchShot, style);
+      input.setVirtual('shoot', true);
+      step(1);
+      input.pushGesture({ type: 'shot', dir: { x: 0, y: 0 }, style: { ...style } });
+      Object.assign(input.touchShot, { chip: false, finesse: false, power: false, low: false });
+      input.setVirtual('shoot', false);
+      step(2);
+      const k = p.action.kick!;
+      expect(k.kind === 'shoot' || k.kind === 'finesse' || k.kind === 'chip').toBe(true);
+      for (const key of ['chip', 'finesse', 'power', 'low'] as const) expect(!!k.style?.[key]).toBe(style[key]);
+    });
+  }
+
+  it('un gesto de tiro sin usar (p. ej. ROBAR en defensa) no contamina el siguiente disparo', () => {
+    const { m, team, input, step } = setup(true);
+    input.pushGesture({ type: 'shot', dir: { x: 0, y: 1 }, style: { chip: true, finesse: false, power: false, low: false } });
+    const p = giveBall(m, team, HALF_LENGTH - 20, 0);
+    input.setVirtual('shoot', true);
+    step(1);
+    input.pushGesture({ type: 'shot', dir: { x: 0, y: 0 }, style: { chip: false, finesse: false, power: false, low: false } });
+    input.setVirtual('shoot', false);
+    step(2);
+    expect(p.action.kick?.style?.chip ?? false).toBe(false);
+  });
+
   it('al cargar el tiro se calcula el punto del arco para la ayuda visual', () => {
     const { m, team, hc, input, step } = setup(true);
     giveBall(m, team, HALF_LENGTH - 20, 0);
@@ -198,18 +237,45 @@ describe('Modo asistido (móvil): tiros', () => {
 });
 
 describe('Modo asistido (móvil): movimiento y defensa', () => {
-  it('con el joystick al máximo esprinta solo; sin asistencia no', () => {
-    const a = setup(true);
-    const pa = giveBall(a.m, a.team, 0, 0);
-    a.input.setVirtualAxes(1, 0);
-    a.step(3);
-    expect(pa.sprinting).toBe(true);
+  it('en el móvil se corre solo: con el joystick virtual a fondo esprinta (con o sin asistencia)', () => {
+    for (const assist of [true, false]) {
+      const a = setup(assist);
+      const pa = giveBall(a.m, a.team, 0, 0);
+      a.input.setVirtualAxes(1, 0);
+      a.step(3);
+      expect(pa.sprinting).toBe(true);
+    }
+  });
+
+  it('con el teclado no se esprinta sin la tecla de sprint', () => {
     const b = setup(false);
     const pb = giveBall(b.m, b.team, 0, 0);
-    b.input.setVirtualAxes(1, 0);
+    b.input.setKey('ArrowRight', true);
     b.step(3);
     expect(pb.sprinting).toBe(false);
   });
+
+  for (const [key, kind] of [['KeyS', 'pass'], ['KeyD', 'shoot'], ['KeyA', 'lob']] as const) {
+    it(`se puede ${kind === 'pass' ? 'pasar' : kind === 'shoot' ? 'tirar' : 'centrar'} corriendo a toda velocidad`, () => {
+      for (const assist of [true, false]) {
+        const s = setup(assist);
+        const p = giveBall(s.m, s.team, kind === 'shoot' ? HALF_LENGTH - 34 : -10, 0);
+        s.team.players[8].pos.set(p.pos.x + 22, 0, 8);
+        s.input.setVirtualAxes(1, 0);
+        s.step(80);
+        expect(p.sprinting).toBe(true);
+        expect(Math.hypot(p.vel.x, p.vel.z)).toBeGreaterThan(7);
+        s.tap(key);
+        let kicked: string | null = null;
+        for (let i = 0; i < 40 && !kicked; i++) {
+          s.step(1);
+          const lt = s.m.lastTouch;
+          if (lt && lt.player === p && lt.deliberate) kicked = lt.kind;
+        }
+        expect(kicked === kind || (kind === 'lob' && kicked === 'cross')).toBe(true);
+      }
+    });
+  }
 
   it('con el joystick a medias camina sin esprintar', () => {
     const a = setup(true);

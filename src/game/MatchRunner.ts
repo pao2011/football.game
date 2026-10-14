@@ -90,7 +90,7 @@ export class MatchRunner {
       const shown = loadJSON<number>('touch-tip', 0);
       if (shown < 3) {
         saveJSON('touch-tip', shown + 1);
-        this.pendingTip = '<b>TOCA</b> PASE o TIRO = automático · <b>MANTÉN</b> = potencia · <b>DESLIZA</b> sobre TIRO = tipo de tiro';
+        this.pendingTip = '<b>TOCA</b> PASE o TIRO = automático · <b>MANTÉN</b> = potencia · <b>ROSCA / VASELINA / RASO / POTENTE</b> = tipo de tiro (mantén uno y toca otro para combinar)';
       }
     }
     this.audio = new MatchAudio(audioEngine, this.match);
