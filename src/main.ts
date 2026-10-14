@@ -24,5 +24,8 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http') && impo
   });
 }
 
+// Aviso de orientación (solo móviles en vertical): se puede ignorar
+document.getElementById('rotate-skip')?.addEventListener('click', () => document.documentElement.classList.add('allow-portrait'));
+
 window.addEventListener('error', (e) => console.error('Error no controlado:', e.message));
 boot();

@@ -17,7 +17,7 @@ const css = readFileSync(join(dist, 'assets', cssFile), 'utf8') + '\n:root{color
 
 const body = `<canvas id="game"></canvas>
 <div id="ui"></div>
-<div class="rotate-hint"><div class="phone"></div>GIRA EL DISPOSITIVO<br><small style="font-size:14px;opacity:.7">Football Elite 3D se juega en horizontal</small></div>
+<div class="rotate-hint"><div class="phone"></div>GIRA EL DISPOSITIVO<br><small style="font-size:14px;opacity:.7">Football Elite 3D se juega en horizontal</small><button type="button" id="rotate-skip">JUGAR IGUALMENTE</button></div>
 <script type="module">
 ${js}
 </script>`;

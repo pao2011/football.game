@@ -184,6 +184,9 @@ await check('Aviso para girar el dispositivo en vertical', async () => {
   await page.waitForTimeout(300);
   assert(await page.isVisible('.rotate-hint'), 'aviso no visible');
   await page.screenshot({ path: join(OUT, 'm-portrait.png') });
+  // el aviso no bloquea: se puede jugar igualmente
+  await page.tap('#rotate-skip');
+  assert(!(await page.isVisible('.rotate-hint')), 'el aviso no se pudo cerrar');
   await page.setViewportSize({ width: 844, height: 390 });
 });
 
