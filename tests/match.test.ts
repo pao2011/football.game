@@ -239,7 +239,7 @@ describe('Control humano (teclado estilo FIFA)', () => {
     const { m, input, step, hc } = setup();
     step(60);
     input.setKey('KeyS', true); step(1); input.setKey('KeyS', false);
-    step(10);
+    step(90); // carrera previa y saque inicial completados
     m.phase = 'play';
     const team = m.teams[0];
     const p = team.players[9];
