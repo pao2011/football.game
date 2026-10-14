@@ -67,10 +67,33 @@ El mismo juego funciona en móviles con **controles táctiles**, una interfaz ad
 | **APK de Android** | El flujo de GitHub Actions (`.github/workflows/ci.yml`) compila el APK automáticamente en cada push: descárgalo desde la pestaña *Actions* → ejecución → artefacto **FootballElite3D-android-apk**. Localmente: `npm run android:apk` (requiere Android Studio / Android SDK y JDK 17) o abre la carpeta `android/` en Android Studio. |
 | **Probar en la red local** | `npm run build && npm start` y abre `http://IP-del-ordenador:8080` desde el móvil. |
 
+![Botones de defensa](docs/capturas/movil-defensa.png)
+
 **Controles táctiles** (estilo de los juegos de fútbol para móvil):
 - **Joystick flotante**: toca y arrastra en cualquier lugar de la mitad izquierda de la pantalla.
-- **Botones a la derecha**: **TIRO**, **PASE**, **ELEVADO**, **AL HUECO**, **SPRINT**, **ROSCA** (tiro colocado) y **CAMBIAR**. Mantén pulsado TIRO o PASE para cargar la potencia.
-- **En defensa los botones cambian solos** a PRESIÓN, ENTRADA, BARRIDA, ARQUERO y AYUDA (presión de un compañero).
+- **Indicador ATAQUE / DEFENSA**: arriba a la derecha muestra el modo actual.
+- **ATAQUE** (botones verdes): **TIRO**, **PASE**, **ELEVADO** (centro), **AL HUECO**, **SPRINT** y **POTENTE**. Mantén pulsado TIRO o PASE para cargar la potencia.
+- **Tipos de tiro con gestos sobre TIRO**:
+  - deslizar ↑ = vaselina;
+  - deslizar ↓ = raso;
+  - deslizar ← → = rosca;
+  - en diagonal se combinan (↖ vaselina con efecto, ↙ rosca rasa);
+  - mantener POTENTE mientras tiras = tiro potente, combinable con todos.
+- **Regates**: desliza el dedo en la zona libre de la derecha:
+  - ↑ sombrero;
+  - ↓ arrastre;
+  - ← → bicicleta;
+  - en diagonal, elástico;
+  - doble toque = ruleta.
+- **Amago de tiro**: mientras cargas TIRO, toca PASE.
+- **DEFENSA** (botones rojos y naranjas, con iconos propios, en un juego de botones aparte):
+  - **ROBAR** (entrada);
+  - **PRESIONAR** (mantener);
+  - **BARRIDA**;
+  - **CAMBIAR** jugador (destacado en azul);
+  - **SPRINT**;
+  - **AYUDA** (un segundo defensor presiona);
+  - **ARQUERO** (sale del arco).
 - **Botón ⏸** para pausar.
 - En vertical aparece un aviso para girar el dispositivo.
 - Los controles táctiles se pueden forzar o desactivar en *Configuración → Controles táctiles*.
@@ -88,7 +111,13 @@ Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y 
 | Pase elevado · **Centro** (desde la banda) | **A** | X / □ |
 | Pase al hueco | **W** | Y / △ |
 | Tiro colocado con rosca | **Shift + D** | RB + B / R1 + ○ |
-| Cambiar de jugador | **Q** (con dirección: al compañero en esa dirección) | LB / L1 |
+| Cambiar de jugador (sin balón) | **Q** (con dirección: al compañero en esa dirección) | LB / L1 |
+| **Tiro raso** | **D** + **D** (doble toque) | B + B |
+| **Vaselina** | **Q + D** | LB + B |
+| **Tiro potente** | **Q + Shift + D** o **Ctrl + D** | LB + RB + B o LT + B |
+| Combinaciones | rosca rasa (Shift+D, D) · potente raso (Ctrl+D, D) · rosca potente (Ctrl+Shift+D) · vaselina potente (Ctrl+Q+D) | ídem |
+| **Amago de tiro** | mientras cargas **D**, pulsa **S** | B y luego A |
+| **Regates** | **J / L** bicicleta · **Shift + J / L** elástico · **I** sombrero · **K** arrastre · **R** ruleta (o teclado numérico 4/6/8/2/5) | stick derecho · R3 ruleta |
 | Contener (jockey) | **Ctrl** o **C** | LT / L2 |
 | Pausa | **Esc** o **P** | Start / Options |
 | **En defensa**: presionar al portador | mantener **S** | mantener A / ✕ |
@@ -128,6 +157,10 @@ Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y 
 - Modelos humanos 3D con esqueleto de 21 huesos y malla con piel, generados por código.
 - Variedad de tonos de piel, peinados, alturas y botas; equipaciones con 5 patrones (liso, degradado, rayas, aros y banda); nombre y dorsal en la espalda y número en el pantalón; arqueros con guantes y manga larga.
 - Animaciones: caminar, trotar y esprintar sin deslizamiento de pies (IK), conducción, pase, centro, disparo, cabezazo con salto, entrada, barrida, caídas y levantarse, control, saque de banda, estiradas del arquero, blocaje, saques del arquero, celebraciones (4 variantes) y lamentos, con transiciones suaves.
+
+**Tiros y regates**
+- **Tiros**: normal, raso, con efecto (rosca), vaselina y potente, combinables entre sí. Cada uno tiene su propia física: la vaselina supera al arquero y baja bajo el travesaño; el raso va pegado al césped; el potente es más rápido, menos preciso y tarda más en armarse. La IA también los usa, por ejemplo la vaselina cuando el arquero está adelantado.
+- **Regates**: bicicleta, elástico, sombrero, arrastre, ruleta y amago de tiro, cada uno con su animación. Si el regate sale bien, el defensor queda descolocado y no puede entrar durante un momento. El éxito depende del control del atacante contra la defensa del rival. La ruleta protege el balón con el cuerpo, y con poco control puedes perder el balón en los regates difíciles. La IA también regatea cuando la presionan, más cuanto mayor es la dificultad.
 
 **IA táctica**
 - Formaciones 4-3-3, 4-4-2, 4-2-3-1 y 3-5-2 que se desplazan y comprimen según el balón y la fase (ataque, defensa o transición).
@@ -182,12 +215,15 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Prueba | Comando | Resultado |
 |---|---|---|
 | Comprobación de tipos (TypeScript estricto) | `npx tsc --noEmit` | ✅ sin errores |
-| Unitarias y de simulación | `npm test` | ✅ **29/29** |
+| Unitarias y de simulación | `npm test` | ✅ **45/45** |
 | Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **14/14** |
-| Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **9/9** |
+| Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **12/12** |
 | Ejecutable de Linux bajo Xvfb | — | ✅ sin errores (detalle abajo) |
 
-**Unitarias y de simulación (29 pruebas)**
+**Unitarias y de simulación (45 pruebas)**
+- **Tipos de tiro (5)**: la vaselina supera los 3 m y entra bajo el travesaño; el raso no pasa de 0,8 m; el potente es más rápido y menos preciso; la rosca lleva efecto; y las combinaciones funcionan.
+- **Regates (4)**: los 6 regates se ejecutan con su animación y control del balón; la bicicleta cambia de dirección; un regate puede superar al defensor (que entonces no puede entrar) pero no siempre; y la ruleta protege el balón.
+- **Controles de tiros y regates (7)**: Q+D vaselina, Q+Shift+D o Ctrl+D potente, doble toque raso, D y luego S amago, I/K/J/L/R regates, gestos táctiles, y Q con balón como modificador (no cambia de jugador).
 - **Física del balón**: gravedad, rebotes y reposo; los botes pierden energía; distancia de los pases rasos; el balón nunca se acelera solo; puntería de los tiros; curva con efecto; rebote en el poste sin atravesarlo; la red retiene el balón; la red lateral impide entrar desde fuera.
 - **Partidos IA contra IA**: con varias semillas se completan sin bloqueos, sin coordenadas inválidas, con pases, tiros y posesión de ambos equipos; también se marcan goles y la eliminatoria pasa por la prórroga y los penales hasta tener ganador.
 - **Reglas**: detección de goles, saque de banda y córner correctos, fuera de juego, falta y tarjeta por barrida trasera sin tocar el balón, y entrada limpia que no es falta.
@@ -205,7 +241,7 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 - Configuración y reasignación de teclas.
 - **Ningún error de JavaScript** durante toda la sesión.
 
-**Móvil (9 pruebas)**: valores por defecto para móvil, menús con toques, controles táctiles visibles, saque con PASE, movimiento con el joystick, tiro con potencia con TIRO, pausa táctil, aviso de orientación vertical, PWA (manifiesto, service worker y **carga sin conexión**) y ningún error de JavaScript.
+**Móvil (12 pruebas)**: valores por defecto para móvil, menús con toques, controles táctiles visibles, saque con PASE, movimiento con el joystick, tiro con potencia con TIRO, vaselina deslizando sobre TIRO, regate deslizando en la zona libre, botones propios de defensa con indicador DEFENSA y CAMBIAR funcionando, pausa táctil, aviso de orientación vertical, PWA (manifiesto, service worker y **carga sin conexión**) y ningún error de JavaScript.
 
 **Ejecutable de Linux**: se lanzó bajo Xvfb, se inició un partido desde el menú sin errores y no hizo ninguna conexión de red externa (se desactivaron las conexiones en segundo plano de Chromium y la descarga de diccionarios).
 

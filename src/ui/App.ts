@@ -778,11 +778,31 @@ export class App {
           <div class="row"><label>Pase elevado / Centro · Barrida</label><span class="keycap">X / □</span></div>
           <div class="row"><label>Pase al hueco · Salida del arquero</label><span class="keycap">Y / △</span></div>
           <div class="row"><label>Sprint</label><span class="keycap">RT / R2</span></div>
-          <div class="row"><label>Cambiar jugador</label><span class="keycap">LB / L1</span></div>
-          <div class="row"><label>Tiro colocado · Presión compañero</label><span class="keycap">RB / R1</span></div>
-          <div class="row"><label>Contener (jockey)</label><span class="keycap">LT / L2</span></div>
+          <div class="row"><label>Cambiar jugador (sin balón)</label><span class="keycap">LB / L1</span></div>
+          <div class="row"><label>Presión de compañero (defensa)</label><span class="keycap">RB / R1</span></div>
+          <div class="row"><label>Contener (defensa)</label><span class="keycap">LT / L2</span></div>
+          <div class="row"><label>Regates</label><span>Stick derecho · R3 ruleta</span></div>
           <div class="row"><label>Pausa</label><span class="keycap">Start / Options</span></div>
           <p class="muted">Mantén pulsado el botón de pase o tiro para cargar la barra de potencia y suéltalo para golpear. Pulsar antes de recibir el balón realiza un golpeo de primera.</p>
+        </div>
+        <div class="panel"><h3>Tipos de tiro (combinables)</h3>
+          <div class="row"><label>Tiro normal</label><span><span class="keycap">D</span> · B / ○</span></div>
+          <div class="row"><label>Tiro raso</label><span><span class="keycap">D</span> + <span class="keycap">D</span> (doble toque)</span></div>
+          <div class="row"><label>Con efecto (rosca)</label><span><span class="keycap">Shift</span>+<span class="keycap">D</span> · RB + B</span></div>
+          <div class="row"><label>Vaselina</label><span><span class="keycap">Q</span>+<span class="keycap">D</span> · LB + B</span></div>
+          <div class="row"><label>Potente</label><span><span class="keycap">Q</span>+<span class="keycap">Shift</span>+<span class="keycap">D</span> o <span class="keycap">Ctrl</span>+<span class="keycap">D</span> · LT + B</span></div>
+          <div class="row"><label>Rosca rasa · Potente raso</label><span>añade el doble toque</span></div>
+          <div class="row"><label>Rosca potente · Vaselina potente</label><span>añade <span class="keycap">Ctrl</span> / LT</span></div>
+          <div class="row"><label>Amago de tiro</label><span>mientras cargas <span class="keycap">D</span>, pulsa <span class="keycap">S</span></span></div>
+          <p class="muted">En móvil: desliza sobre TIRO ↑ vaselina, ↓ raso, ← → rosca (en diagonal se combinan) y mantén POTENTE para el tiro potente.</p>
+        </div>
+        <div class="panel"><h3>Regates (como FIFA)</h3>
+          <div class="row"><label>Bicicleta (hacia ese lado)</label><span><span class="keycap">J</span>/<span class="keycap">L</span> · stick der. ← →</span></div>
+          <div class="row"><label>Elástico</label><span><span class="keycap">Shift</span>+<span class="keycap">J</span>/<span class="keycap">L</span> · RB + stick der. ← →</span></div>
+          <div class="row"><label>Sombrero</label><span><span class="keycap">I</span> · stick der. ↑</span></div>
+          <div class="row"><label>Arrastre (freno y giro)</label><span><span class="keycap">K</span> · stick der. ↓</span></div>
+          <div class="row"><label>Ruleta</label><span><span class="keycap">R</span> · R3</span></div>
+          <p class="muted">Las direcciones son relativas al jugador (↑ = hacia donde corre). En móvil: desliza el dedo en la zona libre de la derecha (en diagonal = elástico) y doble toque = ruleta. Un regate bien hecho deja atrás al defensor; con poco control puedes perder el balón.</p>
         </div>
       </div></div>
       <div class="screen-footer"><button class="btn primary" data-act="back">Volver</button></div>`;

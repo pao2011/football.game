@@ -131,6 +131,11 @@ export class HUD {
       case 'offside':
         this.showToast(`Fuera de juego · ${teamName(e.team)}`, '#ff4d5e');
         break;
+      case 'skill':
+        // regates: nombre del regate del jugador humano, y aviso cuando supera al rival
+        if (e.kind === 'beat') this.showToast(`¡${e.text}! Rival superado`, '#19e68c', 1.2);
+        else if (m.teams[e.team ?? 0]?.human) this.showToast(e.text ?? '', '#2fb4ff', 0.9);
+        break;
       case 'nearMiss':
         this.showToast('¡Cerca!', '#ffffff', 1.2);
         break;
@@ -173,7 +178,7 @@ export class HUD {
     this.show(this.power, !!ch && m.phase !== 'replay');
     if (ch) {
       this.powerFill.style.width = `${Math.round(ch.value * 100)}%`;
-      this.setText(this.powerLbl, ACTION_NAMES[ch.action] ?? '');
+      this.setText(this.powerLbl, ch.label ?? ACTION_NAMES[ch.action] ?? '');
     }
     // Ayuda contextual en balón parado
     this.updateHint();

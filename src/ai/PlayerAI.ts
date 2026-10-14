@@ -7,7 +7,8 @@ import type { Match } from '../sim/Match';
 import type { Player } from '../sim/Player';
 import type { Team } from '../sim/Team';
 import { angleDiff, clamp, dist2D } from '../util/math';
-import { buildClearance, buildGroundPass, buildLob, buildShot } from './Actions';
+import { buildClearance, buildGroundPass, buildLob, buildShot, NORMAL_SHOT } from './Actions';
+import type { SkillKind } from '../sim/types';
 import { getBallPrediction, PRED_DT, PRED_STEPS, timeToReach } from './Predict';
 import { offsideLineU } from '../sim/Rules';
 import { groundPassVelocity } from '../sim/Kicks';
@@ -240,7 +241,8 @@ function headerDecision(m: Match, p: Player, team: Team) {
 
 interface Option {
   score: number;
-  run: () => void;
+  /** Ejecuta la opción; devolver false indica que no fue posible (se prueba la siguiente). */
+  run: () => boolean | void;
   label: string;
 }
 
@@ -453,17 +455,26 @@ function decide(m: Match, p: Player, team: Team, opponents: Player[]) {
     options.push({ score: 0.55, label: 'clear', run: () => m.requestKick(p, buildClearance(m, p, err)) });
   }
 
+  // --- Regate ante un rival encima ---
+  const ctrlAttr = p.data.attrs.control;
+  if (pressure < 2.6 && ctrlAttr >= 62) {
+    const skillRate = team.human ? 0.25 : m.diff.skillUse;
+    options.push({
+      score: (0.55 + (ctrlAttr - 62) / 70 + (pu > HALF_LENGTH - 35 ? 0.15 : 0)) * skillRate + (m.rng.next() - 0.5) * 0.2,
+      label: 'skill',
+      run: () => aiSkill(m, p, team, opponents),
+    });
+  }
+
   // Elegir con ruido según dificultad
   const noise = team.human ? 0.2 : m.diff.decisionNoise;
-  let best: Option | null = null;
-  let bestScore = -Infinity;
   if (debugOptions.length < 40) debugOptions.push(options.slice().sort((a, b) => b.score - a.score).slice(0, 5).map((o) => `${o.label}:${o.score.toFixed(2)}`).join(" "));
-  for (const o of options) {
-    const s = o.score + (m.rng.next() - 0.5) * noise;
-    if (s > bestScore) { bestScore = s; best = o; }
+  const ranked = options.map((o) => ({ o, s: o.score + (m.rng.next() - 0.5) * noise })).sort((a, b) => b.s - a.s);
+  for (const { o } of ranked) {
+    if (o.run() === false) continue;
+    decisionLog[o.label] = (decisionLog[o.label] ?? 0) + 1;
+    return;
   }
-  if (best) decisionLog[best.label] = (decisionLog[best.label] ?? 0) + 1;
-  best?.run();
 }
 
 function aiShoot(m: Match, p: Player, team: Team, err: number) {
@@ -473,10 +484,48 @@ function aiShoot(m: Match, p: Player, team: Team, err: number) {
   const side = gkZ > p.pos.z * 0.3 ? -1 : 1;
   const z = side * (GOAL_HALF_WIDTH - 0.5 - m.rng.next() * 0.8);
   const d = dist2D(p.pos, team.attackGoal);
-  const finesse = d > 14 && d < 24 && m.rng.next() < 0.45;
   const y = 0.25 + m.rng.next() * (d > 16 ? 1.5 : 0.9);
   const power = clamp(0.55 + d / 50 + m.rng.next() * 0.15, 0.5, 0.92);
-  m.requestKick(p, buildShot(m, p, z, y, power, finesse, err));
+  // Elección del tipo de disparo según la situación (mismas opciones que el jugador humano)
+  const gkOff = gk ? Math.abs(gk.pos.x - team.attackGoal.x) : 0;
+  const shooting = p.data.attrs.shooting;
+  const r = m.rng.next();
+  const style = { ...NORMAL_SHOT };
+  if (gkOff > 4.5 && d > 11 && d < 32 && r < 0.75) style.chip = true; // arquero adelantado: vaselina
+  else if (d > 14 && d < 24 && r < 0.4) style.finesse = true; // rosca al palo largo
+  else if (d < 14 && r < 0.45) style.low = true; // cerca: raso y cruzado
+  else if (d > 18 && shooting > 78 && r < 0.65) style.power = true; // lejos con buen disparo: potente
+  if (style.finesse && r < 0.12) style.low = true;
+  if (style.low && shooting > 80 && r < 0.2) style.power = true;
+  m.requestKick(p, buildShot(m, p, z, y, power, style, err));
+}
+
+/** Regate de la IA ante un rival encima (misma mecánica que el humano). */
+function aiSkill(m: Match, p: Player, team: Team, opponents: Player[]): boolean {
+  const fwd = p.forward();
+  const left = new Vector3(fwd.z, 0, -fwd.x);
+  let threat: Player | null = null;
+  let td = 2.8;
+  for (const o of opponents) {
+    if (o.isGK || o.stunnedUntil > m.time) continue;
+    const dx = o.pos.x - p.pos.x;
+    const dz = o.pos.z - p.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d < td && (dx * fwd.x + dz * fwd.z) / Math.max(d, 0.01) > 0.2) { threat = o; td = d; }
+  }
+  if (!threat) return false;
+  const lat = (threat.pos.x - p.pos.x) * left.x + (threat.pos.z - p.pos.z) * left.z;
+  const away: 1 | -1 = lat > 0 ? -1 : 1; // salir hacia el lado contrario al rival
+  const ctrl = p.data.attrs.control;
+  const nearLine = Math.abs(p.pos.z) > HALF_WIDTH - 5;
+  const r = m.rng.next();
+  let kind: SkillKind;
+  if (nearLine && r < 0.5) kind = 'dragback';
+  else if (td < 1.6 && r < 0.4) kind = 'roulette';
+  else if (ctrl > 82 && r < 0.18) kind = 'rainbow';
+  else if (ctrl > 75 && r < 0.45) kind = 'elastico';
+  else kind = 'stepover';
+  return m.requestSkill(p, kind, away);
 }
 
 // ----------------------------------------------------------------------

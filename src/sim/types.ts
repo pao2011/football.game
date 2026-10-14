@@ -25,7 +25,8 @@ export type AnimState =
   | 'gk_kick' // despeje / saque de volea
   | 'celebrate' // celebración
   | 'dejected' // reacción a gol en contra / error
-  | 'trap'; // control del balón
+  | 'trap' // control del balón
+  | 'skill'; // regate (variant: ver SKILL_KINDS)
 
 export interface AnimInfo {
   state: AnimState;
@@ -55,6 +56,7 @@ export type MatchEventType =
   | 'out'
   | 'tackle'
   | 'nearMiss'
+  | 'skill' // regate (kind: tipo; text: nombre; power 1 = superó al rival)
   | 'phase';
 
 export interface MatchEvent {
@@ -67,3 +69,16 @@ export interface MatchEvent {
   x?: number;
   z?: number;
 }
+
+/** Regates disponibles. El índice es la variante de animación. */
+export const SKILL_KINDS = ['stepover', 'roulette', 'elastico', 'rainbow', 'dragback', 'fakeshot'] as const;
+export type SkillKind = (typeof SKILL_KINDS)[number];
+
+export const SKILL_NAMES: Record<SkillKind, string> = {
+  stepover: 'Bicicleta',
+  roulette: 'Ruleta',
+  elastico: 'Elástico',
+  rainbow: 'Sombrero',
+  dragback: 'Arrastre',
+  fakeshot: 'Amago de tiro',
+};

@@ -780,9 +780,128 @@ function dejected(c: Ctx, p: Pose) {
   }
 }
 
+// ------------------------------------------------------------------ regates (pie derecho, salida hacia +X)
+// variantes: 0 bicicleta, 1 ruleta, 2 elástico, 3 sombrero, 4 arrastre, 5 amago de tiro
+function skillMove(c: Ctx, p: Pose) {
+  const n = c.n;
+  const v = c.variant;
+  const plant = () => {
+    _pole.set(0.1, 0, 1);
+    solveLeg(p, 0, V(0.15, ANKLE_H, 0.02), _pole, footQ(0, 10));
+  };
+  const arms = (open: number) => {
+    p.rot(BONE.uarmL, -10, 0, 18 + 40 * open);
+    p.rot(BONE.uarmR, -10, 0, -18 - 40 * open);
+    p.rot(BONE.farmL, -30);
+    p.rot(BONE.farmR, -30);
+  };
+  if (v === 5) {
+    // amago: armado del disparo que se corta y sale en conducción lateral
+    if (n < 0.55) {
+      const cc = { ...c, n: (n / 0.55) * 0.36 };
+      kick(cc, p, 'shoot');
+    } else {
+      const w = sstep(0.55, 1, n);
+      kick({ ...c, n: 0.36 }, p, 'shoot');
+      _tmpPose.reset();
+      trap({ ...c, n: 0.35 + 0.5 * w, variant: 0 }, _tmpPose);
+      p.blend(_tmpPose, w);
+    }
+    return;
+  }
+  if (v === 0) {
+    // bicicleta: la pierna derecha rodea el balón de dentro hacia fuera y el cuerpo amaga hacia la derecha
+    const e = sstep(0, 0.2, n) * (1 - sstep(0.8, 1, n));
+    const sweep = tr(n, [0, 25, 0.25, 30, 0.45, -10, 0.6, -38, 0.8, -20, 1, 0]);
+    p.hips.set(-0.06 * tr(n, [0, 0, 0.45, 1, 0.65, 0.4, 1, -0.6]), 0.93 - 0.03 * e, 0);
+    p.rot(BONE.hips, 6 * e, -sweep * 0.25, -8 * tr(n, [0, 0, 0.5, 1, 0.8, -0.5, 1, 0]));
+    p.rot(BONE.thighR, tr(n, [0, -5, 0.2, -38, 0.5, -42, 0.7, -20, 1, 0]), sweep, -10 * e);
+    p.rot(BONE.shinR, tr(n, [0, 15, 0.25, 55, 0.5, 40, 0.75, 25, 1, 10]));
+    p.rot(BONE.footR, 15 * e);
+    plant();
+    p.rot(BONE.spine, 8 * e, sweep * 0.15, 6 * e);
+    p.rot(BONE.chest, 5 * e, 0, 0);
+    p.rot(BONE.neck, 10 * e, 0, 0);
+    p.rot(BONE.head, 14 * e, 0, 0);
+    arms(e);
+    return;
+  }
+  if (v === 2) {
+    // elástico: empuje con el exterior hacia fuera y latigazo con el interior hacia dentro
+    const e = sstep(0, 0.15, n) * (1 - sstep(0.75, 1, n));
+    const yaw = tr(n, [0, 0, 0.25, -32, 0.42, -30, 0.55, 34, 0.75, 20, 1, 0]);
+    p.hips.set(0.05 * tr(n, [0, 0, 0.3, -1, 0.55, 1, 1, 0.3]), 0.93 - 0.03 * e, 0);
+    p.rot(BONE.hips, 8 * e, yaw * 0.3, tr(n, [0, 0, 0.3, 6, 0.55, -8, 1, 0]));
+    p.rot(BONE.thighR, -28 * e, yaw, -6 * e);
+    p.rot(BONE.shinR, 30 + 20 * e);
+    p.rot(BONE.footR, 10 * e, 0, tr(n, [0, 0, 0.3, -20, 0.55, 22, 1, 0]));
+    plant();
+    p.rot(BONE.spine, 10 * e, yaw * 0.2, 0);
+    p.rot(BONE.chest, 6 * e, 0, 0);
+    p.rot(BONE.head, 16 * e, 0, 0);
+    arms(e * 1.2);
+    return;
+  }
+  if (v === 1) {
+    // ruleta: el pie derecho pisa y arrastra, luego el izquierdo (el giro lo hace la simulación)
+    const e = sstep(0, 0.15, n) * (1 - sstep(0.85, 1, n));
+    const r = sstep(0.05, 0.45, n) * (1 - sstep(0.45, 0.6, n));
+    const l = sstep(0.45, 0.65, n) * (1 - sstep(0.75, 0.95, n));
+    p.hips.set(0, 0.9 - 0.04 * e, 0);
+    p.rot(BONE.hips, 10 * e, 0, 0);
+    p.rot(BONE.thighR, -30 * r, -10 * r, -12 * r);
+    p.rot(BONE.shinR, 20 + 25 * r);
+    p.rot(BONE.footR, -20 * r);
+    if (l > 0.01) {
+      p.rot(BONE.thighL, -30 * l, 10 * l, 12 * l);
+      p.rot(BONE.shinL, 20 + 25 * l);
+      p.rot(BONE.footL, -20 * l);
+      _pole.set(-0.1, 0, 1);
+      solveLeg(p, 1, V(-0.15, ANKLE_H, 0.0), _pole, footQ(0, -10));
+    } else {
+      plant();
+    }
+    p.rot(BONE.spine, 12 * e, 0, 0);
+    p.rot(BONE.chest, 6 * e, 0, 0);
+    p.rot(BONE.head, 18 * e, 0, 0);
+    arms(e * 1.3);
+    return;
+  }
+  if (v === 3) {
+    // sombrero: el talón derecho levanta el balón por detrás y por encima de la cabeza
+    const e = sstep(0, 0.15, n) * (1 - sstep(0.8, 1, n));
+    const hop = Math.sin(clamp((n - 0.3) / 0.35, 0, 1) * Math.PI);
+    p.hips.set(0, 0.92 + 0.07 * hop, 0);
+    p.rot(BONE.hips, -6 * hop + 6 * e, 0, 0);
+    p.rot(BONE.thighR, tr(n, [0, 0, 0.2, -18, 0.32, 18, 0.45, 35, 0.7, 10, 1, 0]), 0, -6 * e);
+    p.rot(BONE.shinR, tr(n, [0, 15, 0.2, 35, 0.32, 70, 0.45, 135, 0.65, 70, 1, 15]));
+    p.rot(BONE.footR, tr(n, [0, 0, 0.32, 30, 0.45, 50, 1, 0]));
+    plant();
+    p.rot(BONE.spine, 6 * e - 8 * hop, 0, 0);
+    p.rot(BONE.chest, 4 * e, 0, 0);
+    p.rot(BONE.neck, -10 * hop, 0, 0);
+    p.rot(BONE.uarmL, -20 * hop, 0, 25 + 35 * e);
+    p.rot(BONE.uarmR, -20 * hop, 0, -25 - 35 * e);
+    p.rot(BONE.farmL, -40);
+    p.rot(BONE.farmR, -40);
+    return;
+  }
+  // 4 arrastre: planta del pie sobre el balón y tirón hacia atrás
+  const e = sstep(0, 0.15, n) * (1 - sstep(0.8, 1, n));
+  p.hips.set(0, 0.93 - 0.03 * e, -0.03 * e);
+  p.rot(BONE.hips, -4 * e, tr(n, [0, 0, 0.5, 0, 0.75, 25, 1, 40]), 0);
+  p.rot(BONE.thighR, tr(n, [0, 0, 0.2, -38, 0.4, -30, 0.6, 12, 0.8, 5, 1, 0]), 0, -4 * e);
+  p.rot(BONE.shinR, tr(n, [0, 15, 0.2, 25, 0.4, 30, 0.6, 45, 1, 15]));
+  p.rot(BONE.footR, tr(n, [0, 0, 0.2, -25, 0.5, -20, 0.7, 10, 1, 0]));
+  plant();
+  p.rot(BONE.spine, -4 * e, 0, 0);
+  p.rot(BONE.head, 12 * e, 0, 0);
+  arms(e * 0.8);
+}
+
 // ------------------------------------------------------------------ despacho
 const DEFAULT_DUR: Partial<Record<AnimState, number>> = {
-  pass: 0.45, lob: 0.55, shoot: 0.55, header: 0.75, tackle: 0.6, slide: 1.0, getup: 1.2, throwin: 1.0, trap: 0.4,
+  pass: 0.45, lob: 0.55, shoot: 0.55, header: 0.75, tackle: 0.6, slide: 1.0, getup: 1.2, throwin: 1.0, trap: 0.4, skill: 0.6,
   gk_dive_left: 1.1, gk_dive_right: 1.1, gk_catch: 0.5, gk_throw: 0.8, gk_kick: 0.85,
 };
 
@@ -814,6 +933,10 @@ function evalState(c: Ctx, p: Pose) {
       return;
     case 'trap':
       trap(c, p);
+      if (!right) p.mirror();
+      return;
+    case 'skill':
+      skillMove(c, p);
       if (!right) p.mirror();
       return;
     case 'header':
@@ -866,7 +989,7 @@ function blendTime(from: AnimState | '', to: AnimState) {
   if (to === 'gk_dive_left' || to === 'gk_dive_right') return 0.1;
   if (from === 'slide' && to === 'fallen') return 0.3;
   if (from === 'fallen' || to === 'fallen') return 0.25;
-  if (to === 'pass' || to === 'shoot' || to === 'lob' || to === 'trap') return 0.12;
+  if (to === 'pass' || to === 'shoot' || to === 'lob' || to === 'trap' || to === 'skill') return 0.12;
   if (to === 'celebrate' || to === 'dejected' || to === 'throwin') return 0.3;
   if ((from === 'locomotion' || from === 'dribble') && (to === 'locomotion' || to === 'dribble')) return 0.25;
   return 0.16;
