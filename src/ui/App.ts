@@ -801,7 +801,7 @@ export class App {
           <div class="row"><label>Rosca rasa · Potente raso</label><span>añade el doble toque</span></div>
           <div class="row"><label>Rosca potente · Vaselina potente</label><span>añade <span class="keycap">Ctrl</span> / LT</span></div>
           <div class="row"><label>Amago de tiro</label><span>mientras cargas <span class="keycap">D</span>, pulsa <span class="keycap">S</span></span></div>
-          <p class="muted">En móvil: desliza sobre TIRO ↑ vaselina, ↓ raso, ← → rosca (en diagonal se combinan) y mantén POTENTE para el tiro potente.</p>
+          <p class="muted">En móvil: botones ROSCA, VASELINA, RASO y POTENTE (disparan directamente); mantén uno y toca otro para combinarlos. No hay botón de sprint: con el joystick pasado de la mitad se corre solo.</p>
         </div>
         <div class="panel"><h3>Modo asistido (móvil)</h3>
           <div class="row"><label>Pase / Tiro con un toque</label><span>potencia automática</span></div>

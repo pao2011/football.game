@@ -141,6 +141,52 @@ await check('Deslizar sobre TIRO hacia arriba = vaselina', async () => {
   await waitFor(() => window.__chip === true, 15000);
 });
 
+await check('Botones de tipo de tiro (ROSCA, VASELINA, RASO, POTENTE) y combinación; sin botón de sprint', async () => {
+  assert(!(await page.$('.touch-controls [data-action=sprint]')), 'sigue habiendo botón de sprint');
+  const setupShot = () => page.evaluate(() => {
+    const m = window.__runner.match;
+    if (m.phase === 'replay') m.skipReplay();
+    m.restart = null; m.phase = 'play';
+    const t = m.teams[0]; const p = t.players[9]; t.controlled = p; const g = t.attackDir;
+    for (const q of m.teams[1].active) if (!q.isGK) q.pos.set(-g * 20, 0, q.pos.z);
+    p.pos.set(g * 34, 0, 0); p.vel.set(0, 0, 0); p.facing = g > 0 ? Math.PI / 2 : -Math.PI / 2; p.clearAction();
+    m.ball.pos.set(g * 34.5, 0.11, 0); m.ball.vel.set(0, 0, 0); m.owner = p; window.__st = null;
+    if (!m.__wrapped) {
+      const orig = m.requestKick.bind(m);
+      m.requestKick = (pl, req) => { if (pl === m.teams[0].controlled && req.style) window.__st = { ...req.style }; return orig(pl, req); };
+      m.__wrapped = true;
+    }
+  });
+  const press = async (sel, id, down) => {
+    const c = await center(sel);
+    await page.evaluate(({ x, y, id, down }) => {
+      if (down) document.elementFromPoint(x, y).dispatchEvent(new PointerEvent('pointerdown', { pointerId: id, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' }));
+      else window.dispatchEvent(new PointerEvent('pointerup', { pointerId: id, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' }));
+    }, { ...c, id, down });
+  };
+  // un toque en ROSCA
+  await setupShot();
+  await page.waitForTimeout(300);
+  await press('.tb-s1', 31, true);
+  await page.waitForTimeout(80);
+  await press('.tb-s1', 31, false);
+  await waitFor(() => window.__st !== null, 15000);
+  let st = await page.evaluate(() => window.__st);
+  assert(st.finesse && !st.chip && !st.low, 'ROSCA no dio un tiro con efecto: ' + JSON.stringify(st));
+  // mantener POTENTE y tocar RASO = potente y raso
+  await setupShot();
+  await page.waitForTimeout(300);
+  await press('.tb-s4', 32, true);
+  await press('.tb-s3', 33, true);
+  await page.waitForTimeout(80);
+  await press('.tb-s3', 33, false);
+  await press('.tb-s4', 32, false);
+  await waitFor(() => window.__st !== null, 15000);
+  st = await page.evaluate(() => window.__st);
+  assert(st.power && st.low && !st.chip, 'la combinación POTENTE + RASO no funcionó: ' + JSON.stringify(st));
+  await page.screenshot({ path: join(OUT, 'm-shot-buttons.png') });
+});
+
 await check('Deslizar en la zona de regates = regate (con su nombre en pantalla)', async () => {
   await page.evaluate(() => {
     const m = window.__runner.match; m.phase = 'play';

@@ -170,9 +170,10 @@ export class CameraDirector {
   }
 
   /** Cámara de repetición: varios planos cinematográficos alrededor del balón. */
-  updateReplay(ballPos: THREE.Vector3, goalX: number, t: number) {
-    const shot = Math.floor(t / 2.6) % 3;
-    if (shot !== this.replayShot) this.replayShot = shot;
+  updateReplay(ballPos: THREE.Vector3, goalX: number, t: number, left = Infinity) {
+    const shot = left < 2.6 ? 0 : (Math.floor(t / 2.6) % 2) + 1;
+    const cut = shot !== this.replayShot || t < 0.05;
+    this.replayShot = shot;
     const s = Math.sign(goalX) || 1;
     const look = ballPos.clone();
     look.y = Math.max(0.6, look.y);
@@ -191,7 +192,9 @@ export class CameraDirector {
       pos.set(ballPos.x + Math.cos(a) * 14, 9, ballPos.z + Math.sin(a) * 14);
       this.camera.fov = 45;
     }
-    this.camera.position.lerp(pos, 0.15);
+    // cambio de plano: corte directo (sin barrido por el estadio)
+    if (cut) this.camera.position.copy(pos);
+    else this.camera.position.lerp(pos, 0.15);
     this.camera.updateProjectionMatrix();
     this.camera.lookAt(look);
     this.look.copy(look);

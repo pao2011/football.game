@@ -235,7 +235,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tc-stick { position: absolute; width: 128px; height: 128px; margin: -64px 0 0 -64px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.35); pointer-events: none; }
 .tc-knob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; border-radius: 50%; background: rgba(255,255,255,0.55); box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
 
-.tc-buttons { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: max(8px, env(safe-area-inset-bottom)); width: 260px; height: 215px; pointer-events: none; transition: opacity 0.18s, transform 0.18s; transform-origin: bottom right; scale: var(--tcs, 1); }
+.tc-buttons { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: max(8px, env(safe-area-inset-bottom)); width: 260px; height: 220px; pointer-events: none; transition: opacity 0.18s, transform 0.18s; transform-origin: bottom right; scale: var(--tcs, 1); }
 .mode-attack .tc-defense, .mode-defense .tc-attack { opacity: 0; transform: scale(0.92); pointer-events: none; }
 .mode-attack .tc-defense .tc-btn, .mode-defense .tc-attack .tc-btn { pointer-events: none; }
 /* tamaño de los botones según la altura de la pantalla */
@@ -261,8 +261,13 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tb-a2 b { font-size: 13px; }
 .tb-a3 { width: 62px; height: 62px; right: 92px; bottom: 88px; border-color: #2fb4ff !important; }
 .tb-a4 { width: 62px; height: 62px; right: 14px; bottom: 108px; border-color: #ffcf3f !important; }
-.tb-a5 { width: 60px; height: 60px; right: 196px; bottom: 0; border-color: rgba(255,255,255,0.85) !important; }
-.tb-a6 { width: 52px; height: 52px; right: 172px; bottom: 76px; border-color: #ff9f3f !important; }
+/* Tipos de tiro: arco exterior; cada uno dispara directamente, mantener uno y tocar otro los combina */
+.tc-attack .tc-shot { background: rgba(100, 16, 26, 0.5); border-color: rgba(255,120,120,0.9); }
+.tc-shot b { font-size: 8.5px; }
+.tb-s1 { width: 52px; height: 52px; right: 82px; bottom: 164px; border-color: #ff7ad9 !important; }
+.tb-s2 { width: 52px; height: 52px; right: 162px; bottom: 138px; border-color: #7ad7ff !important; }
+.tb-s3 { width: 52px; height: 52px; right: 172px; bottom: 74px; border-color: #b6ff7a !important; }
+.tb-s4 { width: 58px; height: 58px; right: 194px; bottom: 0; border-color: #ff9f3f !important; }
 .tb-a1.swipe-up { box-shadow: 0 -10px 18px rgba(255,255,255,0.5); }
 .tb-a1.swipe-down { box-shadow: 0 10px 18px rgba(255,255,255,0.5); }
 .tb-a1.swipe-side { box-shadow: 0 0 22px rgba(47,180,255,0.9); }
@@ -275,10 +280,9 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .tb-d2 b { font-size: 11px; }
 .tb-d3 { width: 62px; height: 62px; right: 92px; bottom: 88px; }
 .tb-d4 { width: 66px; height: 66px; right: 12px; bottom: 106px; background: rgba(20, 50, 110, 0.66) !important; border-color: #4fa3ff !important; }
-.tb-d5 { width: 60px; height: 60px; right: 196px; bottom: 0; border-color: rgba(255,255,255,0.85) !important; }
-.tb-d6 { width: 52px; height: 52px; right: 172px; bottom: 76px; }
-.tb-d7 { width: 50px; height: 50px; right: 168px; bottom: 140px; border-color: #e3c16f !important; }
-.tb-d7 b, .tb-d6 b, .tb-a6 b { font-size: 8.5px; }
+.tb-d6 { width: 58px; height: 58px; right: 194px; bottom: 0; }
+.tb-d7 { width: 52px; height: 52px; right: 172px; bottom: 74px; border-color: #e3c16f !important; }
+.tb-d7 b, .tb-d6 b { font-size: 8.5px; }
 
 .tc-mode { position: absolute; right: max(70px, env(safe-area-inset-right)); top: max(14px, env(safe-area-inset-top)); font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: 0.12em; padding: 6px 12px; border-radius: 14px; background: rgba(10,14,24,0.8); }
 .tc-mode .a { color: #19e68c; }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Match, ReplayFrame } from '../sim/Match';
+import { REPLAY_SPEED, type Match, type ReplayFrame } from '../sim/Match';
 import type { Player } from '../sim/Player';
 import type { StadiumData } from '../data/types';
 import type { AnimInfo, AnimState } from '../sim/types';
@@ -51,6 +51,7 @@ export class MatchView {
   private receiverRing: THREE.Mesh;
   private replayFrames: ReplayFrame[] = [];
   private replayStart = 0;
+  private replayIdx = 0;
   private replayGoalX = HALF_LENGTH;
   private lastPhase = '';
   private tmpAnim: AnimInfo = { state: 'idle', time: 0, duration: 0, speed: 0, variant: 0, foot: 1 };
@@ -115,8 +116,9 @@ export class MatchView {
   update(dt: number, receiverPreview: Player | null, aimDir: THREE.Vector3 | null, aimTarget: THREE.Vector3 | null = null) {
     const m = this.match;
     if (m.phase === 'replay' && this.lastPhase !== 'replay') {
-      this.replayFrames = m.replay.slice(-30 * 6);
+      this.replayFrames = m.replayClip.length > 1 ? m.replayClip : m.replay.slice(-30 * 6);
       this.replayStart = m.time;
+      this.replayIdx = 0;
       this.replayGoalX = Math.sign(m.ball.pos.x) * HALF_LENGTH;
     }
     this.lastPhase = m.phase;
@@ -188,9 +190,13 @@ export class MatchView {
   private updateReplay(dt: number) {
     const m = this.match;
     const t = m.time - this.replayStart;
-    // reproducción a cámara lenta (0.6x)
+    // reproducción a cámara lenta, siguiendo el instante grabado de cada fotograma
     const frames = this.replayFrames;
-    const idx = Math.min(frames.length - 1, Math.floor(t * 30 * 0.6));
+    const target = frames[0].tm + t * REPLAY_SPEED;
+    let idx = this.replayIdx;
+    if (idx >= frames.length || frames[idx].tm > target) idx = 0;
+    while (idx < frames.length - 1 && frames[idx + 1].tm <= target) idx++;
+    this.replayIdx = idx;
     const f = frames[idx];
     const seen = new Set<string>();
     for (const pf of f.players) {
@@ -207,17 +213,20 @@ export class MatchView {
       a.speed = pf.sp;
       a.variant = pf.v;
       a.foot = pf.ft;
-      model.update(a, dt * 0.6);
+      model.update(a, dt * REPLAY_SPEED);
     }
     for (const [id, model] of this.models) if (!seen.has(id)) model.root.visible = false;
     const prev = frames[Math.max(0, idx - 1)];
     const bp = new THREE.Vector3(...f.ball);
-    const vel = new THREE.Vector3((f.ball[0] - prev.ball[0]) * 30, 0, (f.ball[2] - prev.ball[2]) * 30);
-    this.ball.update(bp, vel, 0, dt * 0.6);
+    const fdt = Math.max(1 / 60, f.tm - prev.tm);
+    const vel = new THREE.Vector3((f.ball[0] - prev.ball[0]) / fdt, 0, (f.ball[2] - prev.ball[2]) / fdt);
+    this.ball.update(bp, vel, 0, dt * REPLAY_SPEED);
     for (const ind of this.indicators) if (ind) ind.group.visible = false;
     this.receiverRing.visible = false;
     this.aimLine.visible = false;
-    this.director.updateReplay(bp, this.replayGoalX, t);
+    // tiempo de clip que queda: el final (el balón entrando) se ve siempre desde detrás del arco
+    const left = (frames[frames.length - 1].tm - target) / REPLAY_SPEED;
+    this.director.updateReplay(bp, this.replayGoalX, t, left);
   }
 
   render() {
