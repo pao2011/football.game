@@ -92,6 +92,28 @@ describe('Modo asistido (móvil): pases', () => {
     void p;
   });
 
+  it('al pulsar PASE el control pasa al receptor antes de que el balón salga', () => {
+    const { m, team, p, A, tap, step } = passScene(true);
+    tap('KeyS');
+    step(1);
+    expect(m.owner).toBe(p); // el pasador todavía arma el golpeo
+    expect(team.controlled).toBe(A);
+  });
+
+  it('el receptor no se aleja aunque el stick siga apuntando hacia el pase', () => {
+    const { m, A, input, tap, step } = passScene(true);
+    input.setVirtualAxes(18 / 20.6, -10 / 20.6); // hacia A (z de pantalla invertida)
+    step(1);
+    tap('KeyS');
+    step(30);
+    expect(A.pos.x).toBeLessThan(18.3);
+    // al cambiar el stick a otra dirección, vuelve a obedecer
+    input.setVirtualAxes(0, 1);
+    step(10);
+    expect(A.vel.z).toBeLessThan(-1);
+    void m;
+  });
+
   it('con el stick manda hacia esa dirección aunque haya otro más libre', () => {
     const { p, input, tap, step, B } = passScene(true);
     input.setVirtualAxes(-1, 0); // hacia atrás (−x)

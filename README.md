@@ -96,9 +96,11 @@ El mismo juego funciona en móviles con **controles táctiles**, una interfaz ad
   - **AYUDA** (un segundo defensor presiona);
   - **ARQUERO** (sale del arco).
 - **Botón ⏸** para pausar.
+- **Disposición en arco** alrededor del botón principal (TIRO / ROBAR) en la esquina, botones translúcidos con área táctil ampliada y tamaño adaptado a la altura de la pantalla; el radar va arriba para no tapar el campo.
 
 **Modo asistido (por defecto en móvil; *Configuración → Asistencia total*)**:
 - **Pase asistido**: un toque en PASE elige al compañero más conveniente (libre, con línea de pase limpia, adelantado y nunca en fuera de juego); si mueves el joystick, manda en esa dirección. La ayuda visual marca al receptor antes de pasar.
+- **Cambio inmediato al receptor** (en todos los modos): al pulsar pase controlas al que lo recibe en el mismo momento, y este va a buscar el balón aunque sigas con el stick hacia el pase; en cuanto mueves el stick hacia otro lado, te obedece.
 - **Toque rápido = potencia automática** en PASE, ELEVADO, AL HUECO y TIRO; mantener sigue siendo la barra de potencia manual.
 - **Tiros dirigidos**: un imán lleva a puerta los tiros que iban un poco fuera del palo, se evita la zona del arquero, y una línea punteada muestra a dónde irá el disparo.
 - **Sprint automático** con el joystick al máximo.
@@ -188,7 +190,7 @@ Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y 
 **Presentación**
 - Estadio de tres anillos con techo, más de 20.000 espectadores animados que reaccionan al juego, vallas LED con marcas ficticias, banquillos, túnel, videomarcadores y banderines.
 - Césped con franjas de corte, desgaste y detalle; sombras dinámicas e iluminación de día, atardecer y noche.
-- Cámaras de transmisión (tres estilos y zoom), barrido de presentación, plano de celebración, **repeticiones en cámara lenta** con planos cinematográficos (se omiten con S o D) y cámara de penales.
+- Cámaras de transmisión (tres estilos y zoom), barrido de presentación con **presentación del partido** (estadio, escudos, nombres y formaciones; se salta con cualquier botón o un toque), encuadre que mantiene el balón y tu jugador dentro de la zona visible (también junto a la banda cercana y por encima de los botones táctiles), plano de celebración, **repeticiones en cámara lenta** con planos cinematográficos (se omiten con S o D) y cámara de penales.
 - HUD con marcador, reloj, tiempo añadido, radar, jugador controlado con su resistencia, barra de potencia, avisos (gol, falta, tarjeta, fuera de juego), ayudas en balón parado e indicadores del receptor y la dirección de pase.
 - Audio procedural original: golpeos, botes, postes, red, silbato, ambiente de estadio, gritos de gol, "¡uy!", aplausos, abucheos, sonidos de interfaz y música de menú.
 - Menús animados navegables con ratón, teclado y mando; pantalla de carga con consejos; pausa; configuración de gráficos (calidad baja/media/alta, sombras, escala de resolución, antialiasing, radar, ayudas, repeticiones), sonido y jugabilidad. Todo se guarda en el almacenamiento local.
@@ -223,19 +225,19 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Prueba | Comando | Resultado |
 |---|---|---|
 | Comprobación de tipos (TypeScript estricto) | `npx tsc --noEmit` | ✅ sin errores |
-| Unitarias y de simulación | `npm test` | ✅ **59/59** |
+| Unitarias y de simulación | `npm test` | ✅ **61/61** |
 | Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **14/14** |
-| Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **13/13** |
+| Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **15/15** |
 | Ejecutable de Linux bajo Xvfb | — | ✅ sin errores (detalle abajo) |
 
-**Unitarias y de simulación (59 pruebas)**
+**Unitarias y de simulación (61 pruebas)**
 - **Tipos de tiro (5)**: la vaselina supera los 3 m y entra bajo el travesaño; el raso no pasa de 0,8 m; el potente es más rápido y menos preciso; la rosca lleva efecto; y las combinaciones funcionan.
 - **Regates (4)**: los 6 regates se ejecutan con su animación y control del balón; la bicicleta cambia de dirección; un regate puede superar al defensor (que entonces no puede entrar) pero no siempre; y la ruleta protege el balón.
 - **Controles de tiros y regates (7)**: Q+D vaselina, Q+Shift+D o Ctrl+D potente, doble toque raso, D y luego S amago, I/K/J/L/R regates, gestos táctiles, y Q con balón como modificador (no cambia de jugador).
 - **Física del balón**: gravedad, rebotes y reposo; los botes pierden energía; distancia de los pases rasos; el balón nunca se acelera solo; puntería de los tiros; curva con efecto; rebote en el poste sin atravesarlo; la red retiene el balón; la red lateral impide entrar desde fuera.
 - **Partidos IA contra IA**: con varias semillas se completan sin bloqueos, sin coordenadas inválidas, con pases, tiros y posesión de ambos equipos; también se marcan goles y la eliminatoria pasa por la prórroga y los penales hasta tener ganador.
 - **Reglas**: detección de goles, saque de banda y córner correctos, fuera de juego, falta y tarjeta por barrida trasera sin tocar el balón, y entrada limpia que no es falta.
-- **Modo asistido (14)**: elección del receptor, pase que llega, potencia automática, imán de puntería y evitación del arquero, sprint automático y orientación en defensa.
+- **Modo asistido (16)**: elección del receptor, cambio inmediato al receptor (y que no se aleje con el stick), pase que llega, potencia automática, imán de puntería y evitación del arquero, sprint automático y orientación en defensa.
 - **Control humano**: saque inicial con S y cambio al receptor, movimiento y sprint, y carga de la barra de potencia y disparo con D.
 - **Modos**: calendario de todos contra todos, puntos, torneo completo hasta el campeón (también si el usuario queda eliminado) y temporada de carrera de 14 jornadas con su progresión.
 
@@ -250,7 +252,7 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 - Configuración y reasignación de teclas.
 - **Ningún error de JavaScript** durante toda la sesión.
 
-**Móvil (13 pruebas)**: valores por defecto para móvil, menús con toques, controles táctiles visibles, saque con PASE, movimiento con el joystick, tiro con potencia con TIRO, vaselina deslizando sobre TIRO, regate deslizando en la zona libre, botones propios de defensa con indicador DEFENSA y CAMBIAR funcionando, pausa táctil, aviso de orientación vertical, PWA (manifiesto, service worker y **carga sin conexión**) pase y tiro asistidos con toque rápido, y ningún error de JavaScript.
+**Móvil (15 pruebas)**: valores por defecto para móvil, menús con toques, controles táctiles visibles, saque con PASE, movimiento con el joystick, tiro con potencia con TIRO, vaselina deslizando sobre TIRO, regate deslizando en la zona libre, botones propios de defensa con indicador DEFENSA y CAMBIAR funcionando, pausa táctil, aviso de orientación vertical, PWA (manifiesto, service worker y **carga sin conexión**), pase y tiro asistidos con toque rápido, presentación del partido (se salta con un toque), cámara que mantiene visible el juego junto a la banda inferior, y ningún error de JavaScript.
 
 **Ejecutable de Linux**: se lanzó bajo Xvfb, se inició un partido desde el menú sin errores y no hizo ninguna conexión de red externa (se desactivaron las conexiones en segundo plano de Chromium y la descarga de diccionarios).
 

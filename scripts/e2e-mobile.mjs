@@ -59,6 +59,17 @@ await check('Menús navegables con toques', async () => {
   await page.waitForSelector('[data-act=play]');
   await page.screenshot({ path: join(OUT, 'm-quick.png') });
   await page.tap('[data-act=play]');
+});
+
+await check('Presentación del partido (escudos, estadio) y se salta con un toque', async () => {
+  await page.waitForSelector('.match-intro .mi-team', { state: 'visible', timeout: 60000 });
+  const txt = await page.textContent('.match-intro');
+  assert(/VS/.test(txt) && /espectadores/.test(txt), 'presentación incompleta');
+  assert(await page.evaluate(() => window.__runner.match.time === 0), 'el partido avanzó durante la presentación');
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: join(OUT, 'm-intro.png') });
+  if (await page.$('.match-intro')) await page.touchscreen.tap(420, 200);
+  await page.waitForSelector('.match-intro', { state: 'detached', timeout: 5000 });
   await waitFor(() => window.__runner && window.__runner.match.time > 0.3);
 });
 
@@ -174,7 +185,9 @@ await check('Modo asistido: un toque rápido en PASE elige al compañero libre y
   assert(assist === true, 'el modo asistido no está activo en móvil');
   await page.evaluate(() => {
     window.__runner.timeScale = 1; // velocidad real: un toque de 60 ms dura 60 ms de partido
-    const m = window.__runner.match; m.phase = 'play';
+    const m = window.__runner.match;
+    if (m.phase === 'replay') m.skipReplay();
+    m.restart = null; m.phase = 'play';
     const t = m.teams[0]; const g = t.attackDir; const p = t.players[9]; t.controlled = p;
     for (const q of m.active) q.pos.set(-g * 40, 0, 38);
     const gk = m.teams[1].goalkeeper; gk.pos.set(g * 52, 0, 0);
@@ -199,6 +212,7 @@ await check('Modo asistido: un toque rápido en PASE elige al compañero libre y
   const pass = await page.evaluate(() => window.__kick);
   assert(pass.kind === 'pass', 'no hubo pase');
   assert(pass.target === await page.evaluate(() => window.__rcv), 'el pase asistido no fue al compañero libre');
+  await waitFor(() => window.__runner.match.teams[0].controlled?.id === window.__rcv, 3000);
   // tiro: devolver el balón y tocar TIRO una vez
   await page.evaluate(() => {
     const m = window.__runner.match; const t = m.teams[0]; const g = t.attackDir; const p = t.players[9]; t.controlled = p;
@@ -209,6 +223,30 @@ await check('Modo asistido: un toque rápido en PASE elige al compañero libre y
   await waitFor(() => window.__kick !== null, 15000);
   const shot = await page.evaluate(() => window.__kick);
   assert(shot.kind === 'shoot' && shot.speed > 22, 'el toque rápido no dio potencia automática: ' + JSON.stringify(shot));
+});
+
+await check('Cámara: el balón y el jugador junto a la banda inferior no quedan fuera de la pantalla ni bajo los botones', async () => {
+  await page.evaluate(() => {
+    const m = window.__runner.match;
+    if (m.phase === 'replay') m.skipReplay(); // el tiro de la prueba anterior puede haber sido gol
+    m.restart = null; m.lastGoal = null; m.phase = 'play';
+    const t = m.teams[0]; const p = t.players[7]; t.controlled = p;
+    for (const q of m.active) if (q !== p && !q.isGK) q.pos.set(-30, 0, -20);
+    p.pos.set(10, 0, 33); p.vel.set(0, 0, 0); p.clearAction();
+    m.ball.reset(10.5, 33); m.owner = p; window.__runner.timeScale = 1;
+  });
+  // el renderizado por software es lento: esperar 4 s de partido para que la cámara (suavizada) se asiente
+  const t0 = await page.evaluate(() => window.__runner.match.time);
+  await waitFor(`window.__runner.match.time > ${t0 + 4}`, 90000);
+  const ys = await page.evaluate(() => {
+    const r = window.__runner; const cam = r.view.director.camera; const m = r.match;
+    const v = m.ball.pos.clone(); v.y = 0; v.project(cam);
+    const c = m.teams[0].controlled.pos.clone(); c.y = 0; c.project(cam);
+    return [v.y, c.y];
+  });
+  await page.screenshot({ path: join(OUT, 'm-camera-banda.png') });
+  const dbg = await page.evaluate(() => { const m = window.__runner.match; return [m.phase, m.ball.pos.x.toFixed(1), m.ball.pos.z.toFixed(1), m.teams[0].controlled?.pos.z.toFixed(1)]; });
+  assert(ys.every((y) => y > -0.45 && y < 0.95), 'fuera del encuadre útil: ' + JSON.stringify(ys) + ' ' + dbg.join(' '));
 });
 
 await check('Botón de pausa táctil y salir al menú', async () => {

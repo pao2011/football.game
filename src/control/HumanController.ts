@@ -67,6 +67,8 @@ export class HumanController implements TeamController {
   /** Punto del arco al que irá el disparo actual (para la ayuda visual). */
   aimTarget: Vector3 | null = null;
   private lastKickHandled = -1;
+  /** Recepción tras el cambio inmediato al receptor de un pase. */
+  private receiveLock: { player: Player; dir: Vector3; until: number } | null = null;
   private gkDiveIntent = 0;
   pauseRequested = false;
   /** Dirección de apuntado actual (mundo) para la ayuda visual. */
@@ -113,6 +115,14 @@ export class HumanController implements TeamController {
         team.controlled = rec;
         p = rec;
       }
+    }
+
+    // si el pase no llegó a salir (p. ej. le roban en el armado), se vuelve a controlar a quien tiene el balón
+    const own = m.owner;
+    if (own && own.team === team.index && own !== p && !own.isGK && own.action.kind !== 'kick') {
+      team.controlled = own;
+      p = own;
+      this.receiveLock = null;
     }
 
     const inPlay = m.phase === 'play';
@@ -180,7 +190,22 @@ export class HumanController implements TeamController {
     p.sprinting = input.held('sprint') || (!!this.settings.assist && input.virtualMagnitude() > 0.88);
     const owner = m.owner === p || m.gkHolding === p;
     const defending = !owner && m.possessionTeam !== team.index && m.possessionTeam !== -1;
-    if (hasStick) {
+    // recepción tras el cambio inmediato: hasta que el jugador mueva el stick hacia otro lado
+    const lock = this.receiveLock;
+    let receiving = false;
+    if (lock) {
+      const valid = lock.player === p && m.time < lock.until && !owner && (m.intendedReceiver === p || (m.owner !== null && m.owner.team === team.index));
+      const sameDir = !hasStick || lock.dir.lengthSq() < 0.01 || stick.dot(lock.dir) / (lock.dir.length() * stick.length()) > 0.75;
+      if (!valid || !sameDir) {
+        this.receiveLock = null;
+      } else {
+        receiving = true;
+        if (!this.autoReceive(m, p)) p.desiredVel.set(0, 0, 0);
+      }
+    }
+    if (receiving) {
+      // va a buscar el balón
+    } else if (hasStick) {
       p.desiredVel.copy(stick).multiplyScalar(9.5);
     } else if (!owner && this.autoReceive(m, p)) {
       // recepción asistida: va al punto de intercepción sin tocar el stick
@@ -354,7 +379,22 @@ export class HumanController implements TeamController {
     if (!isOwner && (dH > 1.25 || ball.y > 1.2)) return false;
     if (m.owner && m.owner !== p) return false;
     const req = this.makeKick(m, team, p, b, false);
-    return m.requestKick(p, req);
+    const ok = m.requestKick(p, req);
+    if (ok) this.switchToReceiver(m, team, req.targetId);
+    return ok;
+  }
+
+  /**
+   * Al pasar, el control pasa al receptor en el mismo momento de pulsar (no al llegar el balón).
+   * Mientras el balón va hacia él, el stick que se tenía apuntando al pase no lo aleja: corre a recibir.
+   */
+  private switchToReceiver(m: Match, team: Team, targetId: string | undefined) {
+    if (targetId === undefined || m.phase !== 'play') return;
+    const rec = team.active.find((x) => x.id === targetId);
+    if (!rec || rec.isGK || rec === team.controlled) return;
+    team.controlled = rec;
+    this.receiveLock = { player: rec, dir: this.stickWorld().clone(), until: m.time + 3.5 };
+    this.switchCooldown = Math.max(this.switchCooldown, 1);
   }
 
   private makeKick(m: Match, team: Team, p: Player, b: Omit<Buffered, 'until'>, header: boolean) {
