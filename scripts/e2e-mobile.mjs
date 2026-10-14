@@ -63,7 +63,7 @@ await check('Menús navegables con toques', async () => {
 });
 
 await check('Controles táctiles visibles durante el partido', async () => {
-  await page.waitForSelector('.touch-controls .tb-shoot', { state: 'visible' });
+  await page.waitForSelector('.touch-controls .tb-a1', { state: 'visible' });
   assert(await page.evaluate(() => document.body.classList.contains('touch')), 'clase touch ausente');
   await page.screenshot({ path: join(OUT, 'm-match.png') });
 });
@@ -73,7 +73,7 @@ await check('Botón PASE realiza el saque inicial / el joystick mueve al jugador
   await waitFor(() => { const m = window.__runner.match; return m.phase === 'play' || m.restart?.stage === 'ready'; });
   const mine = await page.evaluate(() => { const m = window.__runner.match; return m.phase !== 'play' && m.restart?.team === 0; });
   if (mine) {
-    const c = await center('.tb-pass');
+    const c = await center('.tb-a2');
     await page.touchscreen.tap(c.x, c.y);
   }
   await waitFor(() => window.__runner.match.phase === 'play', 30000);
@@ -82,11 +82,11 @@ await check('Botón PASE realiza el saque inicial / el joystick mueve al jugador
   await page.mouse.move(150, 260);
   await page.mouse.down();
   await page.mouse.move(215, 260, { steps: 4 });
-  await page.waitForTimeout(2500);
+  // con el joystick a la derecha, el jugador controlado (sea cual sea) corre hacia la derecha de la pantalla (+x)
+  await waitFor(() => { const p = window.__runner.match.teams[0].controlled; return p.vel.x > 2; }, 20000);
   await page.screenshot({ path: join(OUT, 'm-joystick.png') });
   await page.mouse.up();
-  const after = await page.evaluate((id) => { const p = window.__runner.match.playersAll.find((q) => q.id === id); return { x: p.pos.x, z: p.pos.z }; }, before.id);
-  assert(Math.hypot(after.x - before.x, after.z - before.z) > 1.5, 'el jugador no se movió con el joystick');
+  void before;
 });
 
 await check('Botón TIRO carga la potencia y dispara', async () => {
@@ -97,7 +97,7 @@ await check('Botón TIRO carga la potencia y dispara', async () => {
     p.pos.set(g * 34, 0, 0); p.vel.set(0, 0, 0); p.facing = g > 0 ? Math.PI / 2 : -Math.PI / 2;
     m.ball.pos.set(g * 34.5, 0.11, 0); m.ball.vel.set(0, 0, 0); m.owner = p; window.__s0 = t.stats.shots;
   });
-  const c = await center('.tb-shoot');
+  const c = await center('.tb-a1');
   await page.evaluate(({ x, y }) => {
     const el = document.elementFromPoint(x, y);
     el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 7, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' }));
@@ -105,6 +105,68 @@ await check('Botón TIRO carga la potencia y dispara', async () => {
   await page.waitForTimeout(1200);
   await page.evaluate(({ x, y }) => window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 7, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' })), c);
   await waitFor(() => window.__runner.match.teams[0].stats.shots > window.__s0, 15000);
+});
+
+await check('Deslizar sobre TIRO hacia arriba = vaselina', async () => {
+  await page.evaluate(() => {
+    const m = window.__runner.match; m.phase = 'play';
+    const t = m.teams[0]; const p = t.players[9]; t.controlled = p; const g = t.attackDir;
+    for (const q of m.teams[1].active) if (!q.isGK) q.pos.set(-g * 20, 0, q.pos.z);
+    p.pos.set(g * 34, 0, 0); p.vel.set(0, 0, 0); p.facing = g > 0 ? Math.PI / 2 : -Math.PI / 2; p.clearAction();
+    m.ball.pos.set(g * 34.5, 0.11, 0); m.ball.vel.set(0, 0, 0); m.owner = p; window.__chip = null;
+    const orig = m.requestKick.bind(m);
+    m.requestKick = (pl, req) => { if (req.kind === 'chip') window.__chip = true; return orig(pl, req); };
+  });
+  const c = await center('.tb-a1');
+  await page.evaluate(({ x, y }) => {
+    const el = document.elementFromPoint(x, y);
+    el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 9, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' }));
+  }, c);
+  await page.waitForTimeout(700);
+  await page.evaluate(({ x, y }) => {
+    window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 9, bubbles: true, clientX: x, clientY: y - 60, pointerType: 'touch' }));
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 9, bubbles: true, clientX: x, clientY: y - 60, pointerType: 'touch' }));
+  }, c);
+  await waitFor(() => window.__chip === true, 15000);
+});
+
+await check('Deslizar en la zona de regates = regate (con su nombre en pantalla)', async () => {
+  await page.evaluate(() => {
+    const m = window.__runner.match; m.phase = 'play';
+    const t = m.teams[0]; const p = t.players[9]; t.controlled = p; const g = t.attackDir;
+    p.pos.set(0, 0, 5); p.vel.set(0, 0, 0); p.facing = g > 0 ? Math.PI / 2 : -Math.PI / 2; p.clearAction();
+    m.ball.pos.set(0.5 * g, 0.11, 5); m.ball.vel.set(0, 0, 0); m.owner = p;
+  });
+  // deslizamiento horizontal en la zona libre de la derecha (encima de los botones)
+  await page.evaluate(() => {
+    const el = document.querySelector('.tc-skill-zone');
+    const r = el.getBoundingClientRect();
+    const x = r.left + 60, y = r.top + 40;
+    el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 11, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' }));
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 11, bubbles: true, clientX: x + 80, clientY: y, pointerType: 'touch' }));
+  });
+  await waitFor(() => { const p = window.__runner.match.teams[0].players[9]; return p.action.kind === 'skill' || p.anim.state === 'skill'; }, 15000);
+  await page.screenshot({ path: join(OUT, 'm-skill.png') });
+});
+
+await check('En defensa aparecen botones propios (ROBAR, PRESIONAR, CAMBIAR…) e indicador DEFENSA', async () => {
+  await page.evaluate(() => {
+    const m = window.__runner.match; m.phase = 'play';
+    const opp = m.teams[1].players[9];
+    opp.pos.set(0, 0, 0); m.ball.pos.set(0.5, 0.11, 0); m.ball.vel.set(0, 0, 0); m.owner = opp;
+  });
+  await page.waitForSelector('.touch-controls.mode-defense', { timeout: 15000 });
+  const txt = await page.textContent('.tc-defense');
+  assert(/ROBAR/.test(txt) && /PRESIONAR/.test(txt) && /CAMBIAR/.test(txt) && /BARRIDA/.test(txt), 'faltan botones de defensa: ' + txt);
+  assert(await page.isVisible('.tc-mode .d'), 'sin indicador DEFENSA');
+  await page.screenshot({ path: join(OUT, 'm-defense.png') });
+  // pulsar CAMBIAR cambia el jugador controlado
+  const before = await page.evaluate(() => (window.__before = window.__runner.match.teams[0].controlled.id));
+  const c = await center('.tb-d4');
+  await page.touchscreen.tap(c.x, c.y);
+  await waitFor(() => window.__runner.match.teams[0].controlled.id !== window.__before, 8000).catch(() => {});
+  const after = await page.evaluate(() => window.__runner.match.teams[0].controlled.id);
+  assert(before !== after, 'CAMBIAR no cambió de jugador');
 });
 
 await check('Botón de pausa táctil y salir al menú', async () => {

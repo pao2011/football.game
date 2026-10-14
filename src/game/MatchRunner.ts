@@ -130,7 +130,8 @@ export class MatchRunner {
     this.hud.update(dt);
     if (this.touch && team) {
       const pt = m.possessionTeam;
-      this.touch.setContext(pt === team.index || pt === -1 || m.gkHolding?.team === team.index);
+      // con el balón suelto se mantiene el modo anterior (evita parpadeos de botones)
+      if (pt !== -1 || m.phase !== 'play') this.touch.setContext(pt === team.index || m.gkHolding?.team === team.index || (m.phase !== 'play' && m.restart?.team === team.index));
       this.touch.setVisible(!this.paused && m.phase !== 'replay' && !m.finished);
     }
     this.view.render();

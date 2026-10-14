@@ -1,32 +1,75 @@
 import type { Action, Input } from './Input';
 
 /**
- * Controles táctiles para móvil al estilo de los juegos de fútbol para móvil:
- * joystick flotante a la izquierda y botones de acción a la derecha.
- * Los botones envían las mismas acciones lógicas que el teclado/mando (S, D, A, W, E, Q, Shift),
- * por lo que la jugabilidad (barra de potencia, defensa, balón parado) es idéntica.
+ * Controles táctiles para móvil al estilo de los juegos de fútbol para móvil.
+ *
+ * - Joystick flotante en la mitad izquierda.
+ * - ATAQUE y DEFENSA tienen botones, colores e iconos propios (no se reutilizan las mismas
+ *   posiciones con otro texto, que resultaba confuso). Un indicador muestra el modo actual.
+ * - TIRO admite gestos: deslizar ↑ vaselina, ↓ raso, ← / → rosca; en diagonal se combinan.
+ *   Mantener POTENTE mientras se tira = tiro potente (combinable con todo).
+ * - Regates: deslizar el dedo en la zona libre de la derecha (↑ sombrero, ↓ arrastre,
+ *   ← / → bicicleta, diagonal elástico) y doble toque = ruleta. Con el tiro cargado, tocar PASE = amago.
  */
 
 interface ButtonDef {
   action: Action;
-  attack: string;
-  defense: string;
+  label: string;
+  sub?: string;
+  icon: string;
   cls: string;
 }
 
-const BUTTONS: ButtonDef[] = [
-  { action: 'shoot', attack: 'TIRO', defense: 'ENTRADA', cls: 'tb-shoot' },
-  { action: 'pass', attack: 'PASE', defense: 'PRESIÓN', cls: 'tb-pass' },
-  { action: 'lob', attack: 'ELEVADO', defense: 'BARRIDA', cls: 'tb-lob' },
-  { action: 'through', attack: 'AL HUECO', defense: 'ARQUERO', cls: 'tb-through' },
-  { action: 'sprint', attack: 'SPRINT', defense: 'SPRINT', cls: 'tb-sprint' },
-  { action: 'finesse', attack: 'ROSCA', defense: 'AYUDA', cls: 'tb-finesse' },
-  { action: 'switch', attack: 'CAMBIAR', defense: 'CAMBIAR', cls: 'tb-switch' },
+// Iconos SVG sencillos (trazos blancos)
+const I = {
+  ball: '<circle cx="12" cy="12" r="8"/><path d="M12 7l3.5 2.5-1.3 4h-4.4l-1.3-4z"/>',
+  shoot: '<path d="M4 18l9-9"/><path d="M13 4h7v7"/><path d="M20 4L10 14"/>',
+  pass: '<path d="M4 12h13"/><path d="M13 7l5 5-5 5"/>',
+  lob: '<path d="M4 18c3-11 13-11 16 0"/><path d="M17 15l3 3 1-4"/>',
+  through: '<path d="M4 18L18 6"/><path d="M11 6h7v7"/><path d="M4 12l3 3"/>',
+  sprint: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
+  power: '<path d="M12 2v6"/><path d="M6.3 5.3a8 8 0 1 0 11.4 0"/>',
+  press: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
+  tackle: '<path d="M5 19l6-6"/><path d="M11 13l3-6 5 2-3 6z"/>',
+  slide: '<path d="M3 17h12l4-4"/><path d="M7 13l4-6"/><circle cx="19" cy="9" r="2"/>',
+  switch: '<path d="M7 7h11l-3-3"/><path d="M17 17H6l3 3"/>',
+  team: '<circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M3 20c1-4 9-4 10 0M11 20c1-4 9-4 10 0"/>',
+  keeper: '<path d="M5 20V9l7-5 7 5v11"/><path d="M9 20v-6h6v6"/>',
+  contain: '<path d="M12 3l8 4v5c0 5-4 8-8 9-4-1-8-4-8-9V7z"/>',
+};
+
+const ATTACK: ButtonDef[] = [
+  { action: 'shoot', label: 'TIRO', icon: I.shoot, cls: 'tb-a1' },
+  { action: 'pass', label: 'PASE', icon: I.pass, cls: 'tb-a2' },
+  { action: 'lob', label: 'ELEVADO', sub: 'centro', icon: I.lob, cls: 'tb-a3' },
+  { action: 'through', label: 'AL HUECO', icon: I.through, cls: 'tb-a4' },
+  { action: 'sprint', label: 'SPRINT', icon: I.sprint, cls: 'tb-a5' },
+  { action: 'jockey', label: 'POTENTE', sub: '+ tiro', icon: I.power, cls: 'tb-a6' },
 ];
+
+const DEFENSE: ButtonDef[] = [
+  { action: 'shoot', label: 'ROBAR', sub: 'entrada', icon: I.tackle, cls: 'tb-d1' },
+  { action: 'pass', label: 'PRESIONAR', sub: 'mantener', icon: I.press, cls: 'tb-d2' },
+  { action: 'lob', label: 'BARRIDA', icon: I.slide, cls: 'tb-d3' },
+  { action: 'switch', label: 'CAMBIAR', sub: 'jugador', icon: I.switch, cls: 'tb-d4' },
+  { action: 'sprint', label: 'SPRINT', icon: I.sprint, cls: 'tb-d5' },
+  { action: 'finesse', label: 'AYUDA', sub: '2.º defensor', icon: I.team, cls: 'tb-d6' },
+  { action: 'through', label: 'ARQUERO', sub: 'sale', icon: I.keeper, cls: 'tb-d7' },
+];
+
+const svg = (path: string) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
 
 export function isTouchDevice(): boolean {
   if (typeof window === 'undefined') return false;
   return (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+}
+
+interface Tracked {
+  action: Action | null; // botón pulsado (null = zona de regates)
+  x0: number;
+  y0: number;
+  t0: number;
+  el?: HTMLElement;
 }
 
 export class TouchControls {
@@ -35,44 +78,53 @@ export class TouchControls {
   private stickKnob: HTMLDivElement;
   private stickId: number | null = null;
   private origin = { x: 0, y: 0 };
-  private buttonEls: { def: ButtonDef; el: HTMLElement }[] = [];
-  private pointerToAction = new Map<number, Action>();
+  private tracked = new Map<number, Tracked>();
   private attacking = true;
+  private lastTap = 0;
   private readonly radius = 64;
+  private modeEl: HTMLElement;
+  private skillHint: HTMLElement;
 
   constructor(parent: HTMLElement, private input: Input) {
     const r = document.createElement('div');
-    r.className = 'touch-controls';
+    r.className = 'touch-controls mode-attack';
+    const btn = (b: ButtonDef) => `<div class="tc-btn ${b.cls}" data-action="${b.action}">${svg(b.icon)}<b>${b.label}</b>${b.sub ? `<small>${b.sub}</small>` : ''}</div>`;
     r.innerHTML = `
       <div class="tc-stick-zone"></div>
+      <div class="tc-skill-zone"><span class="tc-skill-hint">desliza: regate · doble toque: ruleta</span></div>
       <div class="tc-stick hidden"><div class="tc-knob"></div></div>
-      <div class="tc-buttons">${BUTTONS.map((b) => `<div class="tc-btn ${b.cls}" data-action="${b.action}"><span>${b.attack}</span></div>`).join('')}</div>
-      <div class="tc-btn tc-pause" data-action="pause"><span>II</span></div>`;
+      <div class="tc-mode"><span class="a">● ATAQUE</span><span class="d">● DEFENSA</span></div>
+      <div class="tc-buttons tc-attack">${ATTACK.map(btn).join('')}
+        <div class="tc-shot-hints"><span class="u">↑ vaselina</span><span class="d">↓ raso · ↔ rosca</span></div>
+      </div>
+      <div class="tc-buttons tc-defense">${DEFENSE.map(btn).join('')}</div>
+      <div class="tc-btn tc-pause" data-action="pause"><b>II</b></div>`;
     parent.appendChild(r);
     this.root = r;
     this.stickBase = r.querySelector('.tc-stick') as HTMLDivElement;
     this.stickKnob = r.querySelector('.tc-knob') as HTMLDivElement;
-    for (const def of BUTTONS) {
-      const el = r.querySelector(`[data-action="${def.action}"]`) as HTMLElement;
-      this.buttonEls.push({ def, el });
-    }
+    this.modeEl = r.querySelector('.tc-mode') as HTMLElement;
+    this.skillHint = r.querySelector('.tc-skill-hint') as HTMLElement;
 
-    const zone = r.querySelector('.tc-stick-zone') as HTMLElement;
-    zone.addEventListener('pointerdown', (e) => this.stickStart(e));
-    window.addEventListener('pointermove', this.onMove);
-    window.addEventListener('pointerup', this.onUp);
-    window.addEventListener('pointercancel', this.onUp);
-
+    (r.querySelector('.tc-stick-zone') as HTMLElement).addEventListener('pointerdown', (e) => this.stickStart(e));
+    (r.querySelector('.tc-skill-zone') as HTMLElement).addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.tracked.set(e.pointerId, { action: null, x0: e.clientX, y0: e.clientY, t0: performance.now() });
+    });
     r.querySelectorAll<HTMLElement>('.tc-btn').forEach((el) => {
       el.addEventListener('pointerdown', (e) => {
         e.preventDefault();
+        e.stopPropagation();
         const a = el.dataset.action as Action;
-        this.pointerToAction.set(e.pointerId, a);
+        this.tracked.set(e.pointerId, { action: a, x0: e.clientX, y0: e.clientY, t0: performance.now(), el });
         el.classList.add('down');
         this.input.setVirtual(a, true);
-        if (navigator.vibrate) navigator.vibrate(12);
+        if (navigator.vibrate) navigator.vibrate(10);
       });
     });
+    window.addEventListener('pointermove', this.onMove);
+    window.addEventListener('pointerup', this.onUp);
+    window.addEventListener('pointercancel', this.onUp);
     r.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
@@ -88,6 +140,15 @@ export class TouchControls {
   }
 
   private onMove = (e: PointerEvent) => {
+    const tr = this.tracked.get(e.pointerId);
+    if (tr && tr.action === 'shoot' && tr.el) {
+      // vista previa del tipo de tiro mientras se desliza sobre TIRO
+      const dx = e.clientX - tr.x0;
+      const dy = e.clientY - tr.y0;
+      tr.el.classList.toggle('swipe-up', dy < -28);
+      tr.el.classList.toggle('swipe-down', dy > 28);
+      tr.el.classList.toggle('swipe-side', Math.abs(dx) > 28);
+    }
     if (e.pointerId !== this.stickId) return;
     let dx = e.clientX - this.origin.x;
     let dy = e.clientY - this.origin.y;
@@ -97,7 +158,6 @@ export class TouchControls {
       dy *= this.radius / d;
     }
     this.stickKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-    // magnitud con zona muerta pequeña; y hacia arriba positiva
     const mag = Math.min(1, d / this.radius);
     const k = mag < 0.15 ? 0 : ((mag - 0.15) / 0.85) / Math.max(mag, 1e-6);
     this.input.setVirtualAxes((dx / this.radius) * k, (-dy / this.radius) * k);
@@ -109,22 +169,47 @@ export class TouchControls {
       this.stickBase.classList.add('hidden');
       this.input.setVirtualAxes(0, 0);
     }
-    const a = this.pointerToAction.get(e.pointerId);
-    if (a) {
-      this.pointerToAction.delete(e.pointerId);
-      this.input.setVirtual(a, false);
-      this.root.querySelector(`[data-action="${a}"]`)?.classList.remove('down');
+    const tr = this.tracked.get(e.pointerId);
+    if (!tr) return;
+    this.tracked.delete(e.pointerId);
+    const dx = e.clientX - tr.x0;
+    const dy = e.clientY - tr.y0;
+    const len = Math.hypot(dx, dy);
+    if (tr.action === null) {
+      // zona de regates: deslizar = regate en esa dirección; doble toque = ruleta
+      const now = performance.now();
+      if (len > 30 && now - tr.t0 < 600) {
+        this.input.pushGesture({ type: 'skill', dir: { x: dx / len, y: -dy / len } });
+      } else if (len < 14) {
+        if (now - this.lastTap < 350) {
+          this.input.pushGesture({ type: 'skill', dir: { x: 0, y: 0 }, tap: true });
+          this.lastTap = 0;
+        } else {
+          this.lastTap = now;
+        }
+      }
+      return;
     }
+    if (tr.action === 'shoot' && len > 28) {
+      // gesto sobre TIRO: tipo de disparo (se lee al soltar el botón)
+      this.input.pushGesture({ type: 'shot', dir: { x: dx / len, y: -dy / len } });
+    }
+    tr.el?.classList.remove('down', 'swipe-up', 'swipe-down', 'swipe-side');
+    this.input.setVirtual(tr.action, false);
   };
 
-  /** Cambia las etiquetas según el equipo del jugador tenga o no el balón. */
+  /** Ataque o defensa: cambia de juego de botones (posiciones, colores e iconos propios). */
   setContext(attacking: boolean) {
     if (attacking === this.attacking) return;
+    // no cambiar mientras se mantiene pulsado un botón (evita soltar acciones a medias)
+    for (const t of this.tracked.values()) if (t.action) return;
     this.attacking = attacking;
-    for (const { def, el } of this.buttonEls) {
-      (el.firstElementChild as HTMLElement).textContent = attacking ? def.attack : def.defense;
-      el.classList.toggle('def', !attacking);
-    }
+    this.root.classList.toggle('mode-attack', attacking);
+    this.root.classList.toggle('mode-defense', !attacking);
+    this.modeEl.classList.remove('flash');
+    void this.modeEl.offsetWidth;
+    this.modeEl.classList.add('flash');
+    this.skillHint.style.opacity = attacking ? '' : '0';
   }
 
   setVisible(v: boolean) {
@@ -135,7 +220,7 @@ export class TouchControls {
     window.removeEventListener('pointermove', this.onMove);
     window.removeEventListener('pointerup', this.onUp);
     window.removeEventListener('pointercancel', this.onUp);
-    for (const a of this.pointerToAction.values()) this.input.setVirtual(a, false);
+    for (const t of this.tracked.values()) if (t.action) this.input.setVirtual(t.action, false);
     this.input.setVirtualAxes(0, 0);
     this.root.remove();
   }

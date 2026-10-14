@@ -109,3 +109,24 @@ export function applyKickError(v: Vector3, angleStd: number, powerStd: number, l
   v.y += gauss() * liftStd * speed;
   return v;
 }
+
+/**
+ * Balón elevado que pasa por `target` (x, y, z) en su fase descendente con una elevación dada:
+ * vaselinas por encima del arquero. Busca la velocidad por bisección simulando arrastre y gravedad.
+ */
+export function loftToPoint(from: Vector3, target: Vector3, elevationDeg: number): Vector3 {
+  const dx = target.x - from.x;
+  const dz = target.z - from.z;
+  const horiz = Math.max(0.5, Math.hypot(dx, dz));
+  const el = (elevationDeg * Math.PI) / 180;
+  let lo = 4;
+  let hi = 40;
+  for (let i = 0; i < 18; i++) {
+    const sp = (lo + hi) / 2;
+    const y = heightAtDistance(sp, el, horiz, from.y);
+    // poca velocidad: el balón cae antes (altura < objetivo al llegar) → más velocidad
+    if (y < target.y) lo = sp; else hi = sp;
+  }
+  const sp = (lo + hi) / 2;
+  return new Vector3((dx / horiz) * Math.cos(el) * sp, Math.sin(el) * sp, (dz / horiz) * Math.cos(el) * sp);
+}

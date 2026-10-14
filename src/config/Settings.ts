@@ -1,5 +1,5 @@
 import type { Bindings } from '../input/Input';
-import { FIFA_CLASSIC } from '../input/Input';
+import { FIFA_CLASSIC, WASD_ALT } from '../input/Input';
 import { loadJSON, saveJSON } from '../save/Storage';
 import type { CameraStyle } from '../render/CameraDirector';
 import type { Difficulty } from '../data/types';
@@ -70,7 +70,14 @@ export function loadSettings(): GameSettings {
   const s = loadJSON<Partial<GameSettings>>('settings', {});
   const merged = { ...structuredClone(DEFAULT_SETTINGS), ...mobileDefaults(), ...s };
   // completar asignaciones nuevas que no existían en guardados antiguos
-  merged.bindings = { ...structuredClone(FIFA_CLASSIC), ...(s.bindings ?? {}) };
+  // las acciones nuevas (p. ej. regates) toman la tecla del esquema elegido, sin pisar teclas ya usadas
+  const presetDefaults = structuredClone(merged.preset === 'wasd' ? WASD_ALT : FIFA_CLASSIC);
+  const saved = (s.bindings ?? {}) as Partial<GameSettings['bindings']>;
+  const used = new Set(Object.values(saved).flat());
+  for (const k of Object.keys(presetDefaults) as (keyof GameSettings['bindings'])[]) {
+    if (!saved[k]) presetDefaults[k] = presetDefaults[k].filter((code) => !used.has(code));
+  }
+  merged.bindings = { ...presetDefaults, ...saved };
   return merged;
 }
 

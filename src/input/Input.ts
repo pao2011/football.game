@@ -10,10 +10,14 @@ export type Action =
   | 'shoot' // D  / B (○)   — tiro, volea, cabezazo / entrada
   | 'switch' // Q  / LB (L1) — cambiar de jugador
   | 'finesse' // Shift / RB (R1) — tiro colocado (rosca) / presión de compañero
-  | 'jockey' // Ctrl / LT (L2) — contener (jockey)
+  | 'jockey' // Ctrl / LT (L2) — contener (jockey) · en ataque: modificador de tiro POTENTE
+  | 'skillUp' | 'skillDown' | 'skillLeft' | 'skillRight' // I/K/J/L o numérico — "stick derecho": regates
+  | 'skillSpin' // R / R3 — ruleta
   | 'pause'; // Esc / Start
 
-export const ACTIONS: Action[] = ['up', 'down', 'left', 'right', 'sprint', 'pass', 'through', 'lob', 'shoot', 'switch', 'finesse', 'jockey', 'pause'];
+export const ACTIONS: Action[] = ['up', 'down', 'left', 'right', 'sprint', 'pass', 'through', 'lob', 'shoot', 'switch', 'finesse', 'jockey', 'skillUp', 'skillDown', 'skillLeft', 'skillRight', 'skillSpin', 'pause'];
+
+export const SKILL_ACTIONS: Action[] = ['skillUp', 'skillDown', 'skillLeft', 'skillRight', 'skillSpin'];
 
 export const ACTION_LABELS: Record<Action, string> = {
   up: 'Mover arriba',
@@ -25,9 +29,14 @@ export const ACTION_LABELS: Record<Action, string> = {
   through: 'Pase al hueco · Salida del arquero (defensa)',
   lob: 'Pase elevado / Centro · Barrida (defensa)',
   shoot: 'Tiro / Volea · Entrada (defensa)',
-  switch: 'Cambiar de jugador',
-  finesse: 'Modificador: tiro colocado · Presión de compañero',
-  jockey: 'Contener (jockey)',
+  switch: 'Cambiar de jugador · Con balón + Tiro: vaselina',
+  finesse: 'Con balón + Tiro: rosca · Presión de compañero (defensa)',
+  jockey: 'Contener (defensa) · Con balón + Tiro: tiro potente',
+  skillUp: 'Regate ↑ (hacia delante: sombrero)',
+  skillDown: 'Regate ↓ (hacia atrás: arrastre)',
+  skillLeft: 'Regate ← (bicicleta; dos veces: elástico)',
+  skillRight: 'Regate → (bicicleta; dos veces: elástico)',
+  skillSpin: 'Ruleta',
   pause: 'Pausa',
 };
 
@@ -37,18 +46,22 @@ export type Bindings = Record<Action, string[]>;
 export const FIFA_CLASSIC: Bindings = {
   up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
   sprint: ['KeyE'], pass: ['KeyS'], through: ['KeyW'], lob: ['KeyA'], shoot: ['KeyD'],
-  switch: ['KeyQ'], finesse: ['ShiftLeft', 'ShiftRight'], jockey: ['ControlLeft', 'KeyC'], pause: ['Escape', 'KeyP'],
+  switch: ['KeyQ'], finesse: ['ShiftLeft', 'ShiftRight'], jockey: ['ControlLeft', 'KeyC'],
+  skillUp: ['KeyI', 'Numpad8'], skillDown: ['KeyK', 'Numpad2'], skillLeft: ['KeyJ', 'Numpad4'], skillRight: ['KeyL', 'Numpad6'],
+  skillSpin: ['KeyR', 'Numpad5'], pause: ['Escape', 'KeyP'],
 };
 
 /** Alternativo: WASD para moverse y acciones en la mano derecha. */
 export const WASD_ALT: Bindings = {
   up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'],
   sprint: ['ShiftLeft'], pass: ['KeyK'], through: ['KeyI'], lob: ['KeyJ'], shoot: ['KeyL'],
-  switch: ['KeyQ'], finesse: ['KeyO'], jockey: ['KeyU', 'Space'], pause: ['Escape', 'KeyP'],
+  switch: ['KeyQ'], finesse: ['KeyO'], jockey: ['KeyU', 'Space'],
+  skillUp: ['ArrowUp'], skillDown: ['ArrowDown'], skillLeft: ['ArrowLeft'], skillRight: ['ArrowRight'],
+  skillSpin: ['KeyR'], pause: ['Escape', 'KeyP'],
 };
 
 /** Botones del mando estándar (W3C standard mapping). */
-export const PAD_BUTTONS: Record<Exclude<Action, 'up' | 'down' | 'left' | 'right'>, number> = {
+export const PAD_BUTTONS: Partial<Record<Action, number>> = {
   pass: 0, // A / X(PS)
   shoot: 1, // B / ○
   lob: 2, // X / □
@@ -58,17 +71,27 @@ export const PAD_BUTTONS: Record<Exclude<Action, 'up' | 'down' | 'left' | 'right
   jockey: 6, // LT / L2
   sprint: 7, // RT / R2
   pause: 9, // Start / Options
+  skillSpin: 11, // R3 (pulsar el stick derecho)
 };
 
 export function keyLabel(code: string): string {
   const map: Record<string, string> = {
     ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ShiftLeft: 'Shift', ShiftRight: 'Shift der.',
     ControlLeft: 'Ctrl', ControlRight: 'Ctrl der.', Escape: 'Esc', Space: 'Espacio', Enter: 'Enter',
+    Numpad8: 'Num 8', Numpad2: 'Num 2', Numpad4: 'Num 4', Numpad6: 'Num 6', Numpad5: 'Num 5',
   };
   if (map[code]) return map[code];
   if (code.startsWith('Key')) return code.slice(3);
   if (code.startsWith('Digit')) return code.slice(5);
   return code;
+}
+
+/** Gesto táctil: dirección en pantalla (x derecha, y arriba). */
+export interface TouchGesture {
+  type: 'skill' | 'shot';
+  dir: { x: number; y: number };
+  /** Toque doble en la zona de regates (ruleta). */
+  tap?: boolean;
 }
 
 export interface InputSettings {
@@ -128,6 +151,21 @@ export class Input {
     for (const [t, l] of this.listeners) window.removeEventListener(t, l);
   }
 
+  // --- Gestos táctiles (deslizamientos) ---
+  private gestures: TouchGesture[] = [];
+
+  /** Encola un gesto (regate deslizando, tipo de tiro deslizando sobre TIRO). */
+  pushGesture(g: TouchGesture) {
+    this.gestures.push(g);
+    if (this.gestures.length > 8) this.gestures.shift();
+  }
+
+  /** Extrae el gesto pendiente más antiguo de un tipo. */
+  takeGesture(type: TouchGesture['type']): TouchGesture | null {
+    const i = this.gestures.findIndex((g) => g.type === type);
+    return i >= 0 ? this.gestures.splice(i, 1)[0] : null;
+  }
+
   // --- Controles táctiles (móvil): botones y joystick virtuales ---
   private virtualHeld = new Set<Action>();
   private virtualTapped = new Set<Action>();
@@ -183,7 +221,14 @@ export class Input {
         this.padActive = true;
       }
       const btn = (i: number) => !!gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.4);
-      for (const [a, i] of Object.entries(PAD_BUTTONS)) if (btn(i)) this.cur.add(a as Action);
+      for (const [a, i] of Object.entries(PAD_BUTTONS)) if (i !== undefined && btn(i)) this.cur.add(a as Action);
+      // Stick derecho: cada "golpe" de stick en una dirección es un regate
+      const rx = gp.axes[2] ?? 0;
+      const ry = gp.axes[3] ?? 0;
+      if (Math.hypot(rx, ry) > 0.65) {
+        if (Math.abs(rx) > Math.abs(ry)) this.cur.add(rx > 0 ? 'skillRight' : 'skillLeft');
+        else this.cur.add(ry > 0 ? 'skillDown' : 'skillUp');
+      }
       if (btn(12)) this.cur.add('up');
       if (btn(13)) this.cur.add('down');
       if (btn(14)) this.cur.add('left');

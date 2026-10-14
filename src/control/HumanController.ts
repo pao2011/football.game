@@ -4,7 +4,8 @@ import type { Input, Action } from '../input/Input';
 import type { Match, TeamController } from '../sim/Match';
 import type { Player } from '../sim/Player';
 import type { Team } from '../sim/Team';
-import { buildGroundPass, buildLob, buildShot } from '../ai/Actions';
+import { buildGroundPass, buildLob, buildShot, NORMAL_SHOT, shotStyleName, type ShotStyle } from '../ai/Actions';
+import type { SkillKind } from '../sim/types';
 import { requestDive } from '../ai/GoalkeeperAI';
 import { getBallPrediction } from '../ai/Predict';
 import { interceptCache } from '../ai/TeamAI';
@@ -27,6 +28,16 @@ export interface ControlSettings {
 }
 
 type KickAction = 'pass' | 'through' | 'lob' | 'shoot';
+
+interface Buffered {
+  action: KickAction;
+  power: number;
+  finesse: boolean;
+  until: number;
+  dir: Vector3;
+  noStick?: boolean;
+  style?: ShotStyle;
+}
 const KICK_ACTIONS: KickAction[] = ['pass', 'through', 'lob', 'shoot'];
 
 /**
@@ -36,10 +47,15 @@ const KICK_ACTIONS: KickAction[] = ['pass', 'through', 'lob', 'shoot'];
  */
 export class HumanController implements TeamController {
   /** Carga actual (para el HUD). */
-  charge: { action: KickAction; value: number } | null = null;
+  charge: { action: KickAction; value: number; label?: string } | null = null;
   /** Último golpeo cargado (para mostrar la barra unos instantes tras soltar). */
-  lastCharge: { action: KickAction; value: number; at: number } | null = null;
-  private buffered: { action: KickAction; power: number; finesse: boolean; until: number; dir: Vector3; noStick?: boolean } | null = null;
+  lastCharge: { action: KickAction; value: number; at: number; label?: string } | null = null;
+  private buffered: Buffered | null = null;
+  /** Ignorar la próxima suelta de tiro/pase (doble toque para raso, amago). */
+  private cancelShootRelease = false;
+  private cancelPassRelease = false;
+  /** Último disparo ordenado (para convertirlo en raso con el doble toque). */
+  private lastShot: { power: number; dir: Vector3; style: ShotStyle } | null = null;
   private switchCooldown = 0;
   private lastKickHandled = -1;
   private gkDiveIntent = 0;
@@ -94,9 +110,10 @@ export class HumanController implements TeamController {
     const isTaker = !inPlay && m.restart?.taker === p && (m.restart.stage === 'ready' || m.phase === 'shootout');
 
     // Cambio manual (Q / LB)
-    if (inPlay && input.pressed('switch') && m.gkHolding !== p) {
+    if (inPlay && input.pressed('switch') && m.gkHolding !== p && m.owner !== p) {
       const next = hasStick ? this.inDirection(m, team, p, stick) : this.nearestToBall(m, team, p);
-      if (next) { team.controlled = next; p = next; this.switchCooldown = 0.6; }
+      // el cambio manual tiene prioridad: el cambio automático espera un rato
+      if (next) { team.controlled = next; p = next; this.switchCooldown = 2.5; }
     }
     // Cambio automático en defensa
     if (inPlay && this.settings.autoSwitch && this.switchCooldown <= 0 && m.owner !== p && m.gkHolding !== p) {
@@ -121,6 +138,8 @@ export class HumanController implements TeamController {
 
     p.jockeying = false;
     p.desiredFacing = NaN;
+    if (inPlay) this.handleSkills(m, p, stick);
+    else input.takeGesture('skill');
 
     if (isTaker) {
       this.handleTaker(m, team, p, stick, hasStick);
@@ -185,19 +204,108 @@ export class HumanController implements TeamController {
   // Ataque: barras de potencia y golpeos
   // ------------------------------------------------------------------
 
+  /** Tipo de disparo según los modificadores pulsados (estilo FIFA) y el gesto táctil sobre TIRO. */
+  private currentStyle(gesture: { x: number; y: number } | null = null): ShotStyle {
+    const input = this.input;
+    const q = input.held('switch');
+    const sh = input.held('finesse');
+    const st: ShotStyle = {
+      chip: q && !sh, // Q (LB) + tiro = vaselina
+      finesse: sh && !q, // Shift (RB) + tiro = rosca
+      power: (q && sh) || input.held('jockey'), // Q + Shift (LB + RB) o Ctrl/LT/POTENTE = potente
+      low: false,
+    };
+    if (gesture && Math.hypot(gesture.x, gesture.y) > 0.5) {
+      const up = gesture.y > 0.38;
+      const down = gesture.y < -0.38;
+      const side = Math.abs(gesture.x) > 0.38;
+      if (up) st.chip = true; // ↑ vaselina
+      if (down) st.low = true; // ↓ raso
+      if (side) st.finesse = true; // ← → rosca; en diagonal se combina
+    }
+    return st;
+  }
+
+  /** Etiqueta del golpeo que se está cargando (para la barra de potencia). */
+  private chargeLabel(a: KickAction): string | undefined {
+    return a === 'shoot' ? shotStyleName(this.currentStyle()) : undefined;
+  }
+
+  /** Regates: I/J/K/L o teclado numérico, stick derecho, o deslizar el dedo en la pantalla. */
+  private handleSkills(m: Match, p: Player, stick: Vector3) {
+    const input = this.input;
+    const g = input.takeGesture('skill');
+    if (m.owner !== p || !(p.mobile || p.action.kind === 'trap')) return;
+    let flick: { x: number; y: number } | null = null;
+    let spin = input.pressed('skillSpin');
+    if (g) {
+      if (g.tap) spin = true;
+      else flick = g.dir;
+    }
+    if (input.pressed('skillUp')) flick = { x: 0, y: 1 };
+    else if (input.pressed('skillDown')) flick = { x: 0, y: -1 };
+    else if (input.pressed('skillLeft')) flick = { x: -1, y: 0 };
+    else if (input.pressed('skillRight')) flick = { x: 1, y: 0 };
+    if (!flick && !spin) return;
+    const fwd = p.forward();
+    const left = new Vector3(fwd.z, 0, -fwd.x);
+    if (spin) {
+      const side = stick.lengthSq() > 0.01 && stick.dot(left) < 0 ? -1 : 1;
+      m.requestSkill(p, 'roulette', side);
+      return;
+    }
+    // Como en FIFA, la dirección del regate se interpreta respecto al jugador
+    // (arriba = hacia donde mira, izquierda = su izquierda), sea cual sea la cámara.
+    const fl = Math.hypot(flick!.x, flick!.y) || 1;
+    const along = flick!.y / fl;
+    const lat = -flick!.x / fl;
+    const side: 1 | -1 = lat >= 0 ? 1 : -1;
+    let kind: SkillKind;
+    const diagonal = !!g && Math.abs(flick!.x) > 0.38 && Math.abs(flick!.y) > 0.38;
+    if (diagonal || (input.held('finesse') && Math.abs(along) < 0.6)) kind = 'elastico';
+    else if (along > 0.6) kind = 'rainbow';
+    else if (along < -0.6) kind = 'dragback';
+    else kind = 'stepover';
+    m.requestSkill(p, kind, side);
+  }
+
   private trackCharges(m: Match, team: Team, p: Player, stick: Vector3, hasStick: boolean) {
     const input = this.input;
     this.charge = null;
+    const owner = m.owner === p;
+    // Amago de tiro: con el tiro cargando, pulsar pase (como en FIFA: tiro + pase)
+    if (owner && input.held('shoot') && input.pressed('pass') && (p.mobile || p.action.kind === 'trap')) {
+      const left = new Vector3(Math.cos(p.facing), 0, -Math.sin(p.facing));
+      const side: 1 | -1 = hasStick ? (stick.dot(left) >= 0 ? 1 : -1) : (m.rng.next() < 0.5 ? 1 : -1);
+      if (m.requestSkill(p, 'fakeshot', side)) {
+        this.cancelShootRelease = true;
+        this.cancelPassRelease = true;
+        return;
+      }
+    }
+    // Tiro raso: doble toque del botón de tiro mientras el jugador arma el disparo
+    const k = p.action.kick;
+    if (input.pressed('shoot') && p.action.kind === 'kick' && !p.action.done && k && this.lastShot
+      && (k.kind === 'shoot' || k.kind === 'finesse') && !k.style?.low && !k.style?.chip) {
+      const st: ShotStyle = { ...this.lastShot.style, low: true };
+      const { z, y } = this.shotAim(m, team, p, this.lastShot.dir, this.lastShot.power, st.finesse);
+      p.action.kick = buildShot(m, p, z, y, this.lastShot.power, st, 1);
+      this.lastCharge = { action: 'shoot', value: this.lastShot.power, at: m.time, label: shotStyleName(st) };
+      this.cancelShootRelease = true;
+    }
     for (const a of KICK_ACTIONS) {
       if (input.held(a)) {
-        this.charge = { action: a, value: clamp(input.holdTime(a) / this.settings.powerBarTime, 0, 1) };
+        this.charge = { action: a, value: clamp(input.holdTime(a) / this.settings.powerBarTime, 0, 1), label: this.chargeLabel(a) };
       }
       const rel = input.released(a);
       if (rel >= 0) {
+        if (a === 'shoot' && this.cancelShootRelease) { this.cancelShootRelease = false; input.takeGesture('shot'); continue; }
+        if (a === 'pass' && this.cancelPassRelease) { this.cancelPassRelease = false; continue; }
         const power = clamp(rel / this.settings.powerBarTime, 0.08, 1);
-        this.lastCharge = { action: a, value: power, at: m.time };
         const dir = hasStick ? stick.clone().normalize() : p.forward();
-        this.buffered = { action: a, power, finesse: input.held('finesse'), until: m.time + 0.7, dir, noStick: !hasStick };
+        const style = a === 'shoot' ? this.currentStyle(input.takeGesture('shot')?.dir ?? null) : undefined;
+        this.lastCharge = { action: a, value: power, at: m.time, label: style ? shotStyleName(style) : undefined };
+        this.buffered = { action: a, power, finesse: input.held('finesse'), until: m.time + 0.7, dir, noStick: !hasStick, style };
       }
     }
     if (this.buffered) {
@@ -209,7 +317,7 @@ export class HumanController implements TeamController {
     }
   }
 
-  private tryExecute(m: Match, team: Team, p: Player, b: { action: KickAction; power: number; finesse: boolean; dir: Vector3; noStick?: boolean }): boolean {
+  private tryExecute(m: Match, team: Team, p: Player, b: Buffered): boolean {
     const ball = m.ball.pos;
     const dH = dist2D(p.pos, ball);
     const isOwner = m.owner === p;
@@ -227,15 +335,15 @@ export class HumanController implements TeamController {
     return m.requestKick(p, req);
   }
 
-  private makeKick(m: Match, team: Team, p: Player, b: { action: KickAction; power: number; finesse: boolean; dir: Vector3; noStick?: boolean }, header: boolean) {
+  private makeKick(m: Match, team: Team, p: Player, b: Omit<Buffered, 'until'>, header: boolean) {
     const err = 1;
     const dir = b.dir;
     switch (b.action) {
       case 'shoot': {
-        const { z, y } = this.shotAim(m, team, p, dir, b.power, b.finesse);
-        const req = buildShot(m, p, z, y, b.power, b.finesse && !header, err);
-        if (!b.finesse) req.velocity.y += 0;
-        return req;
+        const st: ShotStyle = header ? { ...NORMAL_SHOT } : b.style ?? { ...NORMAL_SHOT, finesse: b.finesse };
+        const { z, y } = this.shotAim(m, team, p, dir, b.power, st.finesse);
+        this.lastShot = { power: b.power, dir: dir.clone(), style: st };
+        return buildShot(m, p, z, y, b.power, st, err);
       }
       case 'pass': {
         let q = this.pickReceiver(m, team, p, dir);
@@ -420,11 +528,11 @@ export class HumanController implements TeamController {
     const dir = hasStick ? stick.clone().normalize() : p.forward();
     this.charge = null;
     for (const a of KICK_ACTIONS) {
-      if (input.held(a)) this.charge = { action: a, value: clamp(input.holdTime(a) / this.settings.powerBarTime, 0, 1) };
+      if (input.held(a)) this.charge = { action: a, value: clamp(input.holdTime(a) / this.settings.powerBarTime, 0, 1), label: this.chargeLabel(a) };
       const rel = input.released(a);
       if (rel < 0) continue;
       const power = clamp(rel / this.settings.powerBarTime, 0.1, 1);
-      this.lastCharge = { action: a, value: power, at: m.time };
+      this.lastCharge = { action: a, value: power, at: m.time, label: this.chargeLabel(a) };
       const finesse = input.held('finesse');
       if (r.type === 'penalty') {
         if (a !== 'shoot' && a !== 'pass') continue;
@@ -433,7 +541,9 @@ export class HumanController implements TeamController {
         const lat = new Vector3().addScaledVector(this.view.right, mv.x).addScaledVector(this.view.forward, mv.y);
         const z = clamp(lat.z * 3.4 + (mv.x === 0 && mv.y === 0 ? 0 : 0), -(GOAL_HALF_WIDTH - 0.3), GOAL_HALF_WIDTH - 0.3);
         const y = 0.2 + power * power * 2.1;
-        m.requestKick(p, buildShot(m, p, z, y, power, false, 1, 'penalty'));
+        // Q (LB) + tiro en el penal: vaselina a lo Panenka
+        const st = this.currentStyle(input.takeGesture('shot')?.dir ?? null);
+        m.requestKick(p, buildShot(m, p, z, y, power, st.chip ? { ...NORMAL_SHOT, chip: true } : false, 1, 'penalty'));
         return;
       }
       if (r.type === 'throwin') {
@@ -446,10 +556,11 @@ export class HumanController implements TeamController {
         return;
       }
       if (a === 'shoot') {
-        const { z, y } = this.shotAim(m, team, p, dir, power, finesse);
+        const st = this.currentStyle(input.takeGesture('shot')?.dir ?? null);
+        const { z, y } = this.shotAim(m, team, p, dir, power, st.finesse);
         const near = dist2D(p.pos, goal) < 35;
         if (near) {
-          m.requestKick(p, buildShot(m, p, z, finesse ? y + 0.5 : y, power, finesse, 1));
+          m.requestKick(p, buildShot(m, p, z, st.finesse ? y + 0.5 : y, power, st, 1));
         } else {
           // lejos del arco: golpeo largo hacia delante
           m.requestKick(p, buildLob(m, p, p.pos.clone().addScaledVector(dir, 30 + power * 30), 30, 1));

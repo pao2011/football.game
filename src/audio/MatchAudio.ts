@@ -46,6 +46,9 @@ export class MatchAudio {
       case 'save':
         if (e.kind === 'shot' || e.kind === 'shootout') a.applause();
         break;
+      case 'skill':
+        if (e.kind === 'beat') a.ooh();
+        break;
       case 'nearMiss':
         a.ooh();
         break;

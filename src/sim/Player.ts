@@ -16,9 +16,11 @@ export interface KickRequest {
   power: number;
   /** Multiplicador de error de ejecución (dificultad, presión). */
   errorScale: number;
+  /** Tipo de disparo (vaselina, rosca, potente, raso) cuando es un tiro. */
+  style?: import('../ai/Actions').ShotStyle;
 }
 
-export type ActionKind = 'none' | 'kick' | 'tackle' | 'slide' | 'header' | 'dive' | 'fallen' | 'getup' | 'celebrate' | 'dejected' | 'hold' | 'throw' | 'trap';
+export type ActionKind = 'none' | 'kick' | 'tackle' | 'slide' | 'header' | 'dive' | 'fallen' | 'getup' | 'celebrate' | 'dejected' | 'hold' | 'throw' | 'trap' | 'skill';
 
 export interface PlayerAction {
   kind: ActionKind;
@@ -29,8 +31,10 @@ export interface PlayerAction {
   done: boolean; // contacto ya ejecutado
   kick?: KickRequest;
   anim: AnimState;
-  dir: Vector3; // dirección de la acción (barrida, estirada)
+  dir: Vector3; // dirección de la acción (barrida, estirada, salida del regate)
   variant: number;
+  /** Dirección de avance al empezar un regate. */
+  aux?: Vector3;
 }
 
 export class Player {
@@ -52,6 +56,8 @@ export class Player {
   sentOff = false;
   /** Bloqueado por el árbitro (p. ej. a distancia en un tiro libre). */
   frozen = false;
+  /** Superado por un regate: hasta este instante reacciona tarde y no puede entrar. */
+  stunnedUntil = 0;
   /** Posición táctica objetivo calculada por el sistema de equipo. */
   readonly tacticalTarget = new Vector3();
   /** Rol táctico dinámico asignado por el equipo. */
@@ -183,8 +189,8 @@ export class Player {
     if (this.action.kind === 'kick' || this.action.kind === 'tackle' || this.action.kind === 'header') {
       if (this.action.dir.lengthSq() > 0) target = Math.atan2(this.action.dir.x, this.action.dir.z);
       this.facing = approachAngle(this.facing, target, 14 * dt);
-    } else if (this.action.kind === 'slide' || this.action.kind === 'dive' || this.action.kind === 'fallen') {
-      // mantiene orientación
+    } else if (this.action.kind === 'slide' || this.action.kind === 'dive' || this.action.kind === 'fallen' || this.action.kind === 'skill') {
+      // mantiene orientación (en los regates la controla la simulación)
     } else if (!Number.isNaN(this.desiredFacing) && (this.jockeying || s < 1.2)) {
       this.facing = approachAngle(this.facing, this.desiredFacing, turnRate * dt);
     } else if (s > 0.3) {

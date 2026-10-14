@@ -8,12 +8,12 @@ import { DIFFICULTY, type DifficultyParams } from '../ai/Difficulty';
 import { updateTeamTactics } from '../ai/TeamAI';
 import { updateOutfieldAI, aiTakeSetPiece } from '../ai/PlayerAI';
 import { updateGoalkeeperAI } from '../ai/GoalkeeperAI';
-import { dist2D, Rng, clamp } from '../util/math';
+import { dist2D, Rng, clamp, approachAngle as approachAngleRad } from '../util/math';
 import { Ball } from './Ball';
 import { applyKickError } from './Kicks';
 import { Player, type KickRequest } from './Player';
 import { Team } from './Team';
-import type { MatchEvent } from './types';
+import { SKILL_KINDS, SKILL_NAMES, type MatchEvent, type SkillKind } from './types';
 import { evaluateOffsidePositions, isInPenaltyArea } from './Rules';
 import { placeForRestart, type RestartType } from './SetPieces';
 
@@ -286,6 +286,7 @@ export class Match {
     }
     this.updateDecisions(dt);
     this.processActions(dt);
+    if (this.phase !== 'play') return; // una falta detuvo el juego en este paso
     this.movePlayers(dt);
     this.controlBall(dt);
     const ev = this.ball.step(dt);
@@ -332,6 +333,7 @@ export class Match {
   private movePlayers(dt: number) {
     const act = this.active;
     for (const p of act) {
+      if (p.stunnedUntil > this.time) p.desiredVel.multiplyScalar(0.3); // superado por un regate
       p.integrate(dt, this.owner === p);
       const holding = this.gkHolding === p;
       p.updateAnim(dt, this.owner === p, holding);
@@ -390,9 +392,27 @@ export class Match {
     if (b.pos.y > BALL_RADIUS + 0.15) return; // en el aire: se deja caer
     const f = o.forward(_v);
     const sp = Math.hypot(o.vel.x, o.vel.z);
-    const ahead = 0.42 + sp * 0.06;
-    const tx = o.pos.x + f.x * ahead + o.vel.x * 0.05;
-    const tz = o.pos.z + f.z * ahead + o.vel.z * 0.05;
+    let ahead = 0.42 + sp * 0.06;
+    let tx = o.pos.x + f.x * ahead + o.vel.x * 0.05;
+    let tz = o.pos.z + f.z * ahead + o.vel.z * 0.05;
+    if (o.action.kind === 'skill') {
+      // durante el regate el balón sigue el gesto: pegado al pie, arrastrado o hacia la salida
+      const a = o.action;
+      const n = a.time / a.duration;
+      const fwd = a.aux ?? f;
+      const kind = SKILL_KINDS[a.variant];
+      if (!a.done) {
+        if (kind === 'dragback') ahead = 0.45 - 0.75 * Math.min(1, n / Math.max(0.01, a.contactAt / a.duration));
+        else if (kind === 'roulette') ahead = 0.22;
+        else ahead = 0.32;
+        tx = o.pos.x + fwd.x * ahead;
+        tz = o.pos.z + fwd.z * ahead;
+      } else {
+        ahead = 0.5 + sp * 0.06;
+        tx = o.pos.x + a.dir.x * ahead;
+        tz = o.pos.z + a.dir.z * ahead;
+      }
+    }
     const gain = 6.5;
     const dvx = o.vel.x + (tx - b.pos.x) * gain;
     const dvz = o.vel.z + (tz - b.pos.z) * gain;
@@ -612,8 +632,12 @@ export class Match {
           : req.kind === 'punt' ? 'gk_kick'
             : strong || req.kind === 'finesse' || req.kind === 'chip' ? 'shoot'
               : req.kind === 'lob' || req.kind === 'cross' ? 'lob' : 'pass';
-    const duration = header ? 0.6 : handsKick ? 0.7 : strong ? 0.5 + req.power * 0.1 : 0.42;
-    const contact = header ? 0.22 : handsKick ? 0.38 : strong ? 0.2 + req.power * 0.05 : 0.15;
+    // Los tiros tienen un armado algo más largo (permite el doble toque para tiro raso);
+    // el tiro potente tarda más en armarse y es más vulnerable a una entrada.
+    const isShot = req.kind === 'shoot' || req.kind === 'finesse' || req.kind === 'chip';
+    const powerShot = !!req.style?.power;
+    const duration = header ? 0.6 : handsKick ? 0.7 : isShot ? 0.58 + req.power * 0.1 + (powerShot ? 0.15 : 0) : strong ? 0.5 + req.power * 0.1 : 0.42;
+    const contact = header ? 0.22 : handsKick ? 0.38 : isShot ? 0.26 + req.power * 0.05 + (powerShot ? 0.14 : 0) : strong ? 0.2 + req.power * 0.05 : 0.15;
     p.startAction(header ? 'header' : 'kick', anim as any, duration + runup, contact + runup, { kick: req, done: false });
     p.action.dir.set(req.velocity.x, 0, req.velocity.z).normalize();
     // pie de golpeo: el más cercano al lado del balón
@@ -642,6 +666,8 @@ export class Match {
         this.resolveTackle(p, false);
       } else if (a.kind === 'slide' && !a.done && a.time >= 0.08 && a.time <= 0.65) {
         this.resolveTackle(p, true);
+      } else if (a.kind === 'skill') {
+        this.updateSkill(p);
       }
     }
     void dt;
@@ -693,9 +719,11 @@ export class Match {
     const scale = req.errorScale * (1 + pressure * 0.35) * badAngle;
     const baseAng = { pass: 0.035, through: 0.045, lob: 0.05, cross: 0.06, shoot: 0.05, finesse: 0.04, clear: 0.12, header: 0.09, throwin: 0.05, gkthrow: 0.04, punt: 0.08, penalty: 0.03, chip: 0.05 }[req.kind];
     const gauss = () => this.rng.gauss();
-    applyKickError(v, baseAng * q * scale, 0.06 * q * scale, (req.kind === 'shoot' ? 0.045 : 0.025) * q * scale, gauss);
+    const low = !!req.style?.low;
+    applyKickError(v, baseAng * q * scale, 0.06 * q * scale, (req.kind === 'shoot' && !low ? 0.045 : 0.02) * q * scale, gauss);
+    if (low) v.y = Math.min(v.y, 0.7); // el tiro raso sigue pegado al césped
     // Sobrepotenciar un disparo lo eleva (como en los juegos de fútbol modernos)
-    if (req.kind === 'shoot' && req.power > 0.8) v.y += (req.power - 0.8) * 4 * (1.2 - a.shooting / 100) * 2;
+    if (req.kind === 'shoot' && !low && req.power > 0.8) v.y += (req.power - 0.8) * 4 * (1.2 - a.shooting / 100) * 2;
     b.held = false;
     b.vel.copy(v);
     b.spin.copy(req.spin);
@@ -741,11 +769,126 @@ export class Match {
   }
 
   // ------------------------------------------------------------------
+  // Regates
+  // ------------------------------------------------------------------
+
+  /**
+   * Inicia un regate. `side`: +1 hacia la izquierda del jugador, -1 hacia la derecha.
+   * Devuelve false si no es posible (sin balón, ocupado...).
+   */
+  requestSkill(p: Player, kind: SkillKind, side: 1 | -1): boolean {
+    if (this.owner !== p || p.sentOff || (p.busy && p.action.kind !== 'trap')) return false;
+    if (dist2D(p.pos, this.ball.pos) > 1.25 || this.ball.pos.y > 0.6) return false;
+    const fwd = p.forward(new Vector3());
+    const left = new Vector3(fwd.z, 0, -fwd.x);
+    const exit = new Vector3();
+    let dur = 0.6;
+    let key = 0.35;
+    switch (kind) {
+      case 'stepover': dur = 0.62; key = 0.38; exit.copy(fwd).multiplyScalar(0.55).addScaledVector(left, side * 0.85); break;
+      case 'elastico': dur = 0.5; key = 0.27; exit.copy(fwd).multiplyScalar(0.45).addScaledVector(left, side * 0.9); break;
+      case 'roulette': dur = 0.8; key = 0.62; exit.copy(fwd).addScaledVector(left, side * 0.25); break;
+      case 'rainbow': dur = 0.78; key = 0.34; exit.copy(fwd); break;
+      case 'dragback': dur = 0.55; key = 0.3; exit.copy(fwd).multiplyScalar(-1).addScaledVector(left, side * 0.35); break;
+      case 'fakeshot': dur = 0.55; key = 0.3; exit.copy(fwd).multiplyScalar(0.35).addScaledVector(left, side * 0.95); break;
+    }
+    exit.normalize();
+    p.startAction('skill', 'skill', dur, key, { variant: SKILL_KINDS.indexOf(kind), done: false, aux: fwd });
+    p.action.dir.copy(exit);
+    // pie: regate hacia la izquierda del jugador con el pie derecho (animación reflejada al otro lado)
+    p.anim.foot = side > 0 ? 1 : -1;
+    p.stamina = Math.max(0.25, p.stamina - 0.01);
+    this.emit({ type: 'skill', kind, text: SKILL_NAMES[kind], playerId: p.id, team: p.team });
+    return true;
+  }
+
+  /** Movimiento del regatista y momento clave (cuando el regate supera o no al rival). */
+  private updateSkill(p: Player) {
+    const a = p.action;
+    const kind = SKILL_KINDS[a.variant];
+    const fwd = a.aux!;
+    const t = a.time;
+    const sp = (v: number, dir: Vector3) => p.desiredVel.set(dir.x * v, 0, dir.z * v);
+    if (!a.done) {
+      // preparación: el jugador frena y hace el gesto
+      if (kind === 'roulette') {
+        sp(2.6, fwd);
+        // giro de 360° sobre el balón
+        const n = Math.min(1, t / (a.duration * 0.85));
+        p.facing = Math.atan2(fwd.x, fwd.z) + (p.anim.foot > 0 ? 1 : -1) * n * Math.PI * 2;
+      } else if (kind === 'dragback') {
+        sp(0.6, fwd);
+      } else {
+        sp(kind === 'rainbow' ? 3.5 : 1.8, fwd);
+      }
+      if (t >= a.contactAt) {
+        a.done = true;
+        this.skillKeyMoment(p, kind);
+      }
+    } else {
+      // salida explosiva en la nueva dirección
+      const v = kind === 'dragback' ? 4.2 : kind === 'rainbow' ? 7 : kind === 'roulette' ? 5 : 6.4;
+      sp(v, a.dir);
+      p.sprinting = true;
+      p.facing = approachAngleRad(p.facing, Math.atan2(a.dir.x, a.dir.z), 0.35);
+    }
+  }
+
+  private skillKeyMoment(p: Player, kind: SkillKind) {
+    const b = this.ball;
+    const fwd = p.action.aux!;
+    const ctrl = p.data.attrs.control;
+    // toque pesado si el jugador no domina un regate difícil
+    const hard = kind === 'elastico' || kind === 'rainbow';
+    if (hard && ctrl < 62 && this.rng.next() < (62 - ctrl) / 20) {
+      this.owner = null;
+      b.vel.set(fwd.x * 4 + (this.rng.next() - 0.5) * 3, 0.5, fwd.z * 4 + (this.rng.next() - 0.5) * 3);
+      p.noTouchUntil = this.time + 0.3;
+      return;
+    }
+    if (kind === 'rainbow') {
+      // sombrero: el balón pasa por encima del rival
+      this.owner = null;
+      b.vel.set(fwd.x * 5.2, 5.4, fwd.z * 5.2);
+      b.pos.y = Math.max(b.pos.y, 0.35);
+      p.noTouchUntil = this.time + 0.35;
+      this.setLastTouch(p, false, 'control');
+    }
+    // ¿supera al rival más cercano que tiene delante?
+    let best: Player | null = null;
+    let bestD = 3.4;
+    for (const o of this.otherTeam(p.team as 0 | 1).active) {
+      const dx = o.pos.x - p.pos.x;
+      const dz = o.pos.z - p.pos.z;
+      const d = Math.hypot(dx, dz);
+      const front = (dx * fwd.x + dz * fwd.z) / Math.max(d, 0.01);
+      if (d < bestD && front > -0.2 && !o.isGK) { best = o; bestD = d; }
+    }
+    const bonus: Record<SkillKind, number> = { stepover: 0, elastico: 0.08, roulette: 0.1, rainbow: 0.12, dragback: 0.05, fakeshot: 0.1 };
+    let beat = false;
+    if (best) {
+      const chance = clamp(0.42 + (ctrl - best.data.attrs.defending) / 100 + bonus[kind], 0.15, 0.9);
+      if (this.rng.next() < chance) {
+        best.stunnedUntil = this.time + 0.7;
+        if (best.action.kind === 'none') best.vel.multiplyScalar(0.4);
+        beat = true;
+      }
+    }
+    // el amago de tiro también engaña al arquero y a quien intenta tapar el disparo
+    if (kind === 'fakeshot') {
+      for (const o of this.otherTeam(p.team as 0 | 1).active) {
+        if (dist2D(o.pos, p.pos) < 16 && this.rng.next() < 0.6) o.stunnedUntil = Math.max(o.stunnedUntil, this.time + 0.45);
+      }
+    }
+    if (beat) this.emit({ type: 'skill', kind: 'beat', text: SKILL_NAMES[kind], playerId: p.id, team: p.team, power: 1 });
+  }
+
+  // ------------------------------------------------------------------
   // Entradas y faltas
   // ------------------------------------------------------------------
 
   requestTackle(p: Player, slide: boolean): boolean {
-    if (p.busy || p.sentOff) return false;
+    if (p.busy || p.sentOff || p.stunnedUntil > this.time) return false;
     const f = p.forward(_v);
     if (slide) {
       p.startAction('slide', 'slide', 1.15, 0.08, { done: false });
@@ -773,7 +916,9 @@ export class Match {
     const ballD = Math.hypot(b.pos.x - fx, b.pos.z - fz);
     const defending = p.data.attrs.defending / 100;
     const carrier = this.owner;
-    const ballReach = (slide ? 0.8 : 0.65) + defending * 0.3 - (carrier && carrier.team !== p.team ? (carrier.data.attrs.control / 100) * 0.15 : 0);
+    let ballReach = (slide ? 0.8 : 0.65) + defending * 0.3 - (carrier && carrier.team !== p.team ? (carrier.data.attrs.control / 100) * 0.15 : 0);
+    // la ruleta protege el balón con el cuerpo durante el giro
+    if (carrier && carrier.action.kind === 'skill' && SKILL_KINDS[carrier.action.variant] === 'roulette' && carrier.action.time < carrier.action.duration * 0.8) ballReach = 0;
     const team = this.teams[p.team];
     if (b.pos.y < 0.6 && ballD < ballReach && !b.held && (!carrier || carrier.team !== p.team)) {
       // Entrada limpia: toca el balón primero
