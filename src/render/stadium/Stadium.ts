@@ -61,7 +61,7 @@ export class Stadium {
   private prevFog: THREE.Fog | THREE.FogExp2 | null = null;
   private prevBackground: THREE.Scene['background'] = null;
 
-  constructor(data: StadiumData, quality: GfxQuality, homeColor: string, awayColor: string) {
+  constructor(data: StadiumData, quality: GfxQuality, homeColor: string, awayColor: string, names: [string, string] = ['LOCAL', 'VISITANTE']) {
     this.quality = quality;
     this.q = QUALITY[quality] ?? QUALITY.medium;
     this.preset = lightPreset(data.timeOfDay);
@@ -204,7 +204,7 @@ export class Stadium {
     this.textures.push(this.crowd.atlas);
     this.materials.push(this.crowd.material);
     this.group.add(...this.crowd.meshes);
-    this.fans = new FanEffects(this.crowd.spots, { homeColor, awayColor, seed, quality });
+    this.fans = new FanEffects(this.crowd.spots, { homeColor, awayColor, seed, quality, homeName: names[0], awayName: names[1] });
     this.group.add(this.fans.group);
 
     // ---- sky

@@ -70,7 +70,7 @@ export class MatchView {
     this.director.style = opts.cameraStyle;
     this.director.zoom = opts.cameraZoom;
     const [t0, t1] = match.teams;
-    this.stadium = new Stadium(stadiumData, opts.quality, t0.kit.shirt, t1.kit.shirt);
+    this.stadium = new Stadium(stadiumData, opts.quality, t0.kit.shirt, t1.kit.shirt, [t0.data.name, t1.data.name]);
     this.stadium.attachTo(this.scene);
     this.scene.add(this.stadium.group);
     this.scene.add(this.ball.mesh, this.ball.shadow);

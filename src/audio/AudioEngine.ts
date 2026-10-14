@@ -50,6 +50,9 @@ interface Ambience {
   sources: AudioScheduledSourceNode[];
   timer: ReturnType<typeof setInterval> | null;
   nextChant: number;
+  /** Bombos de la barra brava: inicio del próximo compás y número de compás. */
+  nextBar: number;
+  bar: number;
 }
 
 interface MusicNodes {
@@ -127,6 +130,9 @@ const CHANTS: Array<Array<[number, number, number, Vowel]>> = [
   // "oh oh oh oh, oh oh oh" ascendente
   [[0, 0, 1, 'o'], [1, 0, 1, 'o'], [2, 3, 1, 'o'], [3, 5, 1, 'o'], [4, 7, 1.5, 'o'], [5.5, 5, 0.5, 'o'], [6, 3, 2, 'o']],
 ];
+
+/** Pulso de la batería de la barra (s por tiempo, ~143 ppm): coincide con el salto de la barra en la grada. */
+const BARRA_BEAT = 0.42;
 
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -579,7 +585,7 @@ export class AudioEngine {
       lfo(0.031, 120, f1.frequency);
       lfo(0.027, 180, f2.frequency);
 
-      this.amb = { out, tone, murmur, babble, swell, sources, timer: null, nextChant: t + 1.5 };
+      this.amb = { out, tone, murmur, babble, swell, sources, timer: null, nextChant: t + 1.5, nextBar: t + 0.6, bar: 0 };
       this.applyExcitement(0.05);
       // first chant soon, then periodic via timer
       this.scheduleChant(t + 1.5);
@@ -1286,7 +1292,13 @@ export class AudioEngine {
       const now = ctx.currentTime;
       if (now >= a.nextChant - 0.6) {
         this.scheduleChant(Math.max(now + 0.05, a.nextChant));
-        a.nextChant = Math.max(now, a.nextChant) + rand(9, 22) * (1 - 0.45 * this.excitement);
+        a.nextChant = Math.max(now, a.nextChant) + rand(7, 16) * (1 - 0.45 * this.excitement);
+      }
+      // la barra no para: bombos todo el partido (se programan ~1,2 s por delante)
+      if (a.nextBar < now) a.nextBar = now + 0.05;
+      while (a.nextBar < now + 1.2) {
+        this.barraBar(a.nextBar, a.bar++, a.out);
+        a.nextBar += 4 * BARRA_BEAT;
       }
     });
   }
@@ -1337,6 +1349,56 @@ export class AudioEngine {
         c.connect(hp).connect(cg).connect(v);
       }
     });
+  }
+
+  /**
+   * Un compás de la batería de la barra brava: varios bombos (graves, algo desfasados entre sí),
+   * redoblante en los contratiempos y platillo cada dos compases.
+   */
+  private barraBar(t: number, n: number, out: AudioNode): void {
+    const ctx = this.ctx!;
+    const level = 0.16 + 0.3 * this.excitement;
+    const b = BARRA_BEAT / 2; // corcheas
+    const bombo = (tt: number, f0: number, lv: number) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f0 * 1.8, tt);
+      o.frequency.exponentialRampToValueAtTime(f0, tt + 0.12);
+      const g = ctx.createGain();
+      this.perc(g.gain, tt, 0.003, lv, 0.26);
+      o.connect(g).connect(out);
+      o.start(tt);
+      o.stop(tt + 0.32);
+      const nz = this.noise('pink', tt, 0.05);
+      const bp = this.filter('bandpass', 160, 1.1);
+      const ng = ctx.createGain();
+      this.perc(ng.gain, tt, 0.002, lv * 0.45, 0.04);
+      nz.connect(bp).connect(ng).connect(out);
+    };
+    // patrón de cancha (8 corcheas): golpes principales y respuesta de los otros bombos
+    const main = [0, 3, 4, 6];
+    const answer = n % 2 ? [2, 5, 7] : [2, 7];
+    // la mayoría de la batería son bombos: tres grupos con afinación y desfase distintos
+    const drums: Array<[number, number]> = [[52, 0], [58, 0.012], [64, -0.008]];
+    for (const e of main) for (const [f, off] of drums) bombo(t + e * b + off, f, level * (e === 0 ? 0.62 : 0.45));
+    for (const e of answer) bombo(t + e * b + 0.006, 70, level * 0.3);
+    // redoblante
+    for (const e of [2, 6]) {
+      const tt = t + e * b;
+      const nz = this.noise('white', tt, 0.12);
+      const bp = this.filter('bandpass', 1900, 0.9);
+      const g = ctx.createGain();
+      this.perc(g.gain, tt, 0.002, level * 0.22, 0.09);
+      nz.connect(bp).connect(g).connect(out);
+    }
+    // platillo
+    if (n % 2 === 0) {
+      const nz = this.noise('white', t, 1.2);
+      const hp = this.filter('highpass', 6500, 0.7);
+      const g = ctx.createGain();
+      this.perc(g.gain, t, 0.004, level * 0.14, 0.9);
+      nz.connect(hp).connect(g).connect(out);
+    }
   }
 
   /** Bombo de la hinchada en los tiempos del cántico. */

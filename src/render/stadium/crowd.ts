@@ -31,6 +31,8 @@ export interface FanSpot {
   nz: number;
   /** Hinchada visitante (fondo del visitante). */
   away: boolean;
+  /** Barra brava local (fondo detrás del otro arco, gradas bajas). */
+  barra: boolean;
   tier: number;
 }
 
@@ -48,6 +50,7 @@ export function buildCrowd(rows: RowDef[], o: CrowdOptions, su: StaticShadowUnif
     nx: number;
     nz: number;
     away: boolean;
+    barra: boolean;
     tier: number;
   }
   const seats: Seat[][] = [[], [], [], []];
@@ -59,7 +62,7 @@ export function buildCrowd(rows: RowDef[], o: CrowdOptions, su: StaticShadowUnif
       const am = ((along % 13) + 13) % 13;
       if (am < 1.15) return;
       const q = Math.abs(nz) >= Math.abs(nx) ? (nz > 0 ? 0 : 2) : nx > 0 ? 1 : 3;
-      seats[q].push({ x, y: r.y, z, nx, nz, away: nx > 0.55 && r.tier < 2, tier: r.tier });
+      seats[q].push({ x, y: r.y, z, nx, nz, away: nx > 0.55 && r.tier < 2, barra: nx < -0.55 && r.tier < 2, tier: r.tier });
     });
   }
   const total = seats.reduce((a, s) => a + s.length, 0);
@@ -91,14 +94,17 @@ varying vec3 vDark;
         {
           float phase = aMisc.x;
           float energy = aMisc.z;
-          float ex = clamp( uExcite * ( 0.35 + energy ), 0.0, 1.0 );
-          float t = uTime * ( 5.0 + energy * 4.5 ) + phase * 6.2831;
+          float barra = step( 1.1, energy );
+          float ex = clamp( max( uExcite * ( 0.35 + energy ), barra * 0.8 ), 0.0, 1.0 );
+          // la barra salta casi a la vez, al ritmo del bombo (dos tiempos por salto)
+          float t = mix( uTime * ( 5.0 + energy * 4.5 ) + phase * 6.2831, uTime * 7.48 + phase * 0.7, barra );
           float j = max( 0.0, sin( t ) );
           transformed.y += ex * ex * 0.42 * j * j;
           float h = position.y / 1.5;
           transformed.x += sin( uTime * 1.3 + phase * 17.0 ) * 0.035 * h * ( 0.4 + uExcite );
           float up = step( 0.42, ex ) * step( 0.0, sin( uTime * ( 0.9 + energy ) + phase * 31.0 ) );
           up = max( up, step( 0.8, ex ) );
+          up = max( up, barra * step( 0.0, sin( uTime * 3.74 + phase * 0.6 ) ) );
           up = max( up, step( 0.97, aMisc.w ) * step( 0.0, sin( uTime * 0.31 + phase * 9.0 ) ) );
           vMapUv = vec2( ( aMisc.y + uv.x ) / ${CROWD_COLS.toFixed(1)}, 1.0 - ( up + 1.0 - uv.y ) / ${CROWD_ROWS.toFixed(1)} );
           vShirt = aShirt;
@@ -141,7 +147,7 @@ varying vec3 vDark;
   const spots: FanSpot[] = [];
   for (const group of seats) {
     const chosen = group.filter(() => rand() < p);
-    for (const s of chosen) if (rand() < 0.035 && spots.length < 1400) spots.push({ x: s.x, y: s.y, z: s.z, nx: s.nx, nz: s.nz, away: s.away, tier: s.tier });
+    for (const s of chosen) if (rand() < (s.barra ? 0.08 : 0.035) && spots.length < 1800) spots.push({ x: s.x, y: s.y, z: s.z, nx: s.nx, nz: s.nz, away: s.away, barra: s.barra, tier: s.tier });
     if (chosen.length === 0) continue;
     const n = chosen.length;
     const g = base.clone();
@@ -154,6 +160,7 @@ varying vec3 vDark;
       const r = rand();
       let c: THREE.Color;
       if (s.away) c = r < 0.72 ? away : r < 0.8 ? white : neutral[Math.floor(rand() * neutral.length)];
+      else if (s.barra) c = r < 0.86 ? home : r < 0.95 ? white : neutral[Math.floor(rand() * neutral.length)];
       else c = r < 0.56 ? home : r < 0.62 ? white : r < 0.66 ? away : neutral[Math.floor(rand() * neutral.length)];
       tmp.copy(c);
       if (c === home || c === away) tmp.multiplyScalar(0.82 + rand() * 0.3);
@@ -162,7 +169,8 @@ varying vec3 vDark;
       darks[Math.floor(rand() * darks.length)].toArray(dark, i * 3);
       misc[i * 4] = rand();
       misc[i * 4 + 1] = Math.floor(rand() * CROWD_COLS);
-      misc[i * 4 + 2] = rand();
+      // energía: la barra brava (> 1) salta todo el partido al ritmo del bombo
+      misc[i * 4 + 2] = s.barra ? 1.2 + rand() * 0.3 : rand();
       misc[i * 4 + 3] = rand();
       const jitter = (rand() - 0.5) * 0.1;
       pos.set(s.x + -s.nz * jitter, s.y, s.z + s.nx * jitter);

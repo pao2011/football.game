@@ -8,7 +8,9 @@ function spots(): FanSpot[] {
   for (let i = 0; i < 300; i++) {
     const side = i % 2 ? 1 : -1;
     const tier = i % 3;
-    out.push({ x: (i % 50) * 2 - 50, y: 2 + tier * 8, z: side * (40 + tier * 6), nx: 0, nz: side, away: i % 7 === 0, tier });
+    const barra = i % 5 === 0 && tier < 2;
+    if (barra) out.push({ x: -58 - tier * 6 - (i % 4), y: 2 + tier * 8, z: (i % 30) - 15, nx: -1, nz: 0, away: false, barra, tier });
+    else out.push({ x: (i % 50) * 2 - 50, y: 2 + tier * 8, z: side * (40 + tier * 6), nx: 0, nz: side, away: i % 7 === 0, barra, tier });
   }
   return out;
 }
@@ -18,9 +20,22 @@ describe('Efectos de la hinchada', () => {
   cam.position.set(0, 20, 60);
   cam.lookAt(0, 0, 0);
 
-  it('hay banderas en las gradas', () => {
-    const fx = new FanEffects(spots(), { homeColor: '#d02020', awayColor: '#2050d0', seed: 1, quality: 'medium' });
-    expect(fx.flagCount).toBeGreaterThan(20);
+  it('hay banderas en las gradas, trapos en la baranda y bombos en la barra brava', () => {
+    const fx = new FanEffects(spots(), { homeColor: '#d02020', awayColor: '#2050d0', seed: 1, quality: 'medium', homeName: 'Aurora', awayName: 'Brasa' });
+    expect(fx.flagCount).toBeGreaterThan(40);
+    expect(fx.flags.trapoCount).toBeGreaterThan(3);
+    expect(fx.flags.drumCount).toBeGreaterThan(5);
+    expect(fx.flags.giantVisible).toBe(false);
+    fx.dispose();
+  });
+
+  it('la bandera gigante de la barra se despliega en el recibimiento y luego se recoge', () => {
+    const fx = new FanEffects(spots(), { homeColor: '#d02020', awayColor: '#2050d0', seed: 4, quality: 'low' });
+    fx.welcome();
+    for (let i = 0; i < 60 * 3; i++) fx.update(1 / 60, cam, 720, 0.5);
+    expect(fx.flags.giantVisible).toBe(true);
+    for (let i = 0; i < 60 * 25; i++) fx.update(1 / 60, cam, 720, 0);
+    expect(fx.flags.giantVisible).toBe(false);
     fx.dispose();
   });
 

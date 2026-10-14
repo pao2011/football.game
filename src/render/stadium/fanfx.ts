@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { FanSpot } from './crowd';
 import { mulberry32 } from './textures';
+import { FanFlags } from './fanflags';
 
 // Efectos de la hinchada: banderas que flamean en las gradas, humo de bengalas, fuegos artificiales
 // y papelitos. Todo procedural (sin imágenes) y con partículas baratas (THREE.Points), para que
@@ -13,6 +14,9 @@ export interface FanFxOptions {
   seed: number;
   /** Calidad: limita el número de partículas y banderas. */
   quality: 'low' | 'medium' | 'high';
+  /** Nombres de los equipos (para los trapos). */
+  homeName?: string;
+  awayName?: string;
 }
 
 type Style = 0 | 1 | 2; // 0 humo (suave), 1 luz aditiva (chispas, bengalas), 2 papelitos (cuadrados)
@@ -199,9 +203,9 @@ interface Rocket {
 }
 
 const LIMITS = {
-  low: { smoke: 260, sparks: 900, confetti: 500, flags: 26 },
-  medium: { smoke: 520, sparks: 1800, confetti: 1200, flags: 70 },
-  high: { smoke: 800, sparks: 2600, confetti: 1800, flags: 110 },
+  low: { smoke: 260, sparks: 900, confetti: 500, flags: 40, trapos: 8, drums: 8 },
+  medium: { smoke: 520, sparks: 1800, confetti: 1200, flags: 100, trapos: 14, drums: 14 },
+  high: { smoke: 800, sparks: 2600, confetti: 1800, flags: 150, trapos: 20, drums: 18 },
 };
 
 export class FanEffects {
@@ -211,9 +215,7 @@ export class FanEffects {
   private smoke: Particles;
   private sparks: Particles;
   private confetti: Particles;
-  private flagMesh: THREE.InstancedMesh;
-  private poleMesh: THREE.InstancedMesh;
-  private flagUniforms = { uTime: { value: 0 }, uExcite: { value: 0 } };
+  readonly flags: FanFlags;
   private emitters: Emitter[] = [];
   private rockets: Rocket[] = [];
   private confettiQueue: { spot: FanSpot; color: THREE.Color }[] = [];
@@ -230,6 +232,8 @@ export class FanEffects {
   private readonly topSpots: FanSpot[];
   /** Asientos de la tribuna de enfrente de la cámara de transmisión (los efectos se ven más ahí). */
   private readonly farSpots: FanSpot[];
+  /** Barra brava local (detrás de un arco). */
+  private readonly barraSpots: FanSpot[];
 
   constructor(private spots: FanSpot[], o: FanFxOptions) {
     this.rand = mulberry32(o.seed ^ 0x7f4a11);
@@ -247,6 +251,8 @@ export class FanEffects {
     const maxTier = spots.reduce((m, s) => Math.max(m, s.tier), 0);
     this.topSpots = spots.filter((s) => s.tier === maxTier);
     if (this.topSpots.length === 0) this.topSpots = spots;
+    this.barraSpots = low.filter((s) => s.barra);
+    if (this.barraSpots.length === 0) this.barraSpots = this.homeSpots;
     this.farSpots = low.filter((s) => s.nz < -0.5 || Math.abs(s.nx) > 0.5);
     if (this.farSpots.length === 0) this.farSpots = low.length ? low : spots;
 
@@ -255,85 +261,12 @@ export class FanEffects {
     this.confetti = new Particles(lim.confetti, 2);
     this.group.add(this.smoke.points, this.confetti.points, this.sparks.points);
 
-    // ---- banderas en las gradas (flamean con el viento y más fuerte con la emoción del partido)
-    const nFlags = Math.min(lim.flags, low.length);
-    const fg = new THREE.PlaneGeometry(2.4, 1.5, 12, 2);
-    fg.translate(1.2, 0, 0);
-    const phase = new Float32Array(nFlags);
-    const col2 = new Float32Array(nFlags * 3);
-    const fm = new THREE.ShaderMaterial({
-      uniforms: this.flagUniforms,
-      side: THREE.DoubleSide,
-      vertexShader: `uniform float uTime;
-        uniform float uExcite;
-        attribute float aPhase;
-        attribute vec3 aCol2;
-        varying vec2 vUv;
-        varying vec3 vC1;
-        varying vec3 vC2;
-        varying float vShade;
-        void main() {
-          vUv = uv;
-          #ifdef USE_INSTANCING_COLOR
-            vC1 = instanceColor;
-          #else
-            vC1 = vec3(1.0);
-          #endif
-          vC2 = aCol2;
-          vec3 p = position;
-          float w = uv.x;
-          float amp = 0.18 + 0.2 * uExcite;
-          float wave = sin(uv.x * 5.5 - uTime * (5.0 + 3.0 * uExcite) + aPhase * 6.28);
-          p.z += wave * amp * w;
-          p.y += cos(uv.x * 4.0 - uTime * 4.0 + aPhase * 3.0) * 0.05 * w;
-          // el hincha agita la bandera de lado a lado
-          float swing = sin(uTime * (1.4 + uExcite * 2.5) + aPhase * 9.0) * (0.25 + 0.55 * uExcite);
-          p.z += swing * w * 0.9;
-          vShade = 0.72 + 0.28 * cos(uv.x * 5.5 - uTime * 5.0 + aPhase * 6.28);
-          gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(p, 1.0);
-        }`,
-      fragmentShader: `varying vec2 vUv;
-        varying vec3 vC1;
-        varying vec3 vC2;
-        varying float vShade;
-        void main() {
-          // tres franjas verticales: color del club, color secundario, color del club
-          float mid = step(0.34, vUv.x) * step(vUv.x, 0.66);
-          vec3 c = mix(vC1, vC2, mid);
-          gl_FragColor = vec4(c * vShade, 1.0);
-        }`,
+    // ---- banderas, trapos, bandera gigante y bombos de la barra brava
+    this.flags = new FanFlags(spots, {
+      home: this.home, away: this.away, homeName: o.homeName ?? 'LOCAL', awayName: o.awayName ?? 'VISITANTE',
+      flags: lim.flags, trapos: lim.trapos, drums: lim.drums, rand: r,
     });
-    this.flagMesh = new THREE.InstancedMesh(fg, fm, Math.max(1, nFlags));
-    this.poleMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.03, 0.03, 3.2, 4).translate(0, 1.6, 0), new THREE.MeshBasicMaterial({ color: 0x3a3a3a }), Math.max(1, nFlags));
-    const m4 = new THREE.Matrix4();
-    const q = new THREE.Quaternion();
-    const Y = new THREE.Vector3(0, 1, 0);
-    const one = new THREE.Vector3(1, 1, 1);
-    const white = new THREE.Color('#f4f4f4');
-    const used = new Set<number>();
-    for (let i = 0; i < nFlags; i++) {
-      let k = Math.floor(r() * low.length);
-      for (let t = 0; t < 6 && used.has(k); t++) k = Math.floor(r() * low.length);
-      used.add(k);
-      const s = low[k];
-      q.setFromAxisAngle(Y, Math.atan2(-s.nx, -s.nz) + (r() - 0.5) * 0.5);
-      m4.compose(new THREE.Vector3(s.x, s.y + 1.3, s.z), q, one);
-      this.poleMesh.setMatrixAt(i, m4);
-      m4.compose(new THREE.Vector3(s.x, s.y + 3.9, s.z), q, one);
-      this.flagMesh.setMatrixAt(i, m4);
-      const c = s.away ? this.away : this.home;
-      this.flagMesh.setColorAt(i, c);
-      (r() < 0.6 ? white : c.clone().multiplyScalar(0.45)).toArray(col2, i * 3);
-      phase[i] = r();
-    }
-    fg.setAttribute('aPhase', new THREE.InstancedBufferAttribute(phase, 1));
-    fg.setAttribute('aCol2', new THREE.InstancedBufferAttribute(col2, 3));
-    this.flagMesh.count = nFlags;
-    this.poleMesh.count = nFlags;
-    this.flagMesh.frustumCulled = false;
-    this.poleMesh.frustumCulled = false;
-    this.flagMesh.name = 'fan-flags';
-    this.group.add(this.flagMesh, this.poleMesh);
+    this.group.add(this.flags.group);
   }
 
   private pick(list: FanSpot[]) {
@@ -370,8 +303,10 @@ export class FanEffects {
 
   /** Recibimiento: fuegos artificiales, bengalas de ambas hinchadas y lluvia de papelitos. */
   welcome() {
+    this.flags.showGiant(18);
     for (let i = 0; i < 16; i++) this.rocket(0.2 + i * 0.32 + this.rand() * 0.3, i % 4 === 0, i % 2 ? this.home : null);
-    for (let i = 0; i < 9; i++) this.flare(this.pickFar(this.homeSpots), this.smokeColor(this.home), 9 + this.rand() * 6);
+    for (let i = 0; i < 6; i++) this.flare(this.pick(this.barraSpots), this.smokeColor(this.home), 10 + this.rand() * 6);
+    for (let i = 0; i < 5; i++) this.flare(this.pickFar(this.homeSpots), this.smokeColor(this.home), 9 + this.rand() * 6);
     for (let i = 0; i < 5; i++) this.flare(this.pick(this.awaySpots), this.smokeColor(this.away), 9 + this.rand() * 6);
     this.queueConfetti(this.homeSpots, this.home, 700);
     this.queueConfetti(this.awaySpots, this.away, 250);
@@ -380,6 +315,7 @@ export class FanEffects {
   /** Gol: la hinchada del equipo que marca enciende bengalas, tira papelitos y hay fuegos artificiales. */
   goal(team: 0 | 1) {
     const spots = team === 0 ? this.homeSpots : this.awaySpots;
+    if (team === 0) this.flags.showGiant(10);
     const c = team === 0 ? this.home : this.away;
     for (let i = 0; i < 6; i++) this.flare(this.pickFar(spots), this.smokeColor(c), 7 + this.rand() * 5);
     for (let i = 0; i < 5; i++) this.rocket(0.4 + i * 0.45 + this.rand() * 0.3, i === 2, c);
@@ -410,16 +346,18 @@ export class FanEffects {
     this.smoke.uniforms.uScale.value = scale;
     this.sparks.uniforms.uScale.value = scale;
     this.confetti.uniforms.uScale.value = scale;
-    this.flagUniforms.uTime.value = this.time;
-    this.flagUniforms.uExcite.value += (excitement - this.flagUniforms.uExcite.value) * Math.min(1, d * 2);
+    this.flags.update(d, excitement);
     camera.getWorldPosition(this.camPos);
 
     // bengalas espontáneas de vez en cuando (más si el partido está caliente)
     if (this.time > this.nextAmbient) {
       this.nextAmbient = this.time + (55 + r() * 70) * (1 - 0.4 * excitement);
-      const away = r() < 0.35;
+      // la mayoría de las bengalas las prende la barra brava
+      const k = r();
+      const list = k < 0.55 ? this.barraSpots : k < 0.8 ? this.awaySpots : this.homeSpots;
+      const col = list === this.awaySpots ? this.away : this.home;
       const n = 1 + Math.floor(r() * 3);
-      for (let i = 0; i < n; i++) this.flare(this.pickFar(away ? this.awaySpots : this.homeSpots), this.smokeColor(away ? this.away : this.home), 8 + r() * 6);
+      for (let i = 0; i < n; i++) this.flare(list === this.homeSpots ? this.pickFar(list) : this.pick(list), this.smokeColor(col), 8 + r() * 6);
     }
 
     // emisores de humo
@@ -501,18 +439,13 @@ export class FanEffects {
   }
 
   get flagCount() {
-    return this.flagMesh.count;
+    return this.flags.flagCount;
   }
 
   dispose() {
     this.smoke.dispose();
     this.sparks.dispose();
     this.confetti.dispose();
-    this.flagMesh.geometry.dispose();
-    (this.flagMesh.material as THREE.Material).dispose();
-    this.flagMesh.dispose();
-    this.poleMesh.geometry.dispose();
-    (this.poleMesh.material as THREE.Material).dispose();
-    this.poleMesh.dispose();
+    this.flags.dispose();
   }
 }
