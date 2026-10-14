@@ -27,14 +27,14 @@ export function shapeTarget(m: Match, team: Team, p: Player, attacking: boolean,
   let u: number;
   let l: number;
   if (attacking) {
-    const center = clamp(ballU * 0.72 + 6, -28, 30);
-    u = center + (s.depth - 0.45) * 62;
-    l = s.lateral * HALF_WIDTH * 0.86 + ballL * 0.18;
+    const center = clamp(ballU * 0.75 + 11, -22, 34);
+    u = center + (s.depth - 0.45) * 72;
+    l = s.lateral * HALF_WIDTH * (Math.abs(s.lateral) > 0.6 ? 0.95 : 0.8) + ballL * 0.15;
     // los laterales y mediocampistas con libertad se incorporan cuando el balón avanza
     if (ballU > 0) u += s.attackFreedom * ballU * 0.12;
   } else {
-    const center = clamp(ballU * 0.68 - 9 + (lineHeight - 0.45) * 16, -36, 14);
-    u = center + (s.depth - 0.45) * 40;
+    const center = clamp(ballU * 0.62 - 11 + (lineHeight - 0.45) * 16, -38, 10);
+    u = center + (s.depth - 0.45) * 44;
     l = s.lateral * HALF_WIDTH * 0.58 + ballL * 0.42;
     // los delanteros se quedan algo más arriba para salir al contragolpe
     if (s.position === 'FWD') u += 6;

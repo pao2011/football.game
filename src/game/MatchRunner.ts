@@ -31,6 +31,7 @@ export class MatchRunner {
   private last = 0;
   private raf = 0;
   paused = false;
+  private pauseGuard = 0;
   private finishedNotified = false;
   private fulltimeAt = -1;
   onPause: () => void = () => {};
@@ -93,6 +94,10 @@ export class MatchRunner {
       let steps = 0;
       while (this.acc >= SIM_DT && steps < 8 * Math.max(1, this.timeScale)) {
         this.input.poll(SIM_DT);
+        if (this.input.pressed('pause') && performance.now() > this.pauseGuard) {
+          this.pause();
+          break;
+        }
         // la base de la cámara orienta el stick
         if (this.controller) this.view.director.basis(this.controller.view.right, this.controller.view.forward);
         if (m.phase === 'replay' && (this.input.pressed('pass') || this.input.pressed('shoot') || !this.settings.replays)) m.skipReplay();
@@ -106,11 +111,6 @@ export class MatchRunner {
         m.events.length = 0;
         this.acc -= SIM_DT;
         steps++;
-        if (this.controller?.pauseRequested) {
-          this.controller.pauseRequested = false;
-          this.pause();
-          break;
-        }
       }
       if (steps >= 8) this.acc = 0; // evitar espiral de la muerte si el equipo es lento
     } else {
@@ -143,6 +143,7 @@ export class MatchRunner {
 
   resume() {
     this.paused = false;
+    this.pauseGuard = performance.now() + 350; // la misma pulsación de Esc no vuelve a pausar
     this.last = performance.now();
   }
 

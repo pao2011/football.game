@@ -8,7 +8,7 @@ import type { Player } from '../sim/Player';
 import type { Team } from '../sim/Team';
 import { angleDiff, clamp, dist2D } from '../util/math';
 import { buildClearance, buildGroundPass, buildLob, buildShot } from './Actions';
-import { getBallPrediction, PRED_DT, PRED_STEPS } from './Predict';
+import { getBallPrediction, PRED_DT, PRED_STEPS, timeToReach } from './Predict';
 import { offsideLineU } from '../sim/Rules';
 import { groundPassVelocity } from '../sim/Kicks';
 
@@ -110,9 +110,9 @@ export function updateOutfieldAI(m: Match, p: Player, dt: number) {
       break;
     default: {
       // Mantener posición: trote suave; correr si quedó muy descolocado
-      const urgent = distTarget > 12 && team.phase !== 'attack';
+      const urgent = distTarget > (team.phase === 'attack' ? 9 : 7);
       p.sprinting = urgent;
-      moveTo(p, p.tacticalTarget, urgent ? 1 : distTarget > 4 ? 0.62 : 0.4, 1.5);
+      moveTo(p, p.tacticalTarget, urgent ? 1 : distTarget > 3 ? 0.8 : 0.45, 1.2);
       if (distTarget < 3) faceBall(m, p);
       tryInterceptPass(m, p, team);
     }
@@ -262,6 +262,14 @@ function laneSafety(m: Match, from: Vector3, to: Vector3, speed: number, opponen
   return worst;
 }
 
+/** Ventaja (s) del receptor sobre el rival más rápido en llegar a un punto. */
+function raceMargin(q: Player, pt: { x: number; z: number }, opponents: Player[]): number {
+  const mine = timeToReach(q, pt, 0.1);
+  let theirs = Infinity;
+  for (const o of opponents) theirs = Math.min(theirs, timeToReach(o, pt, 0.25));
+  return theirs - mine;
+}
+
 function nearestOpponentDist(opponents: Player[], pt: { x: number; z: number }) {
   let d = Infinity;
   for (const o of opponents) d = Math.min(d, dist2D(o.pos, pt));
@@ -368,14 +376,15 @@ function decide(m: Match, p: Player, team: Team, opponents: Player[]) {
     const open = clamp(nearestOpponentDist(opponents, target) / 7, 0, 1);
     const danger = clamp((tu - (HALF_LENGTH - 35)) / 30, 0, 1);
     const receiverShot = shotQuality(m, team, target, opponents);
-    let score = 0.6 + progress * 0.55 + open * 0.45 + danger * 0.35 + receiverShot * 0.8 - (d > 30 ? 0.15 : 0);
+    let score = 0.55 + progress * 0.7 + open * 0.45 + danger * 0.45 + receiverShot * 0.8 - (d > 30 ? 0.15 : 0);
+    if (progress < 0 && pressure > 3) score -= 0.25; // sin presión no se juega hacia atrás
     if (safety < 0) score -= 1.2;
     else if (safety < 0.25) score -= 0.4;
     if (d <= 32 || safety >= 0) {
       options.push({ score, label: 'pass', run: () => m.requestKick(p, buildGroundPass(m, p, target, 0, err, q)) });
     }
     // Pase elevado si el carril raso está tapado y el receptor está libre
-    if (safety < 0.1 && d > 18 && open > 0.5 && progress > 0) {
+    if (safety < 0.1 && d > 18 && open > 0.5 && progress > 0 && raceMargin(q, target, opponents) > 0.6) {
       const lobScore = 0.2 + progress * 0.6 + open * 0.4 + danger * 0.3 - 0.3;
       options.push({ score: lobScore, label: 'lob', run: () => m.requestKick(p, buildLob(m, p, target, clamp(18 + d * 0.35, 22, 40), err, q)) });
     }
@@ -389,8 +398,11 @@ function decide(m: Match, p: Player, team: Team, opponents: Player[]) {
       if (dd > 8 && dd < 45) {
         const sp = groundPassVelocity(ballPos, tt, 0.2).length();
         const sf = laneSafety(m, ballPos, tt, sp, opponents);
+        // carrera: ¿llega el receptor al espacio antes que cualquier rival?
+        const race = raceMargin(q, tt, opponents);
         const free = clamp(nearestOpponentDist(opponents, tt) / 6, 0, 1);
-        const tScore = 0.5 + ((team.u(tt) - pu) / 25) * 0.6 + free * 0.5 + clamp((team.u(tt) - (HALF_LENGTH - 30)) / 20, 0, 1) * 0.5 - (sf < 0 ? 1.1 : 0);
+        const tScore = 0.5 + ((team.u(tt) - pu) / 25) * 0.6 + free * 0.4 + clamp((team.u(tt) - (HALF_LENGTH - 30)) / 20, 0, 1) * 0.5
+          - (sf < 0 ? 1.1 : 0) - (race < 0.3 ? 1.2 : 0);
         options.push({ score: tScore, label: 'through', run: () => m.requestKick(p, buildGroundPass(m, p, tt, 0.25, err, q, 'through')) });
       }
     }
@@ -402,7 +414,8 @@ function decide(m: Match, p: Player, team: Team, opponents: Player[]) {
     if (inBox.length > 0) {
       const t = inBox[Math.floor(m.rng.next() * inBox.length)];
       const target = t.pos.clone().add(team.toWorld(2, 0));
-      options.push({ score: 0.75 + inBox.length * 0.15, label: 'cross', run: () => m.requestKick(p, buildLob(m, p, target, 21, err, t, 'cross')) });
+      const nearByline = clamp((pu - (HALF_LENGTH - 26)) / 16, 0, 1);
+      options.push({ score: 0.75 + Math.min(3, inBox.length) * 0.12 + nearByline * 0.7, label: 'cross', run: () => m.requestKick(p, buildLob(m, p, target, 21, err, t, 'cross')) });
     }
   }
 
@@ -415,11 +428,15 @@ function decide(m: Match, p: Player, team: Team, opponents: Player[]) {
     const ahead = { x: p.pos.x + dx * 6, z: p.pos.z + dz * 6 };
     if (Math.abs(ahead.z) > HALF_WIDTH - 1.5 || Math.abs(ahead.x) > HALF_LENGTH - 1) continue;
     const space = clamp(nearestOpponentDist(opponents, ahead) / 7, 0, 1);
-    const prog = (dx * team.attackDir * 6) / 6;
+    // progreso: en el último tercio se mide como acercamiento al arco (invita a diagonales hacia dentro)
+    const goalPt = team.attackGoal;
+    const prog = pu > HALF_LENGTH - 35
+      ? (dist2D(p.pos, goalPt) - dist2D(ahead, goalPt)) / 6
+      : (dx * team.attackDir * 6) / 6;
     const goalward = pu > HALF_LENGTH - 30 ? clamp(1 - Math.abs(ahead.z) / 25, 0, 1) * 0.3 : 0;
     const control = p.data.attrs.control / 100;
     const held = m.time - p.lastTouchAt;
-    const score = 0.1 + space * 0.45 + prog * 0.3 + goalward + control * 0.15 - (pressure < 1.5 ? 0.3 : 0) - Math.max(0, held - 0.8) * 0.4 - (p.slot.position === 'DEF' ? 0.15 : 0);
+    const score = 0.05 + space * 0.7 + prog * 0.45 + goalward + control * 0.15 - (pressure < 1.5 ? 0.3 : 0) - Math.max(0, held - 1.4) * (space < 0.5 ? 0.45 : 0.18) - (p.slot.position === 'DEF' ? 0.12 : 0);
     options.push({
       score,
       label: 'dribble',

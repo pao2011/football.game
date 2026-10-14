@@ -149,6 +149,13 @@ export class Match {
     if (config.training) this.firstHalfKickoff = 0;
     this.kickoffTeam = this.firstHalfKickoff;
     this.setupRestart('kickoff', this.kickoffTeam, new Vector3(0, BALL_RADIUS, 0), true);
+    if (config.training === 'penalties' || config.training === 'freekicks') this.trainingReset();
+  }
+
+  /** En entrenamiento de balón parado, cada intento termina y se repite la jugada. */
+  private trainingIdle = 0;
+  private get setPieceTraining() {
+    return this.config.training === 'penalties' || this.config.training === 'freekicks';
   }
 
   get active(): Player[] {
@@ -294,6 +301,15 @@ export class Match {
     const pt = this.possessionTeam;
     if (pt !== -1) this.teams[pt].stats.possessionTime += dt;
     this.recordReplay(dt);
+    if (this.setPieceTraining) {
+      // intento terminado: el arquero atrapó el balón o este quedó muerto
+      this.trainingIdle = this.gkHolding || this.ball.speed < 0.4 ? this.trainingIdle + dt : 0;
+      if (this.trainingIdle > 1.2) {
+        this.trainingIdle = 0;
+        this.trainingReset();
+        return;
+      }
+    }
     // Seguridad: balón detenido sin nadie cerca durante mucho tiempo
     if (!this.owner && this.ball.speed < 0.2) this.debug.stuckTime += dt;
     if (this.halfShouldEnd()) this.endHalf();
@@ -986,6 +1002,10 @@ export class Match {
 
   /** Detiene el juego y prepara una reanudación. */
   stopPlay(type: RestartType, team: 0 | 1, spot: Vector3) {
+    if (this.setPieceTraining) {
+      this.trainingReset();
+      return;
+    }
     this.emit({ type: 'whistle', kind: type === 'throwin' || type === 'goalkick' || type === 'corner' ? 'none' : 'short' });
     this.setupRestart(type, team, spot, false);
   }
