@@ -15,6 +15,7 @@ import type { Fixture, StandingRow } from '../modes/Competition';
 import { crestSVG, kitSVG } from './Crest';
 import { Screen, el, esc, type Handlers } from './dom';
 import { isTouchDevice } from '../input/TouchControls';
+import { gamepadBlocked } from '../input/pads';
 
 const DIFFS: Difficulty[] = ['amateur', 'pro', 'world', 'legend'];
 const HALF_OPTIONS = [2, 3, 4, 5, 6, 8, 10];
@@ -129,9 +130,34 @@ export class App {
     const s = this.show(`
       <div class="logo"><div class="l1">FOOTBALL ELITE</div><div class="l2">3D</div></div>
       <button class="press btn" data-act="go" style="background:none;border:none">${isTouchDevice() ? 'TOCA PARA EMPEZAR' : 'PULSA ENTER PARA EMPEZAR'}</button>
+      <div class="pad-hint">${gamepadBlocked()
+        ? '🎮 El navegador bloquea el mando dentro de esta página incrustada. Abre el juego en su propia pestaña (enlace directo) para usarlo.'
+        : '🎮 ¿Usas mando? Pulsa cualquier botón para conectarlo'}</div>
       <div class="version-tag">v${VERSION}</div>`, { go: () => { this.enterMobileFullscreen(); this.mainMenu(); } }, null, 'title-screen');
     void s;
+    this.watchPads();
     this.playSplash();
+  }
+
+  private padWatching = false;
+
+  /** Avisa cuando se conecta o desconecta un mando (el navegador solo lo detecta tras pulsar un botón). */
+  private watchPads() {
+    if (this.padWatching) return;
+    this.padWatching = true;
+    const note = (html: string) => {
+      document.querySelector('.pad-toast')?.remove();
+      const t = el('div', 'pad-toast', html);
+      document.body.appendChild(t);
+      setTimeout(() => t.classList.add('out'), 3200);
+      setTimeout(() => t.remove(), 3700);
+    };
+    window.addEventListener('gamepadconnected', (e) => {
+      const gp = (e as GamepadEvent).gamepad;
+      const id = (gp.id || 'Mando').replace(/\(.*?\)/g, '').trim().slice(0, 40) || 'Mando';
+      note(`🎮 <b>Mando conectado</b><small>${esc(id)}${gp.mapping === 'standard' ? '' : ' · mapa no estándar: si algún botón no responde, usa un mando Xbox/PlayStation'}</small>`);
+    });
+    window.addEventListener('gamepaddisconnected', () => note('🎮 <b>Mando desconectado</b><small>Reconéctalo y pulsa un botón</small>'));
   }
 
   /**

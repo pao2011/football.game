@@ -1,4 +1,5 @@
 import type { AudioEngine } from '../audio/AudioEngine';
+import { activePad, dpad, padButton } from '../input/pads';
 
 /** Utilidades DOM para las pantallas de menú (navegación por teclado, ratón y mando). */
 
@@ -107,13 +108,20 @@ export class Screen {
   }
 
   private pollPad() {
+    const read = (gp: Gamepad) => {
+      const d = dpad(gp);
+      const ax = gp.axes[0] ?? 0;
+      const ay = gp.axes[1] ?? 0;
+      return [d.up || ay < -0.6, d.down || ay > 0.6, d.left || ax < -0.6, d.right || ax > 0.6, padButton(gp, 0), padButton(gp, 1)];
+    };
+    // lo que ya estaba pulsado al abrir esta pantalla no cuenta (evita saltarse pantallas al mantener A)
+    const first = activePad();
+    if (first) this.padPrev = read(first);
     const tick = () => {
       if (!this.root.isConnected) return;
-      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-      const gp = Array.from(pads).find((p) => p && p.connected);
+      const gp = activePad();
       if (gp) {
-        const b = (i: number) => !!gp.buttons[i]?.pressed;
-        const now = [b(12) || gp.axes[1] < -0.6, b(13) || gp.axes[1] > 0.6, b(14) || gp.axes[0] < -0.6, b(15) || gp.axes[0] > 0.6, b(0), b(1)];
+        const now = read(gp);
         const edge = (i: number) => now[i] && !this.padPrev[i];
         if (edge(0)) this.move(-1);
         if (edge(1)) this.move(1);

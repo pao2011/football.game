@@ -1,6 +1,8 @@
 // Sistema de entrada: teclado + mando (Gamepad API), con asignaciones configurables.
 // Esquema por defecto idéntico al clásico de FIFA para PC (teclado) y al de mando Xbox/PlayStation.
 
+import { activePad, dpad, padButton, rightStick } from './pads';
+
 export type Action =
   | 'up' | 'down' | 'left' | 'right'
   | 'sprint' // E  / RT (R2)
@@ -230,9 +232,8 @@ export class Input {
     this.padActive = false;
     this.padAxes.x = 0;
     this.padAxes.y = 0;
-    const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : [];
-    for (const gp of pads) {
-      if (!gp || !gp.connected) continue;
+    const gp = activePad();
+    if (gp) {
       const ax = gp.axes[0] ?? 0;
       const ay = gp.axes[1] ?? 0;
       const mag = Math.hypot(ax, ay);
@@ -242,20 +243,20 @@ export class Input {
         this.padAxes.y = -ay * k;
         this.padActive = true;
       }
-      const btn = (i: number) => !!gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.4);
-      for (const [a, i] of Object.entries(PAD_BUTTONS)) if (i !== undefined && btn(i)) this.cur.add(a as Action);
+      for (const [a, i] of Object.entries(PAD_BUTTONS)) if (i !== undefined && padButton(gp, i)) this.cur.add(a as Action);
       // Stick derecho: cada "golpe" de stick en una dirección es un regate
-      const rx = gp.axes[2] ?? 0;
-      const ry = gp.axes[3] ?? 0;
-      if (Math.hypot(rx, ry) > 0.65) {
-        if (Math.abs(rx) > Math.abs(ry)) this.cur.add(rx > 0 ? 'skillRight' : 'skillLeft');
-        else this.cur.add(ry > 0 ? 'skillDown' : 'skillUp');
+      const r = rightStick(gp);
+      if (Math.hypot(r.x, r.y) > 0.65) {
+        if (Math.abs(r.x) > Math.abs(r.y)) this.cur.add(r.x > 0 ? 'skillRight' : 'skillLeft');
+        else this.cur.add(r.y > 0 ? 'skillDown' : 'skillUp');
       }
-      if (btn(12)) this.cur.add('up');
-      if (btn(13)) this.cur.add('down');
-      if (btn(14)) this.cur.add('left');
-      if (btn(15)) this.cur.add('right');
-      break;
+      const d = dpad(gp);
+      if (d.up) this.cur.add('up');
+      if (d.down) this.cur.add('down');
+      if (d.left) this.cur.add('left');
+      if (d.right) this.cur.add('right');
+      // la cruceta cuenta como "mando en uso" para que mande sobre el teclado
+      if (d.up || d.down || d.left || d.right) this.padActive = false;
     }
     this.justPressed.clear();
     this.justReleased.clear();

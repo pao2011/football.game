@@ -133,6 +133,8 @@ Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y 
 | Penal a favor | flechas para apuntar + mantener **D** | stick + B / ○ |
 | Penal en contra | mantén ← / → al patear el rival (lado de la estirada) | stick |
 
+**Mando**: se usa un mando de mapa estándar (Xbox, PlayStation, Switch Pro y la mayoría de los genéricos). Los navegadores solo detectan el mando después de pulsar un botón, así que si no responde, **pulsa cualquier botón con la página en primer plano**; aparece el aviso "Mando conectado" (y "Mando desconectado" al perderlo). Si hay varios dispositivos, se elige el de mapa estándar con más botones y ejes. Mandos sin mapa estándar: se reconocen la cruceta por el eje *hat* y el stick derecho alternativo. **Limitación**: dentro de una página incrustada (por ejemplo, un enlace compartido que se muestra en un marco) el navegador puede bloquear el mando; la pantalla de título lo avisa y hay que abrir el juego en su propia pestaña. No se probó con un mando físico, solo con uno simulado en el navegador.
+
 - El tiro sin dirección apunta automáticamente al palo más alejado del arquero; **cargar demasiado la barra eleva el balón** (puede irse por encima del travesaño).
 - También hay un esquema alternativo **WASD + IJKL** y **todas las teclas se pueden reasignar** en *Controles*.
 - *Configuración* permite ajustar la sensibilidad y la zona muerta del stick, la velocidad de la barra de potencia, la asistencia de pase (asistida o manual) y el cambio automático de jugador.
@@ -227,18 +229,20 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Prueba | Comando | Resultado |
 |---|---|---|
 | Comprobación de tipos (TypeScript estricto) | `npx tsc --noEmit` | ✅ sin errores |
-| Unitarias y de simulación | `npm test` | ✅ **84/84** |
+| Unitarias y de simulación | `npm test` | ✅ **91/91** |
 | Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **14/14** |
+| Extremo a extremo con mando (mando estándar simulado) | `npm run build && npm run test:e2e:gamepad` | ✅ **6/6** |
 | Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **17/17** |
 | Ejecutable de Linux bajo Xvfb | — | ✅ sin errores (detalle abajo) |
 
-**Unitarias y de simulación (84 pruebas)**
+**Unitarias y de simulación (91 pruebas)**
 - **Tipos de tiro (5)**: la vaselina supera los 3 m y entra bajo el travesaño; el raso no pasa de 0,8 m; el potente es más rápido y menos preciso; la rosca lleva efecto; y las combinaciones funcionan.
 - **Regates (4)**: los 6 regates se ejecutan con su animación y control del balón; la bicicleta cambia de dirección; un regate puede superar al defensor (que entonces no puede entrar) pero no siempre; y la ruleta protege el balón.
 - **Controles de tiros y regates (7)**: Q+D vaselina, Q+Shift+D o Ctrl+D potente, doble toque raso, D y luego S amago, I/K/J/L/R regates, gestos táctiles, y Q con balón como modificador (no cambia de jugador).
 - **Física del balón**: gravedad, rebotes y reposo; los botes pierden energía; distancia de los pases rasos; el balón nunca se acelera solo; puntería de los tiros; curva con efecto; rebote en el poste sin atravesarlo; la red retiene el balón; la red lateral impide entrar desde fuera.
 - **Partidos IA contra IA**: con varias semillas se completan sin bloqueos, sin coordenadas inválidas, con pases, tiros y posesión de ambos equipos; también se marcan goles y la eliminatoria pasa por la prórroga y los penales hasta tener ganador.
 - **Reglas**: detección de goles, saque de banda y córner correctos, fuera de juego, falta y tarjeta por barrida trasera sin tocar el balón, y entrada limpia que no es falta.
+- **Mando (7)**: stick, botones, gatillos analógicos, cruceta, stick derecho, dispositivos falsos, mapas no estándar y sin mando.
 - **Hinchada (4)**: banderas en las gradas, trapos en la baranda y bombos en la barra; la bandera gigante se despliega en el recibimiento y se recoge; el recibimiento lanza cohetes que estallan (con sonido), humo y papelitos, y todo termina apagándose; el gol de un equipo activa las bengalas y los cohetes de su hinchada.
 - **Tiro libre con trayectoria (7)**: el balón pasa por el punto elegido con y sin efecto (en ambos arcos), el recorrido dibujado termina en ese punto, el stick mueve la mira, J/L cambian el efecto y el disparo real llega cerca de la mira.
 - **Repetición del gol (1)**: incluye la jugada previa, el disparo y el balón en la red, y dura lo necesario para verse entera.
