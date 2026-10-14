@@ -342,14 +342,11 @@ await check('Botón de pausa táctil y salir al menú', async () => {
   assert(!(await page.evaluate(() => document.querySelector('.touch-controls'))), 'controles táctiles no eliminados');
 });
 
-await check('Aviso para girar el dispositivo en vertical', async () => {
+await check('Sin aviso de orientación (ni en horizontal ni en vertical)', async () => {
+  assert(!(await page.$('.rotate-hint')), 'sigue existiendo el aviso de orientación');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(300);
-  assert(await page.isVisible('.rotate-hint'), 'aviso no visible');
-  await page.screenshot({ path: join(OUT, 'm-portrait.png') });
-  // el aviso no bloquea: se puede jugar igualmente
-  await page.tap('.rotate-skip');
-  assert(!(await page.isVisible('.rotate-hint')), 'el aviso no se pudo cerrar');
+  assert(!(await page.$('.rotate-hint')), 'aviso en vertical');
   await page.setViewportSize({ width: 844, height: 390 });
 });
 

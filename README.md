@@ -100,7 +100,6 @@ El mismo juego funciona en móviles con **controles táctiles**, una interfaz ad
 - **Tiros dirigidos**: un imán lleva a puerta los tiros que iban un poco fuera del palo, se evita la zona del arquero, y una línea punteada muestra a dónde irá el disparo.
 - **Carrera automática** con el joystick pasado de la mitad.
 - **Defensa**: ROBAR y BARRIDA se orientan solos hacia el portador y el cambio automático de jugador es más rápido.
-- En vertical aparece un aviso para girar el dispositivo.
 - Los controles táctiles se pueden forzar o desactivar en *Configuración → Controles táctiles*.
 
 ## 4. Controles (idénticos al esquema clásico de FIFA)
@@ -258,7 +257,7 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 - Configuración y reasignación de teclas.
 - **Ningún error de JavaScript** durante toda la sesión.
 
-**Móvil (17 pruebas)**: animación de inicio, valores por defecto para móvil, menús con toques, tiro libre (cámara del lanzador, trayectoria, botones de efecto y disparo, sin avisos emergentes), controles táctiles visibles, saque con PASE, movimiento con el joystick, tiro con potencia con TIRO, vaselina deslizando sobre TIRO, botones ROSCA / VASELINA / RASO / POTENTE y combinación POTENTE + RASO (sin botón de sprint), regate deslizando en la zona libre, botones propios de defensa con indicador DEFENSA y CAMBIAR funcionando, pausa táctil, aviso de orientación vertical, PWA (manifiesto, service worker y **carga sin conexión**), pase y tiro asistidos con toque rápido, presentación del partido (se salta con un toque), cámara que mantiene visible el juego junto a la banda inferior, y ningún error de JavaScript.
+**Móvil (17 pruebas)**: animación de inicio, valores por defecto para móvil, menús con toques, tiro libre (cámara del lanzador, trayectoria, botones de efecto y disparo, sin avisos emergentes), controles táctiles visibles, saque con PASE, movimiento con el joystick, tiro con potencia con TIRO, vaselina deslizando sobre TIRO, botones ROSCA / VASELINA / RASO / POTENTE y combinación POTENTE + RASO (sin botón de sprint), regate deslizando en la zona libre, botones propios de defensa con indicador DEFENSA y CAMBIAR funcionando, pausa táctil, sin aviso de orientación, PWA (manifiesto, service worker y **carga sin conexión**), pase y tiro asistidos con toque rápido, presentación del partido (se salta con un toque), cámara que mantiene visible el juego junto a la banda inferior, y ningún error de JavaScript.
 
 **Ejecutable de Linux**: se lanzó bajo Xvfb, se inició un partido desde el menú sin errores y no hizo ninguna conexión de red externa (se desactivaron las conexiones en segundo plano de Chromium y la descarga de diccionarios).
 
