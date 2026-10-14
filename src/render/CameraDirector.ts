@@ -65,9 +65,10 @@ export class CameraDirector {
       // Plano de presentación: barrido sobre el estadio
       this.introT += dt;
       const t = clamp(this.introT / 4.5, 0, 1);
-      const ang = lerp(-0.9, 0, t * t * (3 - 2 * t));
-      const r = lerp(95, 60, t);
-      targetPos.set(Math.sin(ang) * r, lerp(45, 28, t), Math.cos(ang) * r);
+      // barrido dentro del estadio (la grada limita |z| a ~52 m)
+      const ang = lerp(-1.05, 0, t * t * (3 - 2 * t));
+      const r = lerp(48, 49, t);
+      targetPos.set(Math.sin(ang) * r, lerp(32, 21, t), Math.cos(ang) * r);
       targetLook.set(0, 0, 0);
       this.camera.position.copy(targetPos);
       this.look.copy(targetLook);
