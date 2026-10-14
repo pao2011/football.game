@@ -1,0 +1,28 @@
+{
+  "name": "football-elite-3d",
+  "productName": "Football Elite 3D",
+  "version": "1.0.0",
+  "description": "Football Elite 3D - juego de fútbol 3D 11 contra 11",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "start": "node scripts/serve.mjs",
+    "test": "vitest run",
+    "test:e2e": "node scripts/e2e.mjs",
+    "electron": "electron .",
+    "package": "npm run build && node scripts/package.mjs"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "playwright-core": "^1.56.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}
