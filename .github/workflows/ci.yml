@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-web:
+    name: Pruebas y compilación web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Tipos (TypeScript)
+        run: npx tsc --noEmit
+      - name: Pruebas unitarias y de simulación
+        run: npm test
+      - name: Compilación
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: football-elite-3d-web
+          path: dist/
+
+  android:
+    name: APK de Android
+    runs-on: ubuntu-latest
+    needs: test-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - run: npm run build
+      - name: Copiar el juego al proyecto Android
+        run: npx cap sync android
+      - name: Compilar APK (debug, instalable)
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FootballElite3D-android-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
