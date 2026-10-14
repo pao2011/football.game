@@ -65,6 +65,7 @@ El mismo juego funciona en móviles con **controles táctiles**, una interfaz ad
 |---|---|
 | **App instalable (PWA)** | Publica `dist/` en cualquier hosting HTTPS (GitHub Pages, Netlify…), abre la página en Chrome o Safari del móvil y elige *Instalar aplicación* / *Añadir a pantalla de inicio*. Se abre a pantalla completa en horizontal y **funciona sin conexión** después de la primera carga. |
 | **APK de Android** | El flujo de GitHub Actions (`.github/workflows/ci.yml`) compila el APK automáticamente en cada push: descárgalo desde la pestaña *Actions* → ejecución → artefacto **FootballElite3D-android-apk**. Localmente: `npm run android:apk` (requiere Android Studio / Android SDK y JDK 17) o abre la carpeta `android/` en Android Studio. |
+| **Un solo archivo HTML** | `npm run build:single` genera `release/FootballElite3D.html` con todo el juego dentro: ábrelo con doble clic (sin servidor) o súbelo a cualquier hosting. |
 | **Probar en la red local** | `npm run build && npm start` y abre `http://IP-del-ordenador:8080` desde el móvil. |
 
 ![Botones de defensa](docs/capturas/movil-defensa.png)
