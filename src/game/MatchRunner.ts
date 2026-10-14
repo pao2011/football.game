@@ -10,6 +10,7 @@ import { HUD } from '../ui/HUD';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { MatchAudio } from '../audio/MatchAudio';
 import { TouchControls, isTouchDevice } from '../input/TouchControls';
+import { loadJSON, saveJSON } from '../save/Storage';
 
 export interface MatchResultInfo {
   match: Match;
@@ -60,20 +61,29 @@ export class MatchRunner {
       showIndicators: settings.showIndicators,
     });
     const basis = { right: new THREE.Vector3(1, 0, 0), forward: new THREE.Vector3(0, 0, -1) };
+    const wantTouch = settings.touchControls === 'on' || (settings.touchControls === 'auto' && isTouchDevice());
     this.controller = config.humanTeam >= 0
       ? new HumanController(input, basis, {
         autoSwitch: settings.autoSwitch,
         passAssist: settings.passAssist,
         powerBarTime: settings.powerBarTime,
         showAimAssist: settings.showIndicators,
+        assist: settings.assist === 'on' || (settings.assist === 'auto' && wantTouch),
       })
       : null;
     if (this.controller) this.match.controllers[config.humanTeam as 0 | 1] = this.controller;
     this.hud = new HUD(uiRoot, this.match, this.controller, settings.bindings);
     this.hud.showRadar = settings.showRadar;
-    const wantTouch = settings.touchControls === 'on' || (settings.touchControls === 'auto' && isTouchDevice());
     this.touch = wantTouch && this.controller ? new TouchControls(uiRoot, input) : null;
     document.body.classList.toggle('touch', !!this.touch);
+    if (this.touch) {
+      // consejo de uso las primeras partidas
+      const shown = loadJSON<number>('touch-tip', 0);
+      if (shown < 3) {
+        saveJSON('touch-tip', shown + 1);
+        this.hud.showToast('<b>TOCA</b> PASE o TIRO = automático · <b>MANTÉN</b> = potencia · <b>DESLIZA</b> sobre TIRO = tipo de tiro', '#19e68c', 9);
+      }
+    }
     this.audio = new MatchAudio(audioEngine, this.match);
     this.audio.start();
     this.view.director.startIntro();
@@ -124,8 +134,10 @@ export class MatchRunner {
     }
     const team = m.teams.find((t) => t.human);
     const preview = this.controller && team ? this.controller.previewReceiver(m, team) : null;
-    const showAim = this.controller && team && this.controller.charge && m.owner === team.controlled ? this.controller.aimDir : null;
-    this.view.update(this.paused ? 0 : dt, preview, showAim);
+    const charging = !!(this.controller && team && this.controller.charge && m.owner === team.controlled);
+    const showAim = charging ? this.controller!.aimDir : null;
+    const aimTarget = charging && this.controller!.charge?.action === 'shoot' ? this.controller!.aimTarget : null;
+    this.view.update(this.paused ? 0 : dt, preview, showAim, aimTarget);
     this.audio.update(this.view.excitement);
     this.hud.update(dt);
     if (this.touch && team) {

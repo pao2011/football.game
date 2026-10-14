@@ -181,6 +181,11 @@ export class Input {
     }
   }
 
+  /** Magnitud del joystick virtual (0..1); 0 si no se usa. */
+  virtualMagnitude() {
+    return Math.hypot(this.virtualAxes.x, this.virtualAxes.y);
+  }
+
   /** Joystick virtual: x derecha, y arriba, magnitud 0..1. */
   setVirtualAxes(x: number, y: number) {
     this.virtualAxes.x = x;

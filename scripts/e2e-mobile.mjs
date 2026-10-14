@@ -169,6 +169,48 @@ await check('En defensa aparecen botones propios (ROBAR, PRESIONAR, CAMBIAR…) 
   assert(before !== after, 'CAMBIAR no cambió de jugador');
 });
 
+await check('Modo asistido: un toque rápido en PASE elige al compañero libre y un toque en TIRO dispara con potencia', async () => {
+  const assist = await page.evaluate(() => window.__runner.controller.settings.assist);
+  assert(assist === true, 'el modo asistido no está activo en móvil');
+  await page.evaluate(() => {
+    window.__runner.timeScale = 1; // velocidad real: un toque de 60 ms dura 60 ms de partido
+    const m = window.__runner.match; m.phase = 'play';
+    const t = m.teams[0]; const g = t.attackDir; const p = t.players[9]; t.controlled = p;
+    for (const q of m.active) q.pos.set(-g * 40, 0, 38);
+    const gk = m.teams[1].goalkeeper; gk.pos.set(g * 52, 0, 0);
+    m.teams[1].players[3].pos.set(g * 48, 0, -20); // penúltimo defensor: el compañero (a 45 m) queda en línea
+    p.pos.set(g * 30, 0, 0); p.vel.set(0, 0, 0); p.facing = g > 0 ? Math.PI / 2 : -Math.PI / 2; p.clearAction();
+    t.players[8].pos.set(g * 45, 0, 8); // compañero libre y adelantado
+    m.ball.reset(g * 30.5, 0); m.owner = p;
+    window.__rcv = t.players[8].id; window.__kick = null;
+    const orig = m.requestKick.bind(m);
+    m.requestKick = (pl, req) => { window.__kick = { kind: req.kind, target: req.targetId, speed: req.velocity.length() }; return orig(pl, req); };
+  });
+  const tapBtn = async (sel) => {
+    const c = await center(sel);
+    await page.evaluate(({ x, y }) => {
+      const el = document.elementFromPoint(x, y);
+      el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 21, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' }));
+      setTimeout(() => window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 21, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' })), 60);
+    }, c);
+  };
+  await tapBtn('.tb-a2');
+  await waitFor(() => window.__kick !== null, 15000);
+  const pass = await page.evaluate(() => window.__kick);
+  assert(pass.kind === 'pass', 'no hubo pase');
+  assert(pass.target === await page.evaluate(() => window.__rcv), 'el pase asistido no fue al compañero libre');
+  // tiro: devolver el balón y tocar TIRO una vez
+  await page.evaluate(() => {
+    const m = window.__runner.match; const t = m.teams[0]; const g = t.attackDir; const p = t.players[9]; t.controlled = p;
+    m.phase = 'play'; p.pos.set(g * 34, 0, 0); p.vel.set(0, 0, 0); p.clearAction(); m.ball.reset(g * 34.5, 0); m.owner = p; window.__kick = null;
+  });
+  await page.waitForTimeout(400);
+  await tapBtn('.tb-a1');
+  await waitFor(() => window.__kick !== null, 15000);
+  const shot = await page.evaluate(() => window.__kick);
+  assert(shot.kind === 'shoot' && shot.speed > 22, 'el toque rápido no dio potencia automática: ' + JSON.stringify(shot));
+});
+
 await check('Botón de pausa táctil y salir al menú', async () => {
   const c = await center('.tc-pause');
   await page.touchscreen.tap(c.x, c.y);
