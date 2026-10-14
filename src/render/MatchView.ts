@@ -41,6 +41,11 @@ function makeIndicator(color: string) {
   return { group: g, arrow, head };
 }
 
+/** Puntos máximos del recorrido del tiro libre. */
+const FK_MAX_POINTS = 200;
+/** Puntos dibujados a lo largo de la trayectoria. */
+const FK_DOTS = 48;
+
 export class MatchView {
   readonly scene = new THREE.Scene();
   readonly director: CameraDirector;
@@ -65,7 +70,7 @@ export class MatchView {
     this.director.style = opts.cameraStyle;
     this.director.zoom = opts.cameraZoom;
     const [t0, t1] = match.teams;
-    this.stadium = new Stadium(stadiumData, opts.quality, t0.kit.shirt, t1.kit.shirt);
+    this.stadium = new Stadium(stadiumData, opts.quality, t0.kit.shirt, t1.kit.shirt, [t0.data.name, t1.data.name]);
     this.stadium.attachTo(this.scene);
     this.scene.add(this.stadium.group);
     this.scene.add(this.ball.mesh, this.ball.shadow);
@@ -99,10 +104,39 @@ export class MatchView {
     this.aimLine = new THREE.Line(lg, new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.6, gapSize: 0.4, transparent: true, opacity: 0.6 }));
     this.aimLine.visible = false;
     this.scene.add(this.aimLine);
+    // Tiro libre: recorrido previsto del balón y mira en el arco
+    const tg = new THREE.BufferGeometry();
+    tg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(FK_MAX_POINTS * 3), 3));
+    this.fkLine = new THREE.Line(tg, new THREE.LineDashedMaterial({ color: 0xffe14d, dashSize: 0.45, gapSize: 0.28, transparent: true, opacity: 0.95, depthTest: false }));
+    this.fkLine.renderOrder = 5;
+    this.fkLine.frustumCulled = false;
+    this.fkLine.visible = false;
+    this.scene.add(this.fkLine);
+    // puntos a lo largo del recorrido (más visibles que una línea de 1 px)
+    this.fkDots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.075, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe14d, transparent: true, opacity: 0.95, depthTest: false }), FK_DOTS);
+    this.fkDots.renderOrder = 6;
+    this.fkDots.frustumCulled = false;
+    this.fkDots.visible = false;
+    this.scene.add(this.fkDots);
+    this.fkReticle = new THREE.Group();
+    const rmat = new THREE.MeshBasicMaterial({ color: 0xffe14d, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthTest: false });
+    this.fkReticle.add(new THREE.Mesh(new THREE.RingGeometry(0.34, 0.44, 32), rmat));
+    this.fkReticle.add(new THREE.Mesh(new THREE.CircleGeometry(0.07, 12), rmat));
+    this.fkReticle.rotation.y = Math.PI / 2; // el anillo mira a lo largo del campo (hacia el lanzador)
+    this.fkReticle.renderOrder = 6;
+    this.fkReticle.visible = false;
+    this.scene.add(this.fkReticle);
     renderer.shadowMap.enabled = opts.shadows;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.stadium.keyLight.castShadow = opts.shadows;
   }
+
+  /** Tiro libre directo en curso: recorrido previsto y punto de mira (lo actualiza el bucle del partido). */
+  freeKick: { path: THREE.Vector3[]; target: THREE.Vector3 } | null = null;
+  private fkLine: THREE.Line;
+  private fkDots: THREE.InstancedMesh;
+  private readonly fkMat = new THREE.Matrix4();
+  private fkReticle: THREE.Group;
 
   get camera() {
     return this.director.camera;
@@ -133,7 +167,7 @@ export class MatchView {
     const danger = Math.max(0, (Math.abs(m.ball.pos.x) - (HALF_LENGTH - 30)) / 30);
     const target = m.phase === 'goal' ? 1 : m.phase === 'play' ? danger * 0.8 : 0.15;
     this.excitement += (target - this.excitement) * Math.min(1, dt * (target > this.excitement ? 3 : 0.6));
-    this.stadium.update(dt, this.excitement, this.camera);
+    this.stadium.update(dt, this.excitement, this.camera, this.renderer.domElement.height);
 
     // La luz principal sigue la acción para sombras nítidas
     const b = m.ball.pos;
@@ -183,6 +217,40 @@ export class MatchView {
       this.aimLine.visible = true;
     } else {
       this.aimLine.visible = false;
+    }
+    const fk = this.freeKick;
+    if (fk) {
+      const pos = (this.fkLine.geometry as THREE.BufferGeometry).getAttribute('position') as THREE.BufferAttribute;
+      const n = Math.min(FK_MAX_POINTS - 1, fk.path.length);
+      pos.setXYZ(0, m.ball.pos.x, m.ball.pos.y, m.ball.pos.z);
+      for (let i = 0; i < n; i++) pos.setXYZ(i + 1, fk.path[i].x, fk.path[i].y, fk.path[i].z);
+      pos.needsUpdate = true;
+      this.fkLine.geometry.setDrawRange(0, n + 1);
+      this.fkLine.computeLineDistances();
+      this.fkLine.visible = n > 1;
+      // un punto cada ~0,9 m de recorrido, desplazándose suavemente hacia el arco
+      let count = 0;
+      let acc = (m.time * 2.2) % 0.9;
+      for (let i = 1; i < n && count < FK_DOTS; i++) {
+        acc += fk.path[i].distanceTo(fk.path[i - 1]);
+        if (acc >= 0.9) {
+          acc -= 0.9;
+          const sc = 1 - (count / FK_DOTS) * 0.35;
+          this.fkMat.makeScale(sc, sc, sc).setPosition(fk.path[i]);
+          this.fkDots.setMatrixAt(count++, this.fkMat);
+        }
+      }
+      this.fkDots.count = count;
+      this.fkDots.instanceMatrix.needsUpdate = true;
+      this.fkDots.visible = count > 0;
+      this.fkReticle.position.copy(fk.target);
+      const pulse = 1 + Math.sin(m.time * 6) * 0.08;
+      this.fkReticle.scale.setScalar(pulse);
+      this.fkReticle.visible = true;
+    } else {
+      this.fkLine.visible = false;
+      this.fkDots.visible = false;
+      this.fkReticle.visible = false;
     }
     this.director.update(m, dt);
   }

@@ -35,6 +35,8 @@ export class HUD {
   private frames = 0;
   private fpsAcc = 0;
   showRadar = true;
+  /** Avisos emergentes y ayuda de controles (desactivados por defecto). */
+  popups = false;
   showFps = false;
   private intro: HTMLElement | null = null;
   private lastHalf = 1;
@@ -134,6 +136,7 @@ export class HUD {
   }
 
   showToast(html: string, color = '#ffcf3f', duration = 2.2) {
+    if (!this.popups) return;
     this.toast.innerHTML = html;
     this.toast.style.borderLeftColor = color;
     this.show(this.toast, true);
@@ -262,11 +265,18 @@ export class HUD {
           penalty: `Apunta con ${document.body.classList.contains('touch') ? 'el joystick' : 'las flechas'} y mantén ${this.k('shoot')} para la potencia`,
           dropball: `${this.k('pass')} Pase`,
         };
+        if (r.type === 'freekick' && this.ctrl?.freeKick) {
+          const touch = document.body.classList.contains('touch');
+          map.freekick = touch
+            ? 'Joystick: mira · EFECTO ↶ ↷: curva · mantén TIRO: potencia · PASE / ELEVADO: jugada'
+            : `Flechas: mira · ${this.k('skillLeft')} / ${this.k('skillRight')}: efecto · mantén ${this.k('shoot')}: potencia · ${this.k('pass')} Pase · ${this.k('lob')} Centro`;
+        }
         html = `<b>${label.toUpperCase()}</b><br>${map[r.type] ?? ''}`;
       } else if (!mine && r.type === 'penalty') {
         html = `<b>PENAL EN CONTRA</b><br>Mantén ${document.body.classList.contains('touch') ? 'el joystick' : '← / → (o ↑ ↓)'} hacia un lado para elegir la estirada del arquero`;
       }
     }
+    if (!this.popups) html = '';
     this.show(this.hint, !!html);
     if (html) this.setText(this.hint, html, true);
   }

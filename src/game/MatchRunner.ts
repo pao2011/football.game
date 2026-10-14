@@ -43,6 +43,7 @@ export class MatchRunner {
   onPause: () => void = () => {};
   onFinished: (r: MatchResultInfo) => void = () => {};
   private disposed = false;
+  private audioEngine: AudioEngine;
   /** Presentación inicial en curso (la simulación espera mientras dura). */
   inIntro = false;
   private introFrames = 0;
@@ -83,6 +84,7 @@ export class MatchRunner {
     if (this.controller) this.match.controllers[config.humanTeam as 0 | 1] = this.controller;
     this.hud = new HUD(uiRoot, this.match, this.controller, settings.bindings);
     this.hud.showRadar = settings.showRadar;
+    this.hud.popups = settings.popups;
     this.touch = wantTouch && this.controller ? new TouchControls(uiRoot, input) : null;
     document.body.classList.toggle('touch', !!this.touch);
     if (this.touch) {
@@ -95,6 +97,9 @@ export class MatchRunner {
     }
     this.audio = new MatchAudio(audioEngine, this.match);
     this.audio.start();
+    // hinchada: el sonido de cada cohete sale de su explosión
+    this.view.stadium.fans.onBurst = (d) => audioEngine.firework(d);
+    this.audioEngine = audioEngine;
     if (this.touch) this.view.director.bottomSafe = -0.4;
     if (!config.training) {
       // la presentación empieza cuando ya se dibujan fotogramas (no mientras carga la escena)
@@ -138,6 +143,9 @@ export class MatchRunner {
       // presentación: la simulación espera; cualquier botón la salta
       if (this.introFrames < 3 && ++this.introFrames === 3) {
         this.hud.playIntro(this.introStadium!, () => this.skipIntro());
+        // recibimiento: fuegos artificiales, bengalas, papelitos y cántico con bombo
+        this.view.stadium.fans.welcome();
+        this.audioEngine.chant(1);
         this.view.director.startIntro(INTRO_SECONDS);
         this.introEndAt = performance.now() + (INTRO_SECONDS * 1000) / this.timeScale;
       }
@@ -164,7 +172,17 @@ export class MatchRunner {
           this.hud.onEvent(e);
           this.audio.onEvent(e);
           if (e.type === 'net' && e.x !== undefined && e.z !== undefined) this.view.netImpact(e.x, e.z, e.power ?? 0.6);
-          if (e.type === 'goal' && e.kind !== 'shootout') this.view.director.addShake(0.25);
+          if (e.type === 'goal' && e.kind !== 'shootout') {
+            this.view.director.addShake(0.25);
+            if (e.team === 0 || e.team === 1) this.view.stadium.fans.goal(e.team);
+            // tras el grito de gol, la hinchada canta
+            setTimeout(() => { if (!this.disposed) this.audioEngine.chant(0.8); }, 3200);
+          }
+          // vibración en el móvil: golpeos propios y goles
+          if (this.touch && navigator.vibrate) {
+            if (e.type === 'kick' && e.team !== undefined && m.teams[e.team]?.human) navigator.vibrate(e.kind === 'shoot' || e.kind === 'finesse' || e.kind === 'chip' ? 28 : 12);
+            if (e.type === 'goal') navigator.vibrate([60, 50, 90]);
+          }
         }
         m.events.length = 0;
         this.acc -= SIM_DT;
@@ -180,6 +198,11 @@ export class MatchRunner {
     const charging = !!(this.controller && team && this.controller.charge && m.owner === team.controlled);
     const showAim = charging ? this.controller!.aimDir : null;
     const aimTarget = charging && this.controller!.charge?.action === 'shoot' ? this.controller!.aimTarget : null;
+    // tiro libre directo: trayectoria prevista, mira y cámara del lanzador
+    const fk = this.controller?.freeKick ?? null;
+    this.view.freeKick = fk ?? this.controller?.penaltyAim ?? null;
+    this.view.director.freeKickAim = fk;
+    this.touch?.setFreeKick(!!fk);
     this.view.update(this.paused ? 0 : dt, preview, showAim, aimTarget);
     this.audio.update(this.view.excitement);
     this.hud.update(dt);

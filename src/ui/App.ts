@@ -64,6 +64,8 @@ export class App {
   tournament: Tournament | null = null;
   career: Career | null = null;
 
+  private splashShown = false;
+
   constructor(private canvas: HTMLCanvasElement, ui: HTMLElement) {
     this.ui = ui;
     this.settings = loadSettings();
@@ -129,6 +131,39 @@ export class App {
       <button class="press btn" data-act="go" style="background:none;border:none">${isTouchDevice() ? 'TOCA PARA EMPEZAR' : 'PULSA ENTER PARA EMPEZAR'}</button>
       <div class="version-tag">v${VERSION}</div>`, { go: () => { this.enterMobileFullscreen(); this.mainMenu(); } }, null, 'title-screen');
     void s;
+    this.playSplash();
+  }
+
+  /**
+   * Animación al abrir el juego: el balón entra rodando, se dispara a la red (que se mueve con el
+   * impacto) y aparece el logo. Dura unos 3 s y se salta con cualquier toque o tecla.
+   */
+  private playSplash() {
+    if (this.splashShown) return;
+    this.splashShown = true;
+    const el = document.createElement('div');
+    el.className = 'splash';
+    const net = Array.from({ length: 9 }, (_, i) => `<line x1="${20 + i * 20}" y1="10" x2="${26 + i * 18.5}" y2="88"/>`).join('')
+      + Array.from({ length: 5 }, (_, i) => `<line x1="${20 + i * 1.2}" y1="${10 + i * 19}" x2="${180 - i * 0.6}" y2="${10 + i * 19}"/>`).join('');
+    el.innerHTML = `
+      <div class="sp-glow"></div>
+      <svg class="sp-goal" viewBox="0 0 200 100" preserveAspectRatio="none"><g class="sp-net">${net}</g><path class="sp-frame" d="M20 98V8h160v90"/></svg>
+      <div class="sp-ball"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#fff" stroke="#111" stroke-width="1"/><path d="M12 6.5l4.2 3-1.6 5h-5.2l-1.6-5z" fill="#111"/><path d="M12 6.5V1.5M16.2 9.5l4.6-1.6M14.6 14.5l3 4M9.4 14.5l-3 4M7.8 9.5L3.2 7.9" stroke="#111" stroke-width="1"/></svg></div>
+      <div class="sp-flash"></div>
+      <div class="sp-logo"><span class="s1">FOOTBALL ELITE</span><span class="s2">3D</span></div>
+      <div class="sp-sub">11 contra 11 · IA táctica · física real</div>`;
+    document.body.appendChild(el);
+    let done = false;
+    const end = () => {
+      if (done) return;
+      done = true;
+      el.classList.add('out');
+      window.removeEventListener('keydown', end, true);
+      setTimeout(() => el.remove(), 450);
+    };
+    el.addEventListener('pointerdown', end);
+    window.addEventListener('keydown', end, true);
+    setTimeout(end, 3300);
   }
 
   /** En móvil: pantalla completa y orientación horizontal (si el navegador lo permite). */
@@ -345,6 +380,7 @@ export class App {
     const r = this.runner;
     if (!r) return;
     r.hud.showRadar = this.settings.showRadar;
+    r.hud.popups = this.settings.popups;
     r.view.director.style = this.settings.cameraStyle;
     r.view.director.zoom = this.settings.cameraZoom;
     r.view.opts.showIndicators = this.settings.showIndicators;
@@ -704,6 +740,7 @@ export class App {
           ${toggle('Radar', 'showRadar')}
           ${toggle('Indicadores y ayudas visuales', 'showIndicators')}
           ${toggle('Repeticiones de goles', 'replays')}
+          ${toggle('Avisos en pantalla (atajada, falta, controles…)', 'popups')}
           ${this.stepper('Controles táctiles', ({ auto: 'Automático', on: 'Siempre', off: 'Desactivados' } as const)[st.touchControls], 'touch')}
         </div>
         <div class="panel"><h3>Sonido</h3>

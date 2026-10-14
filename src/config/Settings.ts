@@ -15,6 +15,8 @@ export interface GameSettings {
   cameraStyle: CameraStyle;
   cameraZoom: number;
   replays: boolean;
+  /** Avisos emergentes (atajada, falta, tiro libre…) y ayuda de controles en pantalla. */
+  popups: boolean;
   touchControls: 'auto' | 'on' | 'off';
   // Audio
   masterVolume: number;
@@ -46,6 +48,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   cameraStyle: 'broadcast',
   cameraZoom: 1,
   replays: true,
+  popups: false,
   touchControls: 'auto',
   masterVolume: 0.8,
   musicVolume: 0.5,

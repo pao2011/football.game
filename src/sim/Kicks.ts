@@ -1,5 +1,5 @@
 import { Vector3 } from 'three';
-import { AIR_DRAG, groundPassSpeed, loftedSpeed, MAGNUS } from './Ball';
+import { AIR_DRAG, Ball, groundPassSpeed, loftedSpeed, MAGNUS } from './Ball';
 import { BALL_RADIUS, GRAVITY } from '../config/constants';
 import { clamp } from '../util/math';
 
@@ -129,4 +129,62 @@ export function loftToPoint(from: Vector3, target: Vector3, elevationDeg: number
   }
   const sp = (lo + hi) / 2;
   return new Vector3((dx / horiz) * Math.cos(el) * sp, Math.sin(el) * sp, (dz / horiz) * Math.cos(el) * sp);
+}
+
+const _probe = new Ball();
+
+/**
+ * Tiro libre "con trayectoria" (estilo FC): dada la velocidad de salida, el efecto (ω vertical) y el punto
+ * del arco por el que debe pasar el balón, busca la dirección de golpeo simulando exactamente la física
+ * del balón (arrastre, Magnus, gravedad). Devuelve también el recorrido para dibujarlo en pantalla.
+ * goalX: x de la línea de gol que se ataca. Si el punto es inalcanzable, se queda con la mejor aproximación.
+ */
+export function solveCurvedKick(from: Vector3, goalX: number, aimZ: number, aimY: number, speed: number, spinY: number, path?: Vector3[]) {
+  const dx = goalX - from.x;
+  const dz = aimZ - from.z;
+  const horiz = Math.max(1, Math.hypot(dx, dz));
+  let yaw = Math.atan2(dz, dx);
+  let pitch = clamp(Math.atan2(aimY - from.y, horiz) + 0.12, -0.05, 0.75);
+  const velocity = new Vector3();
+  const spin = new Vector3(0, spinY, 0);
+  const sim = (record: boolean) => {
+    velocity.set(Math.cos(yaw) * Math.cos(pitch) * speed, Math.sin(pitch) * speed, Math.sin(yaw) * Math.cos(pitch) * speed);
+    const b = _probe;
+    b.pos.copy(from);
+    b.pos.y = Math.max(from.y, BALL_RADIUS);
+    b.vel.copy(velocity);
+    b.spin.copy(spin);
+    b.held = false;
+    const dir = Math.sign(dx) || 1;
+    if (record && path) path.length = 0;
+    const dt = 1 / 60;
+    for (let i = 0; i < 300; i++) {
+      const px = b.pos.x;
+      const py = b.pos.y;
+      const pz = b.pos.z;
+      b.step(dt);
+      if (record && path && i % 2 === 0) path.push(b.pos.clone());
+      if ((b.pos.x - goalX) * dir >= 0) {
+        // punto exacto de cruce con la línea de gol
+        const k = (goalX - px) / (b.pos.x - px || 1e-6);
+        const out = { z: pz + (b.pos.z - pz) * k, y: py + (b.pos.y - py) * k, reached: true };
+        if (record && path) path.push(new Vector3(goalX, out.y, out.z));
+        return out;
+      }
+      if (b.vel.lengthSq() < 0.5) break;
+    }
+    return { z: b.pos.z, y: -1, reached: false };
+  };
+  for (let i = 0; i < 10; i++) {
+    const r = sim(false);
+    if (!r.reached) { pitch = Math.min(0.75, pitch + 0.08); continue; }
+    const ez = aimZ - r.z;
+    const ey = aimY - r.y;
+    if (Math.abs(ez) < 0.03 && Math.abs(ey) < 0.03) break;
+    // corrección proporcional (el sistema es casi lineal cerca de la solución)
+    yaw += (ez / horiz) * Math.sign(dx || 1);
+    pitch = clamp(pitch + (ey / horiz) * 1.1, -0.05, 0.75);
+  }
+  const final = sim(true);
+  return { velocity: velocity.clone(), spin: spin.clone(), hit: final };
 }

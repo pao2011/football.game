@@ -11,6 +11,8 @@ import { getBallPrediction } from '../ai/Predict';
 import { interceptCache } from '../ai/TeamAI';
 import { clamp, dist2D } from '../util/math';
 import { offsideLineU } from '../sim/Rules';
+import { solveCurvedKick } from '../sim/Kicks';
+import type { Restart } from '../sim/Match';
 
 /** Orientación de la cámara para convertir el stick (pantalla) en direcciones del mundo. */
 export interface ViewBasis {
@@ -67,6 +69,13 @@ export class HumanController implements TeamController {
   /** Punto del arco al que irá el disparo actual (para la ayuda visual). */
   aimTarget: Vector3 | null = null;
   private lastKickHandled = -1;
+  /**
+   * Tiro libre directo con trayectoria (estilo FC): punto del arco al que se apunta, efecto (−1..1,
+   * positivo = curva hacia la derecha de la pantalla) y recorrido previsto del balón para dibujarlo.
+   */
+  freeKick: { restart: Restart; aimZ: number; aimY: number; curve: number; path: Vector3[]; target: Vector3; power: number } | null = null;
+  /** Penal del jugador: punto del arco al que irá (solo para la ayuda visual). */
+  penaltyAim: { path: Vector3[]; target: Vector3 } | null = null;
   /** Recepción tras el cambio inmediato al receptor de un pase. */
   private receiveLock: { player: Player; dir: Vector3; until: number } | null = null;
   private gkDiveIntent = 0;
@@ -161,6 +170,10 @@ export class HumanController implements TeamController {
     if (inPlay) this.handleSkills(m, p, stick);
     else input.takeGesture('skill');
 
+    if (!isTaker) {
+      this.freeKick = null;
+      this.penaltyAim = null;
+    }
     if (isTaker) {
       this.handleTaker(m, team, p, stick, hasStick);
       return;
@@ -609,13 +622,25 @@ export class HumanController implements TeamController {
     const r = m.restart!;
     p.desiredVel.set(0, 0, 0);
     if (p.busy) return;
-    // Apuntar con el stick (gira al jugador)
     const goal = team.attackGoal;
-    if (hasStick) {
+    // Tiro libre directo cerca del arco: se apunta la trayectoria del balón, no al jugador
+    const fk = this.updateFreeKick(m, team, p, r);
+    // Apuntar con el stick (gira al jugador)
+    if (hasStick && !fk) {
       p.facing = Math.atan2(stick.x, stick.z);
     }
     const dir = hasStick ? stick.clone().normalize() : p.forward();
     this.charge = null;
+    // Penal: mira visible en el arco (lado según el stick, altura según la potencia que se carga)
+    if (r.type === 'penalty') {
+      const mv = input.move();
+      const lat = new Vector3().addScaledVector(this.view.right, mv.x).addScaledVector(this.view.forward, mv.y);
+      const pw = input.held('shoot') ? clamp(input.holdTime('shoot') / this.settings.powerBarTime, 0.1, 1) : 0.45;
+      const gx = (HALF_LENGTH + 0.3) * team.attackDir;
+      this.penaltyAim = { path: [], target: new Vector3(gx, 0.2 + pw * pw * 2.1, clamp(lat.z * 3.4, -(GOAL_HALF_WIDTH - 0.3), GOAL_HALF_WIDTH - 0.3)) };
+    } else {
+      this.penaltyAim = null;
+    }
     for (const a of KICK_ACTIONS) {
       if (input.held(a)) this.charge = { action: a, value: clamp(input.holdTime(a) / this.settings.powerBarTime, 0, 1), label: this.chargeLabel(a) };
       const rel = input.released(a);
@@ -644,6 +669,14 @@ export class HumanController implements TeamController {
         m.requestKick(p, { kind: 'throwin', velocity: v, spin: new Vector3(), targetId: q?.id, power: 0.4, errorScale: 1 });
         return;
       }
+      if (a === 'shoot' && fk) {
+        input.takeGesture('shot');
+        // toque rápido con asistencia: potencia media (la trayectoria ya está apuntada)
+        const pw = this.settings.assist && rel < 0.28 ? 0.6 : power;
+        m.requestKick(p, this.freeKickRequest(m, team, fk, pw));
+        this.freeKick = null;
+        return;
+      }
       if (a === 'shoot') {
         const st = this.currentStyle(input.takeGesture('shot'));
         const { z, y } = this.shotAim(m, team, p, dir, power, st.finesse);
@@ -660,6 +693,67 @@ export class HumanController implements TeamController {
       m.requestKick(p, req);
       return;
     }
+  }
+
+  /** Velocidad de salida del tiro libre según la potencia (0..1). */
+  private static fkSpeed(power: number) {
+    return 18 + clamp(power, 0, 1) * 14;
+  }
+
+  /** Giro del balón para el efecto elegido (ω vertical; positivo = curva hacia la izquierda del tirador). */
+  private static fkSpin(curve: number) {
+    return -curve * 62;
+  }
+
+  /**
+   * Tiro libre directo (estilo FC): el stick mueve el punto de mira en el arco (izquierda/derecha y
+   * altura), J/L, el stick derecho o los botones táctiles de efecto curvan la trayectoria, y TIRO
+   * (mantener) da la potencia. La trayectoria prevista se recalcula con la física real del balón.
+   */
+  private updateFreeKick(m: Match, team: Team, p: Player, r: Restart) {
+    const goal = team.attackGoal;
+    const active = r.type === 'freekick' && r.team === team.index && r.taker === p && dist2D(m.ball.pos, goal) < 36;
+    if (!active) {
+      this.freeKick = null;
+      return null;
+    }
+    let fk = this.freeKick;
+    if (!fk || fk.restart !== r) {
+      const far = -(Math.sign(m.ball.pos.z) || 1);
+      fk = this.freeKick = { restart: r, aimZ: far * 2.2, aimY: 1.9, curve: 0, path: [], target: new Vector3(), power: 0.6 };
+    }
+    const input = this.input;
+    const dt = 1 / 60;
+    const mv = input.move();
+    // izquierda/derecha de la pantalla → a lo ancho del arco; arriba/abajo → altura
+    // la cámara del tiro libre va detrás del balón: la derecha de la pantalla es ±z en el mundo
+    const lateral = Math.sign(this.view.right.z) || team.attackDir;
+    fk.aimZ = clamp(fk.aimZ + mv.x * lateral * 3.2 * dt, -(GOAL_HALF_WIDTH + 2.5), GOAL_HALF_WIDTH + 2.5);
+    fk.aimY = clamp(fk.aimY + mv.y * 1.7 * dt, 0.25, 3.6);
+    if (input.held('skillLeft')) fk.curve = clamp(fk.curve - 1.1 * dt, -1, 1);
+    if (input.held('skillRight')) fk.curve = clamp(fk.curve + 1.1 * dt, -1, 1);
+    if (input.held('shoot')) fk.power = clamp(input.holdTime('shoot') / this.settings.powerBarTime, 0.1, 1);
+    else fk.power = 0.6;
+    const gx = (HALF_LENGTH + 0.3) * team.attackDir;
+    const sol = solveCurvedKick(m.ball.pos, gx, fk.aimZ, fk.aimY, HumanController.fkSpeed(fk.power), HumanController.fkSpin(fk.curve), fk.path);
+    fk.target.set(gx, fk.aimY, fk.aimZ);
+    // el lanzador mira hacia donde sale el balón
+    p.facing = Math.atan2(sol.velocity.x, sol.velocity.z);
+    return fk;
+  }
+
+  private freeKickRequest(m: Match, team: Team, fk: NonNullable<HumanController['freeKick']>, power: number) {
+    const gx = (HALF_LENGTH + 0.3) * team.attackDir;
+    const { velocity, spin } = solveCurvedKick(m.ball.pos, gx, fk.aimZ, fk.aimY, HumanController.fkSpeed(power), HumanController.fkSpin(fk.curve));
+    const curved = Math.abs(fk.curve) > 0.12;
+    return {
+      kind: curved ? 'finesse' as const : 'shoot' as const,
+      velocity,
+      spin,
+      power: Math.min(1, 0.55 + power * 0.45),
+      errorScale: 0.5,
+      style: { ...NORMAL_SHOT, finesse: curved, power: power > 0.85 },
+    };
   }
 
   private handlePenaltyKeeper(m: Match, team: Team, gk: Player, stick: Vector3) {

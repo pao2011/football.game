@@ -50,6 +50,9 @@ interface Ambience {
   sources: AudioScheduledSourceNode[];
   timer: ReturnType<typeof setInterval> | null;
   nextChant: number;
+  /** Bombos de la barra brava: inicio del próximo compás y número de compás. */
+  nextBar: number;
+  bar: number;
 }
 
 interface MusicNodes {
@@ -120,7 +123,16 @@ const CHANTS: Array<Array<[number, number, number, Vowel]>> = [
   [[0, 0, 1, 'o'], [1, 3, 1, 'e'], [2, 5, 2, 'o'], [4, 3, 1, 'e'], [5, 0, 2, 'o']],
   [[0, 5, 0.5, 'a'], [0.5, 5, 0.5, 'a'], [1, 7, 1, 'e'], [2, 5, 1, 'o'], [3, 3, 1, 'e'], [4, 0, 2, 'o']],
   [[0, 0, 1.5, 'o'], [1.5, 0, 0.5, 'e'], [2, 3, 1, 'a'], [3, 0, 1, 'o'], [4, 0, 1.5, 'o'], [5.5, -2, 0.5, 'e'], [6, 0, 2, 'a']],
+  // "o-lé, o-lé, o-lé, o-lé"
+  [[0, 0, 0.5, 'o'], [0.5, 4, 1.5, 'e'], [2, 0, 0.5, 'o'], [2.5, 4, 1.5, 'e'], [4, 0, 0.5, 'o'], [4.5, 4, 1, 'e'], [5.5, 2, 0.5, 'o'], [6, 0, 2, 'e']],
+  // "da-le, da-le, da-le…" (estilo tribuna sudamericana)
+  [[0, 7, 0.5, 'a'], [0.5, 5, 0.5, 'e'], [1, 7, 0.5, 'a'], [1.5, 5, 0.5, 'e'], [2, 4, 1, 'o'], [3, 2, 1, 'o'], [4, 0, 2, 'o'], [6, 2, 0.5, 'a'], [6.5, 4, 1.5, 'e']],
+  // "oh oh oh oh, oh oh oh" ascendente
+  [[0, 0, 1, 'o'], [1, 0, 1, 'o'], [2, 3, 1, 'o'], [3, 5, 1, 'o'], [4, 7, 1.5, 'o'], [5.5, 5, 0.5, 'o'], [6, 3, 2, 'o']],
 ];
+
+/** Pulso de la batería de la barra (s por tiempo, ~143 ppm): coincide con el salto de la barra en la grada. */
+const BARRA_BEAT = 0.42;
 
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
@@ -573,7 +585,7 @@ export class AudioEngine {
       lfo(0.031, 120, f1.frequency);
       lfo(0.027, 180, f2.frequency);
 
-      this.amb = { out, tone, murmur, babble, swell, sources, timer: null, nextChant: t + 1.5 };
+      this.amb = { out, tone, murmur, babble, swell, sources, timer: null, nextChant: t + 1.5, nextBar: t + 0.6, bar: 0 };
       this.applyExcitement(0.05);
       // first chant soon, then periodic via timer
       this.scheduleChant(t + 1.5);
@@ -1280,23 +1292,153 @@ export class AudioEngine {
       const now = ctx.currentTime;
       if (now >= a.nextChant - 0.6) {
         this.scheduleChant(Math.max(now + 0.05, a.nextChant));
-        a.nextChant = Math.max(now, a.nextChant) + rand(9, 22) * (1 - 0.45 * this.excitement);
+        a.nextChant = Math.max(now, a.nextChant) + rand(7, 16) * (1 - 0.45 * this.excitement);
+      }
+      // la barra no para: bombos todo el partido (se programan ~1,2 s por delante)
+      if (a.nextBar < now) a.nextBar = now + 0.05;
+      while (a.nextBar < now + 1.2) {
+        this.barraBar(a.nextBar, a.bar++, a.out);
+        a.nextBar += 4 * BARRA_BEAT;
       }
     });
   }
 
+  /**
+   * Cántico de la hinchada ahora mismo (con bombo). boost 0..1 lo hace más fuerte y largo:
+   * se usa en el recibimiento y después de los goles.
+   */
+  chant(boost = 1): void {
+    this.run((ctx) => {
+      if (!this.amb) return;
+      this.scheduleChant(ctx.currentTime + 0.05, clamp01(boost));
+      this.amb.nextChant = Math.max(this.amb.nextChant, ctx.currentTime + 12);
+    });
+  }
+
+  /** Estallido de fuegos artificiales (trueno grave + chisporroteo), más suave cuanto más lejos. */
+  firework(distance = 60): void {
+    this.run((ctx, g) => {
+      const t = ctx.currentTime;
+      const vol = Math.min(1, 55 / Math.max(20, distance));
+      const dur = 2.2;
+      const v = this.claim('sfx', t, dur);
+      v.connect(this.wetSend(g.sfxWet, 0.6));
+      // trueno: ruido grave + seno que cae
+      const n = this.noise('brown', t, 0.9);
+      const lp = this.filter('lowpass', 420, 0.7);
+      const ng = ctx.createGain();
+      this.perc(ng.gain, t, 0.005, 0.55 * vol, 0.7);
+      n.connect(lp).connect(ng).connect(v);
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(120, t);
+      o.frequency.exponentialRampToValueAtTime(38, t + 0.5);
+      const og = ctx.createGain();
+      this.perc(og.gain, t, 0.004, 0.45 * vol, 0.55);
+      o.connect(og).connect(v);
+      o.start(t);
+      o.stop(t + 0.7);
+      // chisporroteo
+      const k = 18 + Math.floor(Math.random() * 14);
+      for (let i = 0; i < k; i++) {
+        const tt = t + 0.25 + Math.random() * 1.3;
+        const c = this.noise('white', tt, 0.03);
+        const hp = this.filter('highpass', 2500 + Math.random() * 3000, 0.7);
+        const cg = ctx.createGain();
+        this.perc(cg.gain, tt, 0.001, (0.05 + Math.random() * 0.08) * vol, 0.025);
+        c.connect(hp).connect(cg).connect(v);
+      }
+    });
+  }
+
+  /**
+   * Un compás de la batería de la barra brava: varios bombos (graves, algo desfasados entre sí),
+   * redoblante en los contratiempos y platillo cada dos compases.
+   */
+  private barraBar(t: number, n: number, out: AudioNode): void {
+    const ctx = this.ctx!;
+    const level = 0.16 + 0.3 * this.excitement;
+    const b = BARRA_BEAT / 2; // corcheas
+    const bombo = (tt: number, f0: number, lv: number) => {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f0 * 1.8, tt);
+      o.frequency.exponentialRampToValueAtTime(f0, tt + 0.12);
+      const g = ctx.createGain();
+      this.perc(g.gain, tt, 0.003, lv, 0.26);
+      o.connect(g).connect(out);
+      o.start(tt);
+      o.stop(tt + 0.32);
+      const nz = this.noise('pink', tt, 0.05);
+      const bp = this.filter('bandpass', 160, 1.1);
+      const ng = ctx.createGain();
+      this.perc(ng.gain, tt, 0.002, lv * 0.45, 0.04);
+      nz.connect(bp).connect(ng).connect(out);
+    };
+    // patrón de cancha (8 corcheas): golpes principales y respuesta de los otros bombos
+    const main = [0, 3, 4, 6];
+    const answer = n % 2 ? [2, 5, 7] : [2, 7];
+    // la mayoría de la batería son bombos: tres grupos con afinación y desfase distintos
+    const drums: Array<[number, number]> = [[52, 0], [58, 0.012], [64, -0.008]];
+    for (const e of main) for (const [f, off] of drums) bombo(t + e * b + off, f, level * (e === 0 ? 0.62 : 0.45));
+    for (const e of answer) bombo(t + e * b + 0.006, 70, level * 0.3);
+    // redoblante
+    for (const e of [2, 6]) {
+      const tt = t + e * b;
+      const nz = this.noise('white', tt, 0.12);
+      const bp = this.filter('bandpass', 1900, 0.9);
+      const g = ctx.createGain();
+      this.perc(g.gain, tt, 0.002, level * 0.22, 0.09);
+      nz.connect(bp).connect(g).connect(out);
+    }
+    // platillo
+    if (n % 2 === 0) {
+      const nz = this.noise('white', t, 1.2);
+      const hp = this.filter('highpass', 6500, 0.7);
+      const g = ctx.createGain();
+      this.perc(g.gain, t, 0.004, level * 0.14, 0.9);
+      nz.connect(hp).connect(g).connect(out);
+    }
+  }
+
+  /** Bombo de la hinchada en los tiempos del cántico. */
+  private terraceDrum(t: number, beats: number, beat: number, level: number, out: AudioNode): void {
+    const ctx = this.ctx!;
+    for (let k = 0; k < beats; k++) {
+      // golpe en cada tiempo y doble golpe al final de cada compás
+      const hits = k % 4 === 3 ? [0, 0.5] : [0];
+      for (const h of hits) {
+        const tt = t + (k + h) * beat;
+        const o = ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(95, tt);
+        o.frequency.exponentialRampToValueAtTime(48, tt + 0.14);
+        const g = ctx.createGain();
+        this.perc(g.gain, tt, 0.003, 0.55 * level, 0.22);
+        o.connect(g).connect(out);
+        o.start(tt);
+        o.stop(tt + 0.3);
+        const n = this.noise('pink', tt, 0.06);
+        const bp = this.filter('bandpass', 180, 1.2);
+        const ng = ctx.createGain();
+        this.perc(ng.gain, tt, 0.002, 0.25 * level, 0.05);
+        n.connect(bp).connect(ng).connect(out);
+      }
+    }
+  }
+
   /** Distant terrace chant: one vocal cluster stepping through a short melody. */
-  private scheduleChant(t: number): void {
+  private scheduleChant(t: number, boost = 0): void {
     const a = this.amb;
     if (!a) return;
     const pat = CHANTS[Math.floor(Math.random() * CHANTS.length)];
     const beat = rand(0.38, 0.46);
     const base = rand(190, 240);
-    const reps = Math.random() < 0.5 ? 2 : 1;
+    const reps = boost > 0 ? 3 : Math.random() < 0.5 ? 2 : 1;
     const pitch: Array<[number, number]> = [];
     const vowels: Array<[number, Vowel]> = [];
     const env: Array<[number, number]> = [];
-    const level = 0.35 + 0.4 * this.excitement;
+    const level = Math.min(1, 0.35 + 0.4 * this.excitement + 0.35 * boost);
     let phraseLen = 0;
     for (const s of pat) phraseLen = Math.max(phraseLen, s[0] + s[2]);
     for (let r = 0; r < reps; r++) {
@@ -1315,7 +1457,7 @@ export class AudioEngine {
     this.vocalCluster({
       t,
       dur,
-      count: 10,
+      count: boost > 0 ? 14 : 10,
       pitch,
       spread: 1.2,
       vowels,
@@ -1324,8 +1466,10 @@ export class AudioEngine {
       out: a.out,
       lowpass: 1800,
     });
+    // bombo de la tribuna (casi siempre en los cánticos fuertes)
+    if (boost > 0 || Math.random() < 0.55) this.terraceDrum(t, Math.floor(dur / beat), beat, level, a.out);
     // rhythmic clapping on beats for some chants
-    if (Math.random() < 0.5) {
+    if (boost > 0 || Math.random() < 0.5) {
       const ctx = this.ctx!;
       for (let k = 0; k < Math.floor(dur / beat); k += 2) {
         const tt = t + k * beat;
