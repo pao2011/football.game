@@ -10,6 +10,10 @@ import { HUD } from '../ui/HUD';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { MatchAudio } from '../audio/MatchAudio';
 import { TouchControls, isTouchDevice } from '../input/TouchControls';
+import { loadJSON, saveJSON } from '../save/Storage';
+
+/** Duración de la presentación del partido (s). */
+const INTRO_SECONDS = 5.4;
 
 export interface MatchResultInfo {
   match: Match;
@@ -39,6 +43,12 @@ export class MatchRunner {
   onPause: () => void = () => {};
   onFinished: (r: MatchResultInfo) => void = () => {};
   private disposed = false;
+  /** Presentación inicial en curso (la simulación espera mientras dura). */
+  inIntro = false;
+  private introFrames = 0;
+  private introEndAt = 0;
+  private introStadium: StadiumData | null = null;
+  private pendingTip: string | null = null;
   /** Velocidad de simulación (para pruebas automáticas). */
   timeScale = 1;
 
@@ -60,23 +70,53 @@ export class MatchRunner {
       showIndicators: settings.showIndicators,
     });
     const basis = { right: new THREE.Vector3(1, 0, 0), forward: new THREE.Vector3(0, 0, -1) };
+    const wantTouch = settings.touchControls === 'on' || (settings.touchControls === 'auto' && isTouchDevice());
     this.controller = config.humanTeam >= 0
       ? new HumanController(input, basis, {
         autoSwitch: settings.autoSwitch,
         passAssist: settings.passAssist,
         powerBarTime: settings.powerBarTime,
         showAimAssist: settings.showIndicators,
+        assist: settings.assist === 'on' || (settings.assist === 'auto' && wantTouch),
       })
       : null;
     if (this.controller) this.match.controllers[config.humanTeam as 0 | 1] = this.controller;
     this.hud = new HUD(uiRoot, this.match, this.controller, settings.bindings);
     this.hud.showRadar = settings.showRadar;
-    const wantTouch = settings.touchControls === 'on' || (settings.touchControls === 'auto' && isTouchDevice());
     this.touch = wantTouch && this.controller ? new TouchControls(uiRoot, input) : null;
     document.body.classList.toggle('touch', !!this.touch);
+    if (this.touch) {
+      // consejo de uso las primeras partidas
+      const shown = loadJSON<number>('touch-tip', 0);
+      if (shown < 3) {
+        saveJSON('touch-tip', shown + 1);
+        this.pendingTip = '<b>TOCA</b> PASE o TIRO = automático · <b>MANTÉN</b> = potencia · <b>DESLIZA</b> sobre TIRO = tipo de tiro';
+      }
+    }
     this.audio = new MatchAudio(audioEngine, this.match);
     this.audio.start();
-    this.view.director.startIntro();
+    if (this.touch) this.view.director.bottomSafe = -0.4;
+    if (!config.training) {
+      // la presentación empieza cuando ya se dibujan fotogramas (no mientras carga la escena)
+      this.inIntro = true;
+      this.introStadium = stadium;
+    } else {
+      this.showTip();
+    }
+  }
+
+  private showTip() {
+    if (this.pendingTip) this.hud.showToast(this.pendingTip, '#19e68c', 9);
+    this.pendingTip = null;
+  }
+
+  /** Termina la presentación (al acabar o si el jugador la salta con un toque o una tecla). */
+  skipIntro() {
+    if (!this.inIntro) return;
+    this.inIntro = false;
+    this.hud.endIntro();
+    this.view.director.endIntro();
+    this.showTip();
   }
 
   start() {
@@ -94,7 +134,20 @@ export class MatchRunner {
   /** Avance de un fotograma (también usable por pruebas). */
   frame(dt: number) {
     const m = this.match;
-    if (!this.paused) {
+    if (this.inIntro && !this.paused) {
+      // presentación: la simulación espera; cualquier botón la salta
+      if (this.introFrames < 3 && ++this.introFrames === 3) {
+        this.hud.playIntro(this.introStadium!, () => this.skipIntro());
+        this.view.director.startIntro(INTRO_SECONDS);
+        this.introEndAt = performance.now() + (INTRO_SECONDS * 1000) / this.timeScale;
+      }
+      this.input.poll(dt);
+      const pausePressed = this.input.pressed('pause');
+      if ((this.introFrames >= 3 && performance.now() >= this.introEndAt) || pausePressed || (['pass', 'shoot', 'sprint', 'through', 'lob'] as const).some((a) => this.input.pressed(a))) this.skipIntro();
+      this.input.poll(0);
+      // Esc / pausa siempre abre el menú de pausa, también durante la presentación
+      if (pausePressed) this.pause();
+    } else if (!this.paused) {
       this.acc += dt * this.timeScale;
       let steps = 0;
       while (this.acc >= SIM_DT && steps < 8 * Math.max(1, this.timeScale)) {
@@ -124,15 +177,17 @@ export class MatchRunner {
     }
     const team = m.teams.find((t) => t.human);
     const preview = this.controller && team ? this.controller.previewReceiver(m, team) : null;
-    const showAim = this.controller && team && this.controller.charge && m.owner === team.controlled ? this.controller.aimDir : null;
-    this.view.update(this.paused ? 0 : dt, preview, showAim);
+    const charging = !!(this.controller && team && this.controller.charge && m.owner === team.controlled);
+    const showAim = charging ? this.controller!.aimDir : null;
+    const aimTarget = charging && this.controller!.charge?.action === 'shoot' ? this.controller!.aimTarget : null;
+    this.view.update(this.paused ? 0 : dt, preview, showAim, aimTarget);
     this.audio.update(this.view.excitement);
     this.hud.update(dt);
     if (this.touch && team) {
       const pt = m.possessionTeam;
       // con el balón suelto se mantiene el modo anterior (evita parpadeos de botones)
       if (pt !== -1 || m.phase !== 'play') this.touch.setContext(pt === team.index || m.gkHolding?.team === team.index || (m.phase !== 'play' && m.restart?.team === team.index));
-      this.touch.setVisible(!this.paused && m.phase !== 'replay' && !m.finished);
+      this.touch.setVisible(!this.paused && !this.inIntro && m.phase !== 'replay' && !m.finished);
     }
     this.view.render();
 

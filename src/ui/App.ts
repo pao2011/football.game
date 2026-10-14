@@ -30,6 +30,7 @@ const TIPS = [
   'Ojo con el fuera de juego: el árbitro lo juzga en el momento exacto del pase.',
   'Las barridas por detrás se castigan con tarjeta. Si el último defensor derriba a un rival que se iba solo, es roja.',
   'Ctrl (LT) permite contener (jockey) frente al atacante y esperar el momento de la entrada.',
+  'En móvil, un toque rápido en PASE o TIRO golpea con potencia automática y elige al mejor compañero o la mejor esquina del arco.',
 ];
 
 interface QuickSetup {
@@ -348,7 +349,10 @@ export class App {
     r.view.director.zoom = this.settings.cameraZoom;
     r.view.opts.showIndicators = this.settings.showIndicators;
     if (r.controller) {
-      r.controller.settings = { autoSwitch: this.settings.autoSwitch, passAssist: this.settings.passAssist, powerBarTime: this.settings.powerBarTime, showAimAssist: this.settings.showIndicators };
+      r.controller.settings = {
+        autoSwitch: this.settings.autoSwitch, passAssist: this.settings.passAssist, powerBarTime: this.settings.powerBarTime, showAimAssist: this.settings.showIndicators,
+        assist: this.settings.assist === 'on' || (this.settings.assist === 'auto' && !!r.touch),
+      };
     }
     this.applyAudio();
   }
@@ -713,6 +717,7 @@ export class App {
           ${this.stepper('Duración de parte (torneo/carrera)', `${st.halfMinutes} min`, 'half')}
           ${toggle('Cambio automático de jugador', 'autoSwitch')}
           ${this.stepper('Asistencia de pase', st.passAssist >= 0.5 ? 'Asistida' : 'Manual', 'assist')}
+          ${this.stepper('Asistencia total (toque rápido, puntería, defensa)', ({ auto: 'Automática (móvil)', on: 'Siempre', off: 'No' } as const)[st.assist], 'assistAll')}
           ${this.stepper('Velocidad barra de potencia', `${st.powerBarTime.toFixed(1)} s`, 'pbar')}
           ${this.stepper('Zona muerta del stick', pct(st.deadzone), 'dz')}
           ${this.stepper('Sensibilidad del stick', st.sensitivity.toFixed(1), 'sens')}
@@ -749,6 +754,8 @@ export class App {
       diffNext: () => { st.difficulty = cycleArr(DIFFS, st.difficulty, 1); apply(); },
       halfPrev: () => { st.halfMinutes = cycleArr(HALF_OPTIONS, st.halfMinutes, -1); apply(); },
       halfNext: () => { st.halfMinutes = cycleArr(HALF_OPTIONS, st.halfMinutes, 1); apply(); },
+      assistAllPrev: () => { st.assist = cycleArr(['auto', 'on', 'off'] as const, st.assist, -1); apply(); },
+      assistAllNext: () => { st.assist = cycleArr(['auto', 'on', 'off'] as const, st.assist, 1); apply(); },
       assistPrev: () => { st.passAssist = st.passAssist >= 0.5 ? 0 : 1; apply(); },
       assistNext: () => { st.passAssist = st.passAssist >= 0.5 ? 0 : 1; apply(); },
       pbarPrev: () => step('powerBarTime', -1, 0.6, 1.6, 0.1), pbarNext: () => step('powerBarTime', 1, 0.6, 1.6, 0.1),
@@ -795,6 +802,15 @@ export class App {
           <div class="row"><label>Rosca potente · Vaselina potente</label><span>añade <span class="keycap">Ctrl</span> / LT</span></div>
           <div class="row"><label>Amago de tiro</label><span>mientras cargas <span class="keycap">D</span>, pulsa <span class="keycap">S</span></span></div>
           <p class="muted">En móvil: desliza sobre TIRO ↑ vaselina, ↓ raso, ← → rosca (en diagonal se combinan) y mantén POTENTE para el tiro potente.</p>
+        </div>
+        <div class="panel"><h3>Modo asistido (móvil)</h3>
+          <div class="row"><label>Pase / Tiro con un toque</label><span>potencia automática</span></div>
+          <div class="row"><label>Pase</label><span>elige al compañero libre, sin rivales en medio y sin fuera de juego</span></div>
+          <div class="row"><label>Con el joystick</label><span>el pase va hacia esa dirección</span></div>
+          <div class="row"><label>Tiro</label><span>entre los palos y lejos del arquero</span></div>
+          <div class="row"><label>Joystick al máximo</label><span>esprinta solo</span></div>
+          <div class="row"><label>Defensa</label><span>la entrada se orienta sola al balón; el cambio de jugador es más rápido</span></div>
+          <p class="muted">Mantén pulsado el botón para cargar la barra y controlar tú la potencia. Se puede activar o desactivar en Configuración → Asistencia total.</p>
         </div>
         <div class="panel"><h3>Regates (como FIFA)</h3>
           <div class="row"><label>Bicicleta (hacia ese lado)</label><span><span class="keycap">J</span>/<span class="keycap">L</span> · stick der. ← →</span></div>

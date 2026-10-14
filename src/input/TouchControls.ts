@@ -39,7 +39,7 @@ const I = {
 };
 
 const ATTACK: ButtonDef[] = [
-  { action: 'shoot', label: 'TIRO', icon: I.shoot, cls: 'tb-a1' },
+  { action: 'shoot', label: 'TIRO', sub: 'desliza ↑ ↓ ↔', icon: I.shoot, cls: 'tb-a1' },
   { action: 'pass', label: 'PASE', icon: I.pass, cls: 'tb-a2' },
   { action: 'lob', label: 'ELEVADO', sub: 'centro', icon: I.lob, cls: 'tb-a3' },
   { action: 'through', label: 'AL HUECO', icon: I.through, cls: 'tb-a4' },
@@ -53,7 +53,7 @@ const DEFENSE: ButtonDef[] = [
   { action: 'lob', label: 'BARRIDA', icon: I.slide, cls: 'tb-d3' },
   { action: 'switch', label: 'CAMBIAR', sub: 'jugador', icon: I.switch, cls: 'tb-d4' },
   { action: 'sprint', label: 'SPRINT', icon: I.sprint, cls: 'tb-d5' },
-  { action: 'finesse', label: 'AYUDA', sub: '2.º defensor', icon: I.team, cls: 'tb-d6' },
+  { action: 'finesse', label: 'AYUDA', sub: 'compañero', icon: I.team, cls: 'tb-d6' },
   { action: 'through', label: 'ARQUERO', sub: 'sale', icon: I.keeper, cls: 'tb-d7' },
 ];
 
@@ -91,11 +91,10 @@ export class TouchControls {
     const btn = (b: ButtonDef) => `<div class="tc-btn ${b.cls}" data-action="${b.action}">${svg(b.icon)}<b>${b.label}</b>${b.sub ? `<small>${b.sub}</small>` : ''}</div>`;
     r.innerHTML = `
       <div class="tc-stick-zone"></div>
-      <div class="tc-skill-zone"><span class="tc-skill-hint">desliza: regate · doble toque: ruleta</span></div>
+      <div class="tc-skill-zone"><span class="tc-skill-hint">desliza aquí: regate · doble toque: ruleta</span></div>
       <div class="tc-stick hidden"><div class="tc-knob"></div></div>
       <div class="tc-mode"><span class="a">● ATAQUE</span><span class="d">● DEFENSA</span></div>
       <div class="tc-buttons tc-attack">${ATTACK.map(btn).join('')}
-        <div class="tc-shot-hints"><span class="u">↑ vaselina</span><span class="d">↓ raso · ↔ rosca</span></div>
       </div>
       <div class="tc-buttons tc-defense">${DEFENSE.map(btn).join('')}</div>
       <div class="tc-btn tc-pause" data-action="pause"><b>II</b></div>`;

@@ -26,6 +26,8 @@ export interface GameSettings {
   preset: 'fifa' | 'wasd' | 'custom';
   autoSwitch: boolean;
   passAssist: number;
+  /** Asistencia de pase/tiro/defensa: automática (solo en pantallas táctiles), siempre o desactivada. */
+  assist: 'auto' | 'on' | 'off';
   powerBarTime: number;
   deadzone: number;
   sensitivity: number;
@@ -53,6 +55,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   preset: 'fifa',
   autoSwitch: true,
   passAssist: 1,
+  assist: 'auto',
   powerBarTime: 1,
   deadzone: 0.18,
   sensitivity: 1,

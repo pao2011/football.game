@@ -19,6 +19,13 @@ export class CameraDirector {
   private replayT = 0;
   private replayShot = 0;
   private introT = 0;
+  /**
+   * Límite inferior (coordenadas de pantalla −1..1) por debajo del cual no deben quedar el balón
+   * ni el jugador controlado. En móvil es más alto porque los botones táctiles tapan esa zona.
+   */
+  bottomSafe = -0.7;
+  private readonly probe = new THREE.PerspectiveCamera();
+  private readonly tmp = new THREE.Vector3();
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(38, aspect, 0.3, 900);
@@ -44,8 +51,16 @@ export class CameraDirector {
     this.shake = Math.max(this.shake, v);
   }
 
-  startIntro() {
+  private introLen = 4.5;
+
+  startIntro(seconds = 4.5) {
     this.introT = 0;
+    this.introLen = seconds;
+  }
+
+  /** Corta el plano de presentación (la cámara vuelve suavemente a la transmisión). */
+  endIntro() {
+    this.introT = this.introLen;
   }
 
   update(m: Match, dt: number, focusOverride?: THREE.Vector3) {
@@ -61,16 +76,17 @@ export class CameraDirector {
     }
     this.replayT = 0;
 
-    if (this.introT < 4.5 && m.phase === 'kickoff' && m.half === 1 && m.time < 6) {
+    if (this.introT < this.introLen && m.phase === 'kickoff' && m.half === 1 && m.time < 6) {
       // Plano de presentación: barrido sobre el estadio
       this.introT += dt;
-      const t = clamp(this.introT / 4.5, 0, 1);
+      const t = clamp(this.introT / this.introLen, 0, 1);
       // barrido dentro del estadio (la grada limita |z| a ~52 m)
       const ang = lerp(-1.05, 0, t * t * (3 - 2 * t));
       const r = lerp(48, 49, t);
       targetPos.set(Math.sin(ang) * r, lerp(32, 21, t), Math.cos(ang) * r);
       targetLook.set(0, 0, 0);
       this.camera.position.copy(targetPos);
+      this.pos.copy(targetPos);
       this.look.copy(targetLook);
       this.camera.fov = 40;
       this.camera.updateProjectionMatrix();
@@ -100,11 +116,11 @@ export class CameraDirector {
       const height = style === 'tele' ? 27 : style === 'wide' ? 33 : 19;
       const back = style === 'tele' ? 17 : style === 'wide' ? 17 : 15;
       const lookX = clamp(focus.x, -HALF_LENGTH + 8, HALF_LENGTH - 8);
-      const lookZ = clamp(focus.z * 0.55, -HALF_WIDTH * 0.45, HALF_WIDTH * 0.45);
-      targetLook.set(lookX, 0, lookZ);
+      fov = (style === 'tele' ? 26 : style === 'wide' ? 44 : 31) / this.zoom;
       // la cámara se desplaza a lo largo de la banda y algo hacia el arco para dar perspectiva
       targetPos.set(lookX * 0.86, height, HALF_WIDTH + back + Math.max(-4, focus.z * 0.08));
-      fov = (style === 'tele' ? 26 : style === 'wide' ? 44 : 31) / this.zoom;
+      const lookZ = this.frameLookZ(m, focus, lookX, targetPos, fov);
+      targetLook.set(lookX, 0, lookZ);
       damp = 3;
     }
 
@@ -120,6 +136,37 @@ export class CameraDirector {
     this.camera.fov = lerp(this.camera.fov, fov, k);
     this.camera.updateProjectionMatrix();
     this.camera.lookAt(this.look);
+  }
+
+  /**
+   * Profundidad (z) del punto al que mira la cámara lateral: parte de seguir al balón y se corrige
+   * hasta que el balón y el jugador controlado quedan dentro de la zona visible útil
+   * (sin cortarse por el borde inferior ni quedar tapados por los controles).
+   */
+  private frameLookZ(m: Match, focus: THREE.Vector3, lookX: number, camPos: THREE.Vector3, fov: number): number {
+    let lookZ = clamp(focus.z * 0.6, -HALF_WIDTH * 0.5, HALF_WIDTH * 0.55);
+    const pts: THREE.Vector3[] = [focus];
+    const human = m.teams.find((t) => t.human);
+    const c = human?.controlled;
+    if (c && !c.sentOff && Math.abs(c.pos.x - focus.x) < 32) pts.push(c.pos);
+    const cam = this.probe;
+    cam.fov = fov;
+    cam.aspect = this.camera.aspect;
+    cam.near = 0.3;
+    cam.far = 900;
+    cam.updateProjectionMatrix();
+    cam.position.copy(camPos);
+    const ndcY = (p: THREE.Vector3) => this.tmp.set(p.x, 0, p.z).project(cam).y;
+    for (let i = 0; i < 14; i++) {
+      cam.lookAt(lookX, 0, lookZ);
+      cam.updateMatrixWorld();
+      let low = Infinity;
+      for (const p of pts) low = Math.min(low, ndcY(p));
+      if (low < this.bottomSafe) lookZ += 1.5; // mirar más cerca: lo de abajo sube en la pantalla
+      else if (ndcY(focus) > 0.55 && low > this.bottomSafe + 0.25) lookZ -= 1.5; // el balón no se va arriba del todo
+      else break;
+    }
+    return clamp(lookZ, -HALF_WIDTH, HALF_WIDTH + 6);
   }
 
   /** Cámara de repetición: varios planos cinematográficos alrededor del balón. */

@@ -5,6 +5,8 @@ import type { MatchEvent } from '../sim/types';
 import { RESTART_LABELS } from '../sim/SetPieces';
 import type { Bindings } from '../input/Input';
 import { keyLabel } from '../input/Input';
+import type { StadiumData } from '../data/types';
+import { crestSVG } from './Crest';
 
 const ACTION_NAMES: Record<string, string> = { pass: 'PASE', through: 'PASE AL HUECO', lob: 'PASE ELEVADO', shoot: 'TIRO' };
 
@@ -34,6 +36,8 @@ export class HUD {
   private fpsAcc = 0;
   showRadar = true;
   showFps = false;
+  private intro: HTMLElement | null = null;
+  private lastHalf = 1;
 
   constructor(parent: HTMLElement, private match: Match, private ctrl: HumanController | null, private bindings: Bindings) {
     const r = document.createElement('div');
@@ -100,6 +104,35 @@ export class HUD {
     this.bannerUntil = this.match.time + duration;
   }
 
+  /** Presentación del partido: estadio, escudos y nombres de los equipos y el aviso de inicio. */
+  playIntro(stadium: StadiumData, onSkip: () => void) {
+    const [h, a] = this.match.teams;
+    const el = document.createElement('div');
+    el.className = 'match-intro';
+    el.style.setProperty('--home', h.kit.shirt);
+    el.style.setProperty('--away', a.kit.shirt);
+    const team = (t: typeof h, cls: string) => `<div class="mi-team ${cls}">
+        <div class="mi-crest">${crestSVG(t.data, 96)}</div>
+        <b>${t.data.name}</b><small>${t.data.city} · ${t.formation}</small></div>`;
+    el.innerHTML = `
+      <div class="mi-bar mi-bar-h"></div><div class="mi-bar mi-bar-a"></div>
+      <div class="mi-top">${stadium.name.toUpperCase()}<small>${stadium.capacity.toLocaleString('es-ES')} espectadores</small></div>
+      <div class="mi-row">${team(h, 'mi-home')}<div class="mi-vs">VS</div>${team(a, 'mi-away')}</div>
+      <div class="mi-go">¡COMIENZA EL PARTIDO!</div>
+      <div class="mi-skip">toca para saltar</div>`;
+    el.addEventListener('pointerdown', (e) => { e.preventDefault(); onSkip(); });
+    this.root.appendChild(el);
+    this.intro = el;
+  }
+
+  endIntro() {
+    const el = this.intro;
+    if (!el) return;
+    this.intro = null;
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 380);
+  }
+
   showToast(html: string, color = '#ffcf3f', duration = 2.2) {
     this.toast.innerHTML = html;
     this.toast.style.borderLeftColor = color;
@@ -154,6 +187,10 @@ export class HUD {
 
   update(dt: number) {
     const m = this.match;
+    if (m.half !== this.lastHalf) {
+      this.lastHalf = m.half;
+      if (m.phase === 'kickoff') this.showBanner(m.half === 2 ? 'SEGUNDO TIEMPO' : m.half === 3 ? 'PRÓRROGA' : 'SEGUNDO TIEMPO DE LA PRÓRROGA', '', '#fff', 2.5);
+    }
     const [h, a] = m.teams;
     this.setText(this.sbScore, `${h.stats.goals} - ${a.stats.goals}`);
     this.setText(this.sbClock, m.config.training ? 'ENTRENO' : m.clockText.split(' ')[0]);

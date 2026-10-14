@@ -112,7 +112,7 @@ export class MatchView {
   }
 
   /** Actualiza modelos y cámara para este fotograma. */
-  update(dt: number, receiverPreview: Player | null, aimDir: THREE.Vector3 | null) {
+  update(dt: number, receiverPreview: Player | null, aimDir: THREE.Vector3 | null, aimTarget: THREE.Vector3 | null = null) {
     const m = this.match;
     if (m.phase === 'replay' && this.lastPhase !== 'replay') {
       this.replayFrames = m.replay.slice(-30 * 6);
@@ -124,7 +124,7 @@ export class MatchView {
     if (m.phase === 'replay' && this.replayFrames.length > 0) {
       this.updateReplay(dt);
     } else {
-      this.updateLive(dt, receiverPreview, aimDir);
+      this.updateLive(dt, receiverPreview, aimDir, aimTarget);
     }
 
     // Ambiente: excitación según peligro de gol
@@ -139,7 +139,7 @@ export class MatchView {
     this.stadium.focusShadow(this.focus);
   }
 
-  private updateLive(dt: number, receiverPreview: Player | null, aimDir: THREE.Vector3 | null) {
+  private updateLive(dt: number, receiverPreview: Player | null, aimDir: THREE.Vector3 | null, aimTarget: THREE.Vector3 | null) {
     const m = this.match;
     for (const p of m.playersAll) {
       const model = this.models.get(p.id)!;
@@ -174,7 +174,8 @@ export class MatchView {
       const pos = (this.aimLine.geometry as THREE.BufferGeometry).getAttribute('position') as THREE.BufferAttribute;
       const b = m.ball.pos;
       pos.setXYZ(0, b.x, 0.05, b.z);
-      pos.setXYZ(1, b.x + aimDir.x * 6, 0.05, b.z + aimDir.z * 6);
+      if (aimTarget) pos.setXYZ(1, aimTarget.x, Math.max(0.05, aimTarget.y * 0.5), aimTarget.z);
+      else pos.setXYZ(1, b.x + aimDir.x * 6, 0.05, b.z + aimDir.z * 6);
       pos.needsUpdate = true;
       this.aimLine.computeLineDistances();
       this.aimLine.visible = true;

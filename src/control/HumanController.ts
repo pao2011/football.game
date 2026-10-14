@@ -10,6 +10,7 @@ import { requestDive } from '../ai/GoalkeeperAI';
 import { getBallPrediction } from '../ai/Predict';
 import { interceptCache } from '../ai/TeamAI';
 import { clamp, dist2D } from '../util/math';
+import { offsideLineU } from '../sim/Rules';
 
 /** Orientación de la cámara para convertir el stick (pantalla) en direcciones del mundo. */
 export interface ViewBasis {
@@ -25,6 +26,12 @@ export interface ControlSettings {
   powerBarTime: number;
   /** Mostrar la trayectoria de pase/tiro (ayuda visual). */
   showAimAssist: boolean;
+  /**
+   * Modo asistido (pensado para pantallas táctiles): receptor elegido de forma inteligente,
+   * toque rápido = pase/tiro con potencia automática, puntería hacia la portería, sprint
+   * automático con el joystick al máximo y defensa que se orienta sola hacia el portador.
+   */
+  assist?: boolean;
 }
 
 type KickAction = 'pass' | 'through' | 'lob' | 'shoot';
@@ -57,7 +64,11 @@ export class HumanController implements TeamController {
   /** Último disparo ordenado (para convertirlo en raso con el doble toque). */
   private lastShot: { power: number; dir: Vector3; style: ShotStyle } | null = null;
   private switchCooldown = 0;
+  /** Punto del arco al que irá el disparo actual (para la ayuda visual). */
+  aimTarget: Vector3 | null = null;
   private lastKickHandled = -1;
+  /** Recepción tras el cambio inmediato al receptor de un pase. */
+  private receiveLock: { player: Player; dir: Vector3; until: number } | null = null;
   private gkDiveIntent = 0;
   pauseRequested = false;
   /** Dirección de apuntado actual (mundo) para la ayuda visual. */
@@ -106,6 +117,14 @@ export class HumanController implements TeamController {
       }
     }
 
+    // si el pase no llegó a salir (p. ej. le roban en el armado), se vuelve a controlar a quien tiene el balón
+    const own = m.owner;
+    if (own && own.team === team.index && own !== p && !own.isGK && own.action.kind !== 'kick') {
+      team.controlled = own;
+      p = own;
+      this.receiveLock = null;
+    }
+
     const inPlay = m.phase === 'play';
     const isTaker = !inPlay && m.restart?.taker === p && (m.restart.stage === 'ready' || m.phase === 'shootout');
 
@@ -122,10 +141,11 @@ export class HumanController implements TeamController {
         const dn = dist2D(nearest.pos, m.ball.pos);
         const dp = dist2D(p.pos, m.ball.pos);
         const theirs = m.possessionTeam !== team.index;
-        if (theirs && dp > 12 && dn < dp * 0.5) {
+        const assist = !!this.settings.assist;
+        if (theirs && (assist ? dp > 6 && dn < dp * 0.7 : dp > 12 && dn < dp * 0.5)) {
           team.controlled = nearest;
           p = nearest;
-          this.switchCooldown = 1.2;
+          this.switchCooldown = assist ? 0.8 : 1.2;
         }
       }
     }
@@ -156,11 +176,36 @@ export class HumanController implements TeamController {
       return;
     }
 
+    // Punto de apuntado del disparo (ayuda visual en el arco)
+    this.aimTarget = null;
+    if (m.owner === p && dist2D(p.pos, team.attackGoal) < 42) {
+      const aimDir = hasStick ? stick.clone().normalize() : p.forward();
+      const st = this.currentStyle();
+      const { z, y } = this.shotAim(m, team, p, aimDir, 0.7, st.finesse);
+      this.aimTarget = new Vector3(HALF_LENGTH * team.attackDir, st.chip ? 1.9 : st.low ? 0.2 : clamp(y, 0.3, 2.2), z);
+    }
+
     // ----- Movimiento -----
-    p.sprinting = input.held('sprint');
+    // con el joystick virtual al máximo se esprinta solo (no hace falta un tercer dedo)
+    p.sprinting = input.held('sprint') || (!!this.settings.assist && input.virtualMagnitude() > 0.88);
     const owner = m.owner === p || m.gkHolding === p;
     const defending = !owner && m.possessionTeam !== team.index && m.possessionTeam !== -1;
-    if (hasStick) {
+    // recepción tras el cambio inmediato: hasta que el jugador mueva el stick hacia otro lado
+    const lock = this.receiveLock;
+    let receiving = false;
+    if (lock) {
+      const valid = lock.player === p && m.time < lock.until && !owner && (m.intendedReceiver === p || (m.owner !== null && m.owner.team === team.index));
+      const sameDir = !hasStick || lock.dir.lengthSq() < 0.01 || stick.dot(lock.dir) / (lock.dir.length() * stick.length()) > 0.75;
+      if (!valid || !sameDir) {
+        this.receiveLock = null;
+      } else {
+        receiving = true;
+        if (!this.autoReceive(m, p)) p.desiredVel.set(0, 0, 0);
+      }
+    }
+    if (receiving) {
+      // va a buscar el balón
+    } else if (hasStick) {
       p.desiredVel.copy(stick).multiplyScalar(9.5);
     } else if (!owner && this.autoReceive(m, p)) {
       // recepción asistida: va al punto de intercepción sin tocar el stick
@@ -301,9 +346,11 @@ export class HumanController implements TeamController {
       if (rel >= 0) {
         if (a === 'shoot' && this.cancelShootRelease) { this.cancelShootRelease = false; input.takeGesture('shot'); continue; }
         if (a === 'pass' && this.cancelPassRelease) { this.cancelPassRelease = false; continue; }
-        const power = clamp(rel / this.settings.powerBarTime, 0.08, 1);
+        let power = clamp(rel / this.settings.powerBarTime, 0.08, 1);
         const dir = hasStick ? stick.clone().normalize() : p.forward();
         const style = a === 'shoot' ? this.currentStyle(input.takeGesture('shot')?.dir ?? null) : undefined;
+        // modo asistido: un toque rápido (sin cargar la barra) golpea con potencia automática
+        if (this.settings.assist && rel < 0.28) power = this.autoPower(m, team, p, a, style);
         this.lastCharge = { action: a, value: power, at: m.time, label: style ? shotStyleName(style) : undefined };
         this.buffered = { action: a, power, finesse: input.held('finesse'), until: m.time + 0.7, dir, noStick: !hasStick, style };
       }
@@ -332,7 +379,22 @@ export class HumanController implements TeamController {
     if (!isOwner && (dH > 1.25 || ball.y > 1.2)) return false;
     if (m.owner && m.owner !== p) return false;
     const req = this.makeKick(m, team, p, b, false);
-    return m.requestKick(p, req);
+    const ok = m.requestKick(p, req);
+    if (ok) this.switchToReceiver(m, team, req.targetId);
+    return ok;
+  }
+
+  /**
+   * Al pasar, el control pasa al receptor en el mismo momento de pulsar (no al llegar el balón).
+   * Mientras el balón va hacia él, el stick que se tenía apuntando al pase no lo aleja: corre a recibir.
+   */
+  private switchToReceiver(m: Match, team: Team, targetId: string | undefined) {
+    if (targetId === undefined || m.phase !== 'play') return;
+    const rec = team.active.find((x) => x.id === targetId);
+    if (!rec || rec.isGK || rec === team.controlled) return;
+    team.controlled = rec;
+    this.receiveLock = { player: rec, dir: this.stickWorld().clone(), until: m.time + 3.5 };
+    this.switchCooldown = Math.max(this.switchCooldown, 1);
   }
 
   private makeKick(m: Match, team: Team, p: Player, b: Omit<Buffered, 'until'>, header: boolean) {
@@ -346,7 +408,7 @@ export class HumanController implements TeamController {
         return buildShot(m, p, z, y, b.power, st, err);
       }
       case 'pass': {
-        let q = this.pickReceiver(m, team, p, dir);
+        let q = this.pickReceiver(m, team, p, dir, false, !b.noStick);
         // sin dirección y sin nadie delante: al compañero mejor situado en cualquier dirección
         if (!q && b.noStick) q = this.pickFrom(p, team.active.filter((x) => x !== p && !x.isGK), dir);
         if (!q) {
@@ -362,7 +424,7 @@ export class HumanController implements TeamController {
         return buildGroundPass(m, p, target, b.power - 0.35, err, q);
       }
       case 'through': {
-        const q = this.pickReceiver(m, team, p, dir, true);
+        const q = this.pickReceiver(m, team, p, dir, true, !b.noStick);
         const run = new Vector3(team.attackDir, 0, 0).lerp(dir, 0.4).normalize();
         const lead = 5 + b.power * 13;
         const base = q ? q.pos : p.pos;
@@ -388,7 +450,7 @@ export class HumanController implements TeamController {
           target.addScaledVector(new Vector3(team.attackDir, 0, 0), (b.power - 0.5) * 6);
           return buildLob(m, p, target, 20 + b.power * 6, err, q ?? undefined, 'cross');
         }
-        const q = this.pickReceiver(m, team, p, dir);
+        const q = this.pickReceiver(m, team, p, dir, false, !b.noStick);
         const target = q ? q.pos.clone().addScaledVector(q.vel, 0.9) : p.pos.clone().addScaledVector(dir, 15 + b.power * 35);
         if (q && this.settings.passAssist < 0.5) target.copy(p.pos).addScaledVector(dir, 12 + b.power * 40);
         return buildLob(m, p, target, 28 + b.power * 10, err, q ?? undefined, 'lob');
@@ -396,22 +458,40 @@ export class HumanController implements TeamController {
     }
   }
 
+  /** Potencia automática de un toque rápido: según la distancia al arco o al receptor. */
+  private autoPower(m: Match, team: Team, p: Player, a: KickAction, style?: ShotStyle): number {
+    if (a === 'shoot') {
+      const d = dist2D(p.pos, team.attackGoal);
+      return clamp(0.42 + d / 55 + (style?.power ? 0.12 : 0), 0.5, 0.95);
+    }
+    return a === 'pass' ? 0.5 : 0.55;
+  }
+
   /** Punto de apuntado en el arco a partir del stick y la potencia (como los juegos modernos). */
   private shotAim(m: Match, team: Team, p: Player, dir: Vector3, power: number, finesse: boolean) {
     const gx = HALF_LENGTH * team.attackDir;
+    const assist = !!this.settings.assist;
+    const gk = m.otherTeam(team.index).goalkeeper;
+    const inner = GOAL_HALF_WIDTH - (assist ? 0.65 : 0.35);
     let z: number;
     const toGoalX = gx - p.pos.x;
     const stickAligned = Math.sign(dir.x) === Math.sign(toGoalX) && Math.abs(dir.x) > 0.15;
-    if (this.input.move().x !== 0 || this.input.move().y !== 0) {
+    const hasDir = this.input.move().x !== 0 || this.input.move().y !== 0 || (assist && stickAligned);
+    if (hasDir) {
       if (stickAligned) {
         z = p.pos.z + (dir.z / dir.x) * toGoalX;
       } else {
-        z = Math.sign(dir.z) * GOAL_HALF_WIDTH;
+        z = Math.sign(dir.z || p.pos.z || 1) * GOAL_HALF_WIDTH;
       }
-      z = clamp(z, -(GOAL_HALF_WIDTH - 0.35), GOAL_HALF_WIDTH - 0.35);
+      if (assist) {
+        // imán: un disparo que iba "casi" al arco entra entre los palos
+        if (Math.abs(z) < GOAL_HALF_WIDTH + 3.2) z = clamp(z, -inner, inner);
+        // y se aleja del arquero si iba a su zona de alcance
+        if (gk && Math.abs(z - gk.pos.z) < 1.1) z = clamp(z + (z >= gk.pos.z ? 1.5 : -1.5), -inner, inner);
+      }
+      z = clamp(z, -inner, inner);
     } else {
       // sin dirección: al palo más alejado del arquero (asistencia)
-      const gk = m.otherTeam(team.index).goalkeeper;
       const side = gk && gk.pos.z > 0 ? -1 : 1;
       z = side * (GOAL_HALF_WIDTH - 1.1);
     }
@@ -459,11 +539,13 @@ export class HumanController implements TeamController {
       p.desiredFacing = Math.atan2(ball.x - p.pos.x, ball.z - p.pos.z);
     }
     // Entrada de pie / barrida
+    // modo asistido: la entrada se orienta sola hacia el balón si el rival está cerca
+    const faceBall = !!this.settings.assist && !!carrier && dist2D(p.pos, ball) < 4.5;
     if (input.pressed('shoot')) {
-      if (!hasStick && carrier) p.facing = Math.atan2(ball.x - p.pos.x, ball.z - p.pos.z);
+      if ((!hasStick || faceBall) && carrier) p.facing = Math.atan2(ball.x - p.pos.x, ball.z - p.pos.z);
       m.requestTackle(p, false);
     } else if (input.pressed('lob')) {
-      if (!hasStick) p.facing = Math.atan2(ball.x - p.pos.x, ball.z - p.pos.z);
+      if (!hasStick || faceBall) p.facing = Math.atan2(ball.x - p.pos.x, ball.z - p.pos.z);
       else p.facing = Math.atan2(stick.x, stick.z);
       m.requestTackle(p, true);
     }
@@ -494,14 +576,14 @@ export class HumanController implements TeamController {
       if (rel < 0) continue;
       const power = clamp(rel / this.settings.powerBarTime, 0.1, 1);
       if (a === 'pass' || a === 'through') {
-        const q = this.pickReceiver(m, team, p, dir);
+        const q = this.pickReceiver(m, team, p, dir, false, hasStick);
         const target = q ? q.pos.clone() : p.pos.clone().addScaledVector(dir, 15 + power * 15);
         const req = buildGroundPass(m, p, target, power - 0.3, 1, q ?? undefined);
         req.kind = 'gkthrow';
         req.velocity.y = a === 'through' ? 4 : 1.2;
         m.requestKick(p, req);
       } else {
-        const q = this.pickReceiver(m, team, p, dir);
+        const q = this.pickReceiver(m, team, p, dir, false, hasStick);
         const target = q && power < 0.85 ? q.pos.clone() : p.pos.clone().addScaledVector(dir, 35 + power * 30);
         const req = buildLob(m, p, target, a === 'shoot' ? 22 : 36, 1, q ?? undefined);
         req.kind = 'punt';
@@ -547,7 +629,7 @@ export class HumanController implements TeamController {
         return;
       }
       if (r.type === 'throwin') {
-        const q = this.pickReceiver(m, team, p, dir);
+        const q = this.pickReceiver(m, team, p, dir, false, hasStick);
         const target = q ? q.pos.clone() : p.pos.clone().addScaledVector(dir, 8 + power * 12);
         const d = dist2D(m.ball.pos, target);
         const v = new Vector3(target.x - m.ball.pos.x, 0, target.z - m.ball.pos.z).normalize().multiplyScalar(clamp(d * 0.75 + 4, 6, a === 'lob' ? 19 : 15));
@@ -624,22 +706,61 @@ export class HumanController implements TeamController {
     return best;
   }
 
-  /** Receptor asistido en la dirección del stick (cono de ~60°). */
-  private pickReceiver(m: Match, team: Team, p: Player, dir: Vector3, forwardOnly = false): Player | null {
+  /**
+   * Receptor del pase. Sin asistencia: el compañero más cercano a la dirección del stick (cono de ~60°).
+   * Con asistencia: se puntúan todos los compañeros por dirección, espacio libre, línea de pase sin rivales,
+   * distancia útil y progreso, y se evitan los fueras de juego; sin stick se mira hacia donde corre el jugador.
+   */
+  private pickReceiver(m: Match, team: Team, p: Player, dir: Vector3, forwardOnly = false, intent = true): Player | null {
     const cands = team.active.filter((q) => q !== p && (!q.isGK || team.u(p.pos) < -HALF_LENGTH + 30) && (!forwardOnly || !q.isGK));
-    const best = this.pickFrom(p, cands, dir);
-    if (!best) return null;
-    const vx = best.pos.x - p.pos.x;
-    const vz = best.pos.z - p.pos.z;
-    const cos = (vx * dir.x + vz * dir.z) / Math.hypot(vx, vz);
-    return cos > 0.45 ? best : null;
+    if (!this.settings.assist) {
+      const best = this.pickFrom(p, cands, dir);
+      if (!best) return null;
+      const vx = best.pos.x - p.pos.x;
+      const vz = best.pos.z - p.pos.z;
+      const cos = (vx * dir.x + vz * dir.z) / Math.hypot(vx, vz);
+      return cos > 0.45 ? best : null;
+    }
+    const opps = m.otherTeam(team.index).active;
+    const offU = offsideLineU(m, team);
+    const ballU = team.u(m.ball.pos);
+    const pu = team.u(p.pos);
+    let best: Player | null = null;
+    let bestScore = -Infinity;
+    for (const q of cands) {
+      const vx = q.pos.x - p.pos.x;
+      const vz = q.pos.z - p.pos.z;
+      const d = Math.hypot(vx, vz);
+      if (d < 3) continue;
+      const cos = (vx * dir.x + vz * dir.z) / d;
+      if (intent && cos < -0.15) continue; // nunca en sentido contrario al stick
+      const qu = team.u(q.pos);
+      if (qu > offU + 0.1 && qu > ballU) continue; // en fuera de juego
+      if (forwardOnly && qu < pu - 2) continue;
+      let nearest = Infinity;
+      let lane = Infinity;
+      for (const o of opps) {
+        nearest = Math.min(nearest, dist2D(o.pos, q.pos));
+        const t = clamp(((o.pos.x - p.pos.x) * vx + (o.pos.z - p.pos.z) * vz) / (d * d), 0, 1);
+        lane = Math.min(lane, Math.hypot(o.pos.x - (p.pos.x + vx * t), o.pos.z - (p.pos.z + vz * t)));
+      }
+      const open = clamp(nearest / 6, 0, 1);
+      const laneClear = clamp(lane / 2.5, 0, 1);
+      const distScore = clamp(1 - Math.abs(d - 16) / 30, 0, 1);
+      const progress = (qu - pu) / 30;
+      let score = cos * (intent ? 2.4 : 0.9) + open * 1.0 + laneClear * 1.3 + distScore * 0.5 + progress * (forwardOnly ? 2 : 0.6);
+      if (q.isGK) score -= 1.5;
+      if (score > bestScore) { bestScore = score; best = q; }
+    }
+    return best;
   }
 
   /** Para la ayuda visual: ¿a quién iría un pase ahora? */
   previewReceiver(m: Match, team: Team): Player | null {
     const p = team.controlled;
     if (!p || m.owner !== p) return null;
-    return this.pickReceiver(m, team, p, this.aimDir);
+    const hasStick = this.input.move().x !== 0 || this.input.move().y !== 0;
+    return this.pickReceiver(m, team, p, hasStick ? this.aimDir : p.forward(), false, hasStick);
   }
 }
 
