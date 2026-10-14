@@ -7,7 +7,7 @@ import type { Match } from '../sim/Match';
 import type { Player } from '../sim/Player';
 import type { Team } from '../sim/Team';
 import { angleDiff, clamp, dist2D } from '../util/math';
-import { buildClearance, buildGroundPass, buildLob, buildShot, NORMAL_SHOT } from './Actions';
+import { buildClearance, buildCross, buildGroundPass, buildLob, buildShot, chooseCrossTarget, NORMAL_SHOT } from './Actions';
 import type { SkillKind } from '../sim/types';
 import { getBallPrediction, PRED_DT, PRED_STEPS, timeToReach } from './Predict';
 import { offsideLineU } from '../sim/Rules';
@@ -188,12 +188,13 @@ function tryAerial(m: Match, p: Player, team: Team): boolean {
   const b = m.ball;
   if (m.owner || b.held || b.pos.y < 0.8 || p.busy) return false;
   const pts = getBallPrediction(m);
-  for (let i = 1; i <= 8; i++) {
+  for (let i = 1; i <= 12; i++) {
     const pt = pts[i];
     const t = i * PRED_DT;
-    if (pt.y < 1.5 || pt.y > 2.7) continue;
+    if (pt.y < 1.3 || pt.y > 2.7) continue;
     const d = dist2D(p.pos, pt);
-    if (d > 1.6) continue;
+    // llega a tiempo al punto de remate (antes solo si ya estaba encima)
+    if (d > 1.6 + t * 6) continue;
     // ¿Soy el más cercano de mi equipo a ese punto?
     if (team.active.some((q) => q !== p && !q.isGK && dist2D(q.pos, pt) < d - 0.3)) return false;
     moveTo(p, pt, 1, 0.1);
@@ -210,11 +211,15 @@ function headerDecision(m: Match, p: Player, team: Team) {
   const goal = team.attackGoal;
   const dGoal = dist2D(p.pos, goal);
   const err = errScale(m, p);
-  if (dGoal < 15) {
-    const z = (m.rng.next() < 0.5 ? -1 : 1) * (GOAL_HALF_WIDTH - 0.8);
-    const req = buildShot(m, p, z, 0.4, 0.55, false, err * 1.2, 'header');
-    req.velocity.multiplyScalar(0.75);
-    req.velocity.y = Math.min(req.velocity.y, 0.5);
+  if (dGoal < 16) {
+    // cabezazo hacia abajo, al palo contrario de donde está el arquero
+    const gk = m.otherTeam(team.index).goalkeeper;
+    const side = gk ? (gk.pos.z > 0.3 ? -1 : gk.pos.z < -0.3 ? 1 : m.rng.next() < 0.5 ? -1 : 1) : 1;
+    const z = side * (GOAL_HALF_WIDTH - 0.7);
+    const req = buildShot(m, p, z, 0.35, 0.6, false, err * 1.1, 'header');
+    req.velocity.multiplyScalar(0.8);
+    req.velocity.y = Math.min(req.velocity.y, 0.3);
+    req.aimAt = new Vector3(goal.x, 0, z);
     return req;
   }
   const ownHalf = team.u(p.pos) < 0;
@@ -412,12 +417,13 @@ function decide(m: Match, p: Player, team: Team, opponents: Player[]) {
 
   // --- Centro desde banda ---
   if (pu > HALF_LENGTH - 26 && Math.abs(p.pos.z) > 13) {
-    const inBox = team.active.filter((q) => q !== p && team.u(q.pos) > HALF_LENGTH - PENALTY_AREA_DEPTH - 2 && Math.abs(q.pos.z) < 12);
+    // rematadores en el área o llegando a ella (corren a primer palo, penal y segundo palo)
+    const inBox = team.active.filter((q) => q !== p && !q.isGK && (team.u(q.pos) > HALF_LENGTH - PENALTY_AREA_DEPTH - 4 || (q.duty === 'run' && team.u(q.tacticalTarget) > HALF_LENGTH - 18)) && Math.abs(team.l(q.pos)) < 16);
     if (inBox.length > 0) {
-      const t = inBox[Math.floor(m.rng.next() * inBox.length)];
-      const target = t.pos.clone().add(team.toWorld(2, 0));
+      const { receiver, point } = chooseCrossTarget(m, team, p);
       const nearByline = clamp((pu - (HALF_LENGTH - 26)) / 16, 0, 1);
-      options.push({ score: 0.75 + Math.min(3, inBox.length) * 0.12 + nearByline * 0.7, label: 'cross', run: () => m.requestKick(p, buildLob(m, p, target, 21, err, t, 'cross')) });
+      const style = m.rng.next() < 0.3 ? 'driven' as const : m.rng.next() < 0.15 ? 'low' as const : 'normal' as const;
+      options.push({ score: 0.75 + Math.min(3, inBox.length) * 0.12 + nearByline * 0.7, label: 'cross', run: () => m.requestKick(p, buildCross(m, p, point, style, err, receiver)) });
     }
   }
 
@@ -562,10 +568,8 @@ export function aiTakeSetPiece(m: Match, p: Player) {
       break;
     }
     case 'corner': {
-      const inBox = mates.filter((q) => Math.abs(q.pos.x) > HALF_LENGTH - 14 && Math.abs(q.pos.z) < 10);
-      const t = inBox.length ? inBox[Math.floor(m.rng.next() * inBox.length)] : null;
-      const target = t ? t.pos.clone() : new Vector3(Math.sign(ball.x) * (HALF_LENGTH - 9), 0, 0);
-      m.requestKick(p, buildLob(m, p, target, 24, err, t ?? undefined, 'cross'));
+      const { receiver, point } = chooseCrossTarget(m, team, p);
+      m.requestKick(p, buildCross(m, p, point, m.rng.next() < 0.3 ? 'driven' : 'normal', err, receiver));
       break;
     }
     case 'goalkick': {

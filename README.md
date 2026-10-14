@@ -108,12 +108,18 @@ Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y 
 
 | Acción | Teclado (clásico) | Mando Xbox / PlayStation |
 |---|---|---|
-| Moverse | Flechas | Stick izquierdo / Cruceta |
+| Moverse | Flechas | Stick izquierdo |
 | Sprint | **E** | RT / R2 |
 | Pase corto · Cabezazo | **S** | A / ✕ |
 | Tiro · Volea | **D** (mantener = potencia) | B / ○ |
 | Pase elevado · **Centro** (desde la banda) | **A** | X / □ |
 | Pase al hueco | **W** | Y / △ |
+| **Pase tenso** | **Shift + S** | RB + A / R1 + ✕ |
+| **Pase al hueco bombeado** | **Q + W** | LB + Y / L1 + △ |
+| **Centro tenso** · pase elevado tenso | **Shift + A** | RB + X / R1 + □ |
+| **Centro bajo** · **centro raso** | **A A** · **A A A** | X X · X X X |
+| **Pedir desmarque** (con el balón) | **Q** (tocar, sin combinar) | LB / L1 |
+| **Mentalidad** del equipo (← defensiva · → ofensiva) | — | Cruceta ← / → |
 | Tiro colocado con rosca | **Shift + D** | RB + B / R1 + ○ |
 | Cambiar de jugador (sin balón) | **Q** (con dirección: al compañero en esa dirección) | LB / L1 |
 | **Tiro raso** | **D** + **D** (doble toque) | B + B |
@@ -132,6 +138,8 @@ Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y 
 | Arquero con el balón | **S** saque con la mano · **A / D** despeje · **W** saque alto | A · X / B · Y |
 | Penal a favor | flechas para apuntar + mantener **D** | stick + B / ○ |
 | Penal en contra | mantén ← / → al patear el rival (lado de la estirada) | stick |
+
+El mando sigue el **esquema clásico de FIFA**: mismos botones y mismas combinaciones (RB + A pase tenso, LB + Y globo al hueco, RB + X centro tenso, X X centro bajo, X X X centro raso, LB para pedir el desmarque, LB + B vaselina, RB + B rosca, B B raso, B y luego A amago) y la **cruceta no mueve al jugador**: ← / → cambian la mentalidad del equipo (de ultradefensiva a ultraofensiva; se ve un indicador bajo el marcador).
 
 **Mando**: se usa un mando de mapa estándar (Xbox, PlayStation, Switch Pro y la mayoría de los genéricos). Los navegadores solo detectan el mando después de pulsar un botón, así que si no responde, **pulsa cualquier botón con la página en primer plano**; aparece el aviso "Mando conectado" (y "Mando desconectado" al perderlo). Si hay varios dispositivos, se elige el de mapa estándar con más botones y ejes. Mandos sin mapa estándar: se reconocen la cruceta por el eje *hat* y el stick derecho alternativo. **Limitación**: dentro de una página incrustada (por ejemplo, un enlace compartido que se muestra en un marco) el navegador puede bloquear el mando; la pantalla de título lo avisa y hay que abrir el juego en su propia pestaña. No se probó con un mando físico, solo con uno simulado en el navegador.
 
@@ -180,6 +188,8 @@ Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y 
 - Faltas: el pie llega antes al rival que al balón; la gravedad depende de si la entrada es por detrás, de la velocidad y de la distancia al balón.
 - Tarjeta amarilla, segunda amarilla y roja (incluida la ocasión manifiesta de gol del último defensor); el expulsado sale del campo y, si es el arquero, lo sustituye un jugador de campo.
 - Tiros libres con barrera a 9,15 m y penales.
+- **Centros**: la trayectoria se calcula con la física real para que el balón llegue a la cabeza del rematador (centro normal, bombeado por encima de la primera línea), a media altura (tenso) o a la cintura (bajo), con efecto alejándose del arquero. Cuando un compañero va a centrar, los delanteros **atacan el área** (primer palo, punto de penal, segundo palo y borde), el que recibe va al **punto de remate** y no a donde bota, y se elige al rematador con espacio y sin defensores en la trayectoria. Los cabezazos se dirigen al palo contrario al arquero y se apuntan en el instante del contacto. En pruebas con 40 centros desde la banda, un atacante toca primero en el 100 % (antes, 90 %) y hay el doble de goles.
+- **Recepción de pases**: el jugador al que le pasas va a buscar el balón aunque el stick siga apuntando a otro lado; el stick vuelve a mandar al recibirlo.
 - **Tiros libres directos con trayectoria (estilo FC)**: cerca del arco, la cámara se coloca detrás del lanzador (algo más atrás y por encima) y se ve el recorrido previsto del balón con puntos y una mira en el arco. Con el stick / flechas / joystick se mueve la mira (lado y altura), con **J / L**, el stick derecho o los botones táctiles **EFECTO ↶ ↷** se curva la trayectoria, y manteniendo **TIRO** se elige la potencia (poca potencia = parábola más alta; mucha = más tenso). El recorrido se calcula con la misma física del balón, así que lo que ves es lo que hace (más un pequeño error según el lanzador). PASE y ELEVADO siguen sirviendo para jugarlo en corto o centrar.
 - **Penales**: mira visible en el arco (lado según el stick, altura según la potencia que se carga).
 - Fuera de juego evaluado en el momento exacto del pase (penúltimo defensor y balón; sin fuera de juego en saques de banda, de arco ni de esquina).
@@ -229,19 +239,21 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Prueba | Comando | Resultado |
 |---|---|---|
 | Comprobación de tipos (TypeScript estricto) | `npx tsc --noEmit` | ✅ sin errores |
-| Unitarias y de simulación | `npm test` | ✅ **91/91** |
+| Unitarias y de simulación | `npm test` | ✅ **109/109** |
 | Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **14/14** |
 | Extremo a extremo con mando (mando estándar simulado) | `npm run build && npm run test:e2e:gamepad` | ✅ **6/6** |
 | Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **17/17** |
 | Ejecutable de Linux bajo Xvfb | — | ✅ sin errores (detalle abajo) |
 
-**Unitarias y de simulación (91 pruebas)**
+**Unitarias y de simulación (109 pruebas)**
 - **Tipos de tiro (5)**: la vaselina supera los 3 m y entra bajo el travesaño; el raso no pasa de 0,8 m; el potente es más rápido y menos preciso; la rosca lleva efecto; y las combinaciones funcionan.
 - **Regates (4)**: los 6 regates se ejecutan con su animación y control del balón; la bicicleta cambia de dirección; un regate puede superar al defensor (que entonces no puede entrar) pero no siempre; y la ruleta protege el balón.
 - **Controles de tiros y regates (7)**: Q+D vaselina, Q+Shift+D o Ctrl+D potente, doble toque raso, D y luego S amago, I/K/J/L/R regates, gestos táctiles, y Q con balón como modificador (no cambia de jugador).
 - **Física del balón**: gravedad, rebotes y reposo; los botes pierden energía; distancia de los pases rasos; el balón nunca se acelera solo; puntería de los tiros; curva con efecto; rebote en el poste sin atravesarlo; la red retiene el balón; la red lateral impide entrar desde fuera.
 - **Partidos IA contra IA**: con varias semillas se completan sin bloqueos, sin coordenadas inválidas, con pases, tiros y posesión de ambos equipos; también se marcan goles y la eliminatoria pasa por la prórroga y los penales hasta tener ganador.
 - **Reglas**: detección de goles, saque de banda y córner correctos, fuera de juego, falta y tarjeta por barrida trasera sin tocar el balón, y entrada limpia que no es falta.
+- **Centros y esquema clásico (12)**: el balón pasa por el punto y la altura pedidos; centro normal, tenso y bajo llegan a la altura correcta; los rematadores atacan el área; los centros de la IA acaban en remates y goles; X / RB + X / X X / X X X, RB + A, LB + Y, LB para el desmarque y la mentalidad con la cruceta.
+- **Recepción (5)**: la IA sale al encuentro del pase y el jugador controlado lo busca y lo recibe con el stick hacia el pase, hacia un costado, hacia atrás o sin tocarlo.
 - **Mando (7)**: stick, botones, gatillos analógicos, cruceta, stick derecho, dispositivos falsos, mapas no estándar y sin mando.
 - **Hinchada (4)**: banderas en las gradas, trapos en la baranda y bombos en la barra; la bandera gigante se despliega en el recibimiento y se recoge; el recibimiento lanza cohetes que estallan (con sonido), humo y papelitos, y todo termina apagándose; el gol de un equipo activa las bengalas y los cohetes de su hinchada.
 - **Tiro libre con trayectoria (7)**: el balón pasa por el punto elegido con y sin efecto (en ambos arcos), el recorrido dibujado termina en ese punto, el stick mueve la mira, J/L cambian el efecto y el disparo real llega cerca de la mira.

@@ -19,6 +19,7 @@ export class HUD {
   private sbClock: HTMLElement;
   private sbAdded: HTMLElement;
   private banner: HTMLElement;
+  private mentality: HTMLElement;
   private toast: HTMLElement;
   private ptag: HTMLElement;
   private power: HTMLElement;
@@ -53,6 +54,7 @@ export class HUD {
         <div class="sb-clock">00:00</div>
         <div class="sb-added hidden">+1</div>
       </div>
+      <div class="mentality hidden"></div>
       <div class="banner hidden"></div>
       <div class="toast hidden"></div>
       <div class="player-tag hidden"><div class="nm"></div><div class="meta"></div><div class="stamina"><div></div></div></div>
@@ -71,6 +73,7 @@ export class HUD {
     this.sbClock = q('.sb-clock');
     this.sbAdded = q('.sb-added');
     this.banner = q('.banner');
+    this.mentality = q('.mentality');
     this.toast = q('.toast');
     this.ptag = q('.player-tag');
     this.power = q('.powerbar');
@@ -190,6 +193,15 @@ export class HUD {
 
   update(dt: number) {
     const m = this.match;
+    // mentalidad (cruceta ← → del mando)
+    const ht = m.teams.find((t) => t.human);
+    if (ht) {
+      const names = ['ULTRADEFENSIVA', 'DEFENSIVA', 'EQUILIBRADA', 'OFENSIVA', 'ULTRAOFENSIVA'];
+      const recent = !!this.ctrl && m.time - this.ctrl.mentalityShownAt < 2;
+      const show = ht.mentality !== 0 || recent;
+      this.show(this.mentality, show);
+      if (show) this.setText(this.mentality, `<span class="bars">${'▮'.repeat(ht.mentality + 3)}${'▯'.repeat(2 - ht.mentality)}</span> ${names[ht.mentality + 2]}`, true);
+    }
     if (m.half !== this.lastHalf) {
       this.lastHalf = m.half;
       if (m.phase === 'kickoff') this.showBanner(m.half === 2 ? 'SEGUNDO TIEMPO' : m.half === 3 ? 'PRÓRROGA' : 'SEGUNDO TIEMPO DE LA PRÓRROGA', '', '#fff', 2.5);

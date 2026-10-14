@@ -403,3 +403,8 @@ body.touch .scoreboard > div { font-size: 15px; padding: 0 8px; }
 .pad-toast { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); z-index: 70; background: rgba(10,14,24,0.92); border: 1px solid rgba(25,230,140,0.6); border-radius: 12px; padding: 10px 18px; font-family: var(--display); font-size: 15px; color: #fff; text-align: center; animation: spDown 0.3s both; transition: opacity 0.45s; }
 .pad-toast small { display: block; font-family: var(--body); font-size: 11px; opacity: 0.75; margin-top: 3px; }
 .pad-toast.out { opacity: 0; }
+
+/* Mentalidad del equipo (cruceta del mando) */
+.mentality { position: absolute; top: 66px; left: 22px; font-family: var(--display); font-size: 12px; letter-spacing: 0.12em; background: rgba(10,14,24,0.8); padding: 4px 10px; border-radius: 10px; color: #e8eefc; }
+.mentality .bars { color: #19e68c; letter-spacing: 0; margin-right: 6px; }
+body.touch .mentality { top: 48px; left: 10px; }

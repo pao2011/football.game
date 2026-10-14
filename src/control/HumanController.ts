@@ -4,10 +4,10 @@ import type { Input, Action, TouchGesture } from '../input/Input';
 import type { Match, TeamController } from '../sim/Match';
 import type { Player } from '../sim/Player';
 import type { Team } from '../sim/Team';
-import { buildGroundPass, buildLob, buildShot, NORMAL_SHOT, shotStyleName, type ShotStyle } from '../ai/Actions';
+import { buildCross, buildGroundPass, buildLob, buildShot, chooseCrossTarget, NORMAL_SHOT, shotStyleName, type CrossStyle, type ShotStyle } from '../ai/Actions';
 import type { SkillKind } from '../sim/types';
 import { requestDive } from '../ai/GoalkeeperAI';
-import { getBallPrediction } from '../ai/Predict';
+import { aerialIntercept, getBallPrediction } from '../ai/Predict';
 import { interceptCache } from '../ai/TeamAI';
 import { clamp, dist2D } from '../util/math';
 import { offsideLineU } from '../sim/Rules';
@@ -46,6 +46,12 @@ interface Buffered {
   dir: Vector3;
   noStick?: boolean;
   style?: ShotStyle;
+  /** LB (Q) mantenido al soltar: globo al hueco con LB + Y. */
+  lb?: boolean;
+  /** Toques seguidos de X (A en teclado): 2 = centro bajo, 3 = centro raso. */
+  taps?: number;
+  /** El centro espera un instante para poder contar más toques de X. */
+  notBefore?: number;
 }
 const KICK_ACTIONS: KickAction[] = ['pass', 'through', 'lob', 'shoot'];
 
@@ -74,6 +80,40 @@ export class HumanController implements TeamController {
    * positivo = curva hacia la derecha de la pantalla) y recorrido previsto del balón para dibujarlo.
    */
   freeKick: { restart: Restart; aimZ: number; aimY: number; curve: number; path: Vector3[]; target: Vector3; power: number } | null = null;
+  private lbDownAt = -1;
+  private lbUsed = false;
+  /** Último centro ordenado (para convertirlo en bajo o raso con toques seguidos de X). */
+  private lastLob: { b: Omit<Buffered, 'until'>; at: number } | null = null;
+  /** Instante del último cambio de mentalidad (para mostrarlo en el HUD). */
+  mentalityShownAt = -10;
+
+  /**
+   * Desmarque pedido (LB, como en FIFA): el compañero adelantado mejor situado corre al espacio,
+   * a la espalda de la defensa, durante unos segundos.
+   */
+  private callRun(m: Match, team: Team, p: Player) {
+    const pu = team.u(p.pos);
+    const off = offsideLineU(m, team);
+    let best: Player | null = null;
+    let bestS = -Infinity;
+    for (const q of team.active) {
+      if (q === p || q.isGK || q.sentOff) continue;
+      const qu = team.u(q.pos);
+      if (qu < pu - 8) continue;
+      const s = (q.slot.position === 'FWD' ? 2 : q.slot.position === 'MID' ? 1 : 0) + qu * 0.04 - dist2D(q.pos, p.pos) * 0.03;
+      if (s > bestS) { bestS = s; best = q; }
+    }
+    if (!best) return;
+    const bu = team.u(best.pos);
+    const bl = team.l(best.pos);
+    // a la espalda de la defensa, cerrando un poco hacia el centro
+    const u = clamp(Math.max(bu + 10, off + 7), -HALF_LENGTH + 10, HALF_LENGTH - 8);
+    const l = clamp(bl * 0.7, -HALF_WIDTH + 4, HALF_WIDTH - 4);
+    best.forcedRunUntil = m.time + 3.5;
+    best.forcedRunTarget.copy(team.toWorld(u, l));
+    m.emit({ type: 'skill', kind: 'run', team: team.index, text: 'Desmarque' });
+  }
+
   /** Penal del jugador: punto del arco al que irá (solo para la ayuda visual). */
   penaltyAim: { path: Vector3[]; target: Vector3 } | null = null;
   /** Recepción tras el cambio inmediato al receptor de un pase. */
@@ -137,6 +177,18 @@ export class HumanController implements TeamController {
     const inPlay = m.phase === 'play';
     const isTaker = !inPlay && m.restart?.taker === p && (m.restart.stage === 'ready' || m.phase === 'shootout');
 
+    // Cruceta del mando (como en FIFA): ← → mentalidad del equipo
+    if (input.padTactic !== 0) {
+      team.mentality = clamp(team.mentality + input.padTactic, -2, 2);
+      this.mentalityShownAt = m.time;
+    }
+    // LB (Q) con el balón, pulsado y soltado sin combinarlo con un golpeo: pide un desmarque
+    if (m.owner === p && inPlay) {
+      if (input.pressed('switch')) { this.lbDownAt = m.time; this.lbUsed = false; }
+      if (input.held('switch') && KICK_ACTIONS.some((a) => input.held(a))) this.lbUsed = true;
+      const lbRel = input.released('switch');
+      if (lbRel >= 0 && lbRel < 0.45 && !this.lbUsed) this.callRun(m, team, p);
+    }
     // Cambio manual (Q / LB)
     if (inPlay && input.pressed('switch') && m.gkHolding !== p && m.owner !== p) {
       const next = hasStick ? this.inDirection(m, team, p, stick) : this.nearestToBall(m, team, p);
@@ -203,17 +255,18 @@ export class HumanController implements TeamController {
     p.sprinting = input.held('sprint') || input.virtualMagnitude() > 0.6;
     const owner = m.owner === p || m.gkHolding === p;
     const defending = !owner && m.possessionTeam !== team.index && m.possessionTeam !== -1;
-    // recepción tras el cambio inmediato: hasta que el jugador mueva el stick hacia otro lado
+    // Recepción: mientras un pase de nuestro equipo viaja hacia el jugador controlado, este va a
+    // buscar el balón (como en FIFA): el stick no lo aleja del pase; se vuelve a usar al recibir.
     const lock = this.receiveLock;
     let receiving = false;
-    if (lock) {
-      const valid = lock.player === p && m.time < lock.until && !owner && (m.intendedReceiver === p || (m.owner !== null && m.owner.team === team.index));
-      const sameDir = !hasStick || lock.dir.lengthSq() < 0.01 || stick.dot(lock.dir) / (lock.dir.length() * stick.length()) > 0.75;
-      if (!valid || !sameDir) {
-        this.receiveLock = null;
-      } else {
-        receiving = true;
-        if (!this.autoReceive(m, p)) p.desiredVel.set(0, 0, 0);
+    const pt = m.lastTouch;
+    const incoming = !owner && !m.owner && !m.ball.held && m.intendedReceiver === p && !!pt && pt.team === team.index && pt.player !== p && pt.deliberate && m.time - pt.time < 4;
+    const windup = !!lock && lock.player === p && m.time < lock.until && !owner && !!m.owner && m.owner.team === team.index;
+    if (lock && !windup && !incoming) this.receiveLock = null;
+    if (incoming || windup) {
+      receiving = true;
+      if (!this.autoReceive(m, p)) {
+        p.desiredVel.set(0, 0, 0);
       }
     }
     if (receiving) {
@@ -242,7 +295,9 @@ export class HumanController implements TeamController {
   private autoReceive(m: Match, p: Player): boolean {
     if (m.owner || m.ball.held) return false;
     if (m.intendedReceiver !== p && dist2D(p.pos, m.ball.pos) > 6) return false;
-    const ic = interceptCache.get(p);
+    // balón aéreo (centro, pase elevado): al punto de remate a la altura de la cabeza
+    const air = m.ball.pos.y > 1 || m.ball.vel.y > 2 ? aerialIntercept(m, p) : null;
+    const ic = air ?? interceptCache.get(p);
     if (!ic) return false;
     const dx = ic.point.x - p.pos.x;
     const dz = ic.point.z - p.pos.z;
@@ -371,13 +426,33 @@ export class HumanController implements TeamController {
         const style = a === 'shoot' ? this.currentStyle(input.takeGesture('shot')) : undefined;
         // modo asistido: un toque rápido (sin cargar la barra) golpea con potencia automática
         if (this.settings.assist && rel < 0.28) power = this.autoPower(m, team, p, a, style);
+        // X (A en teclado) varias veces seguidas: centro bajo (2) o raso (3), como en FIFA
+        if (a === 'lob' && this.lastLob && m.time - this.lastLob.at < 0.4) {
+          const taps = Math.min(3, (this.lastLob.b.taps ?? 1) + 1);
+          this.lastLob = { b: { ...this.lastLob.b, taps }, at: m.time };
+          if (this.buffered && this.buffered.action === 'lob') {
+            this.buffered.taps = taps;
+            if (this.buffered.notBefore !== undefined) this.buffered.notBefore = m.time + 0.25;
+            continue;
+          }
+          const k = p.action.kick;
+          if (p.action.kind === 'kick' && !p.action.done && k && (k.kind === 'cross' || k.kind === 'lob')) {
+            p.action.kick = this.makeKick(m, team, p, this.lastLob.b, false);
+            this.lastCharge = { action: a, value: this.lastLob.b.power, at: m.time, label: taps === 2 ? 'CENTRO BAJO' : 'CENTRO RASO' };
+            continue;
+          }
+        }
         this.lastCharge = { action: a, value: power, at: m.time, label: style ? shotStyleName(style) : undefined };
-        this.buffered = { action: a, power, finesse: input.held('finesse'), until: m.time + 0.7, dir, noStick: !hasStick, style };
+        const crossZone = a === 'lob' && team.u(p.pos) > HALF_LENGTH - 30 && Math.abs(p.pos.z) > 12;
+        this.buffered = { action: a, power, finesse: input.held('finesse'), lb: input.held('switch'), until: m.time + (crossZone ? 1.0 : 0.7), dir, noStick: !hasStick, style, taps: 1, notBefore: crossZone ? m.time + 0.25 : undefined };
+        if (a === 'lob') this.lastLob = { b: { ...this.buffered }, at: m.time };
       }
     }
     if (this.buffered) {
       if (m.time > this.buffered.until) {
         this.buffered = null;
+      } else if (this.buffered.notBefore !== undefined && m.time < this.buffered.notBefore && (this.buffered.taps ?? 1) < 3) {
+        // esperando otro toque de X (centro bajo / raso)
       } else if (this.tryExecute(m, team, p, this.buffered)) {
         this.buffered = null;
       }
@@ -439,9 +514,10 @@ export class HumanController implements TeamController {
         const manual = this.settings.passAssist < 0.5;
         if (manual) {
           const d = 6 + b.power * 34;
-          return buildGroundPass(m, p, p.pos.clone().addScaledVector(dir, d), 0.2, err, q);
+          return this.driven(buildGroundPass(m, p, p.pos.clone().addScaledVector(dir, d), 0.2, err, q), b);
         }
-        return buildGroundPass(m, p, target, b.power - 0.35, err, q);
+        // RB + A: pase tenso (más rápido, como en FIFA)
+        return this.driven(buildGroundPass(m, p, target, b.power - 0.35, err, q), b);
       }
       case 'through': {
         const q = this.pickReceiver(m, team, p, dir, true, !b.noStick);
@@ -451,7 +527,8 @@ export class HumanController implements TeamController {
         const target = base.clone().addScaledVector(run, lead);
         target.x = clamp(target.x, -HALF_LENGTH + 3, HALF_LENGTH - 3);
         target.z = clamp(target.z, -HALF_WIDTH + 2, HALF_WIDTH - 2);
-        const req = buildGroundPass(m, p, target, 0.25, err, q ?? undefined, 'through');
+        // LB + Y: pase al hueco bombeado por encima de la defensa
+        const req = b.lb ? buildLob(m, p, target, 34, err, q ?? undefined, 'lob') : buildGroundPass(m, p, target, 0.25, err, q ?? undefined, 'through');
         if (q) {
           q.duty = 'receive';
           q.tacticalTarget.copy(target);
@@ -464,18 +541,29 @@ export class HumanController implements TeamController {
         const pu = team.u(p.pos);
         const crossing = pu > HALF_LENGTH - 30 && Math.abs(p.pos.z) > 12;
         if (crossing) {
-          const inBox = team.active.filter((q) => q !== p && team.u(q.pos) > HALF_LENGTH - PENALTY_AREA_DEPTH - 3 && Math.abs(q.pos.z) < 14);
-          const q = this.pickFrom(p, inBox, dir) ?? null;
-          const target = q ? q.pos.clone() : team.toWorld(HALF_LENGTH - 9, 0);
-          target.addScaledVector(new Vector3(team.attackDir, 0, 0), (b.power - 0.5) * 6);
-          return buildLob(m, p, target, 20 + b.power * 6, err, q ?? undefined, 'cross');
+          // FIFA clásico: X centro, RB + X centro tenso, X X centro bajo, X X X centro raso
+          const style: CrossStyle = (b.taps ?? 1) >= 3 ? 'ground' : (b.taps ?? 1) === 2 ? 'low' : b.finesse ? 'driven' : 'normal';
+          const { receiver, point } = chooseCrossTarget(m, team, p, b.noStick ? undefined : dir);
+          // la potencia corre el punto hacia el segundo palo (más) o el primero (menos)
+          point.addScaledVector(new Vector3(team.attackDir, 0, 0), (b.power - 0.5) * 3);
+          return buildCross(m, p, point, style, err, receiver);
         }
         const q = this.pickReceiver(m, team, p, dir, false, !b.noStick);
         const target = q ? q.pos.clone().addScaledVector(q.vel, 0.9) : p.pos.clone().addScaledVector(dir, 15 + b.power * 35);
         if (q && this.settings.passAssist < 0.5) target.copy(p.pos).addScaledVector(dir, 12 + b.power * 40);
-        return buildLob(m, p, target, 28 + b.power * 10, err, q ?? undefined, 'lob');
+        // RB + X: pase elevado tenso (más bajo y rápido)
+        return buildLob(m, p, target, b.finesse ? 17 + b.power * 5 : 28 + b.power * 10, err, q ?? undefined, 'lob');
       }
     }
+  }
+
+  /** RB (Shift) mantenido al pasar: pase tenso, un 25 % más rápido. */
+  private driven<T extends { velocity: Vector3; power: number }>(req: T, b: Omit<Buffered, 'until'>): T {
+    if (b.finesse) {
+      req.velocity.multiplyScalar(1.25);
+      req.power = Math.min(1, req.power * 1.25);
+    }
+    return req;
   }
 
   /** Potencia automática de un toque rápido: según la distancia al arco o al receptor. */

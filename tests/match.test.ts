@@ -220,6 +220,8 @@ describe('Control humano (teclado estilo FIFA)', () => {
     step(60);
     input.setKey('KeyS', true); step(1); input.setKey('KeyS', false);
     step(30);
+    // el receptor va primero a buscar el pase; se mide cuando ya tiene el balón
+    for (let i = 0; i < 240 && m.owner !== m.teams[0].controlled; i++) step(1);
     const p = m.teams[0].controlled!;
     const x0 = p.pos.x;
     input.setKey('ArrowRight', true);

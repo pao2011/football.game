@@ -841,8 +841,8 @@ export class App {
           ${this.stepper('Esquema', st.preset === 'fifa' ? 'Clásico (flechas + QWEASD)' : st.preset === 'wasd' ? 'Alternativo (WASD + IJKL)' : 'Personalizado', 'preset')}
           ${ACTIONS.map((a) => `<div class="row"><label>${ACTION_LABELS[a]}</label><span>${st.bindings[a].map((k, i) => `<span class="keycap ${listening === a && i === 0 ? 'listening' : ''}">${listening === a && i === 0 ? '…' : keyLabel(k)}</span>`).join('')}<button class="btn" style="padding:4px 10px;font-size:12px;margin-left:6px" data-act="rebind" data-a="${a}">Cambiar</button></span></div>`).join('')}
         </div>
-        <div class="panel"><h3>Mando (Xbox / PlayStation)</h3>
-          <div class="row"><label>Mover</label><span>Stick izquierdo / Cruceta</span></div>
+        <div class="panel"><h3>Mando (esquema clásico de FIFA)</h3>
+          <div class="row"><label>Mover</label><span>Stick izquierdo</span></div>
           <div class="row"><label>Pase corto / Cabezazo · Presionar</label><span class="keycap">A / ✕</span></div>
           <div class="row"><label>Tiro / Volea · Entrada</label><span class="keycap">B / ○</span></div>
           <div class="row"><label>Pase elevado / Centro · Barrida</label><span class="keycap">X / □</span></div>
@@ -851,6 +851,11 @@ export class App {
           <div class="row"><label>Cambiar jugador (sin balón)</label><span class="keycap">LB / L1</span></div>
           <div class="row"><label>Presión de compañero (defensa)</label><span class="keycap">RB / R1</span></div>
           <div class="row"><label>Contener (defensa)</label><span class="keycap">LT / L2</span></div>
+          <div class="row"><label>Pase tenso</label><span>RB + A</span></div>
+          <div class="row"><label>Pase al hueco bombeado</label><span>LB + Y</span></div>
+          <div class="row"><label>Centro tenso · bajo · raso</label><span>RB + X · X X · X X X</span></div>
+          <div class="row"><label>Pedir desmarque (con balón)</label><span class="keycap">LB / L1</span></div>
+          <div class="row"><label>Mentalidad del equipo</label><span>Cruceta ← / →</span></div>
           <div class="row"><label>Regates</label><span>Stick derecho · R3 ruleta</span></div>
           <div class="row"><label>Pausa</label><span class="keycap">Start / Options</span></div>
           <p class="muted">Mantén pulsado el botón de pase o tiro para cargar la barra de potencia y suéltalo para golpear. Pulsar antes de recibir el balón realiza un golpeo de primera.</p>

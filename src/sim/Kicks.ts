@@ -188,3 +188,67 @@ export function solveCurvedKick(from: Vector3, goalX: number, aimZ: number, aimY
   const final = sim(true);
   return { velocity: velocity.clone(), spin: spin.clone(), hit: final };
 }
+
+/**
+ * Golpeo que pasa por el punto `target` (x, y, z) a la velocidad `speed` con efecto `spinY`, simulando la
+ * física real (arrastre, Magnus, gravedad). Sirve para centros y pases elevados: el balón llega al punto a
+ * la altura pedida (p. ej. a la cabeza del rematador). Devuelve null si no se encuentra solución.
+ */
+export function solveKickThrough(from: Vector3, target: Vector3, speed: number, spinY: number, startPitch?: number) {
+  const dx = target.x - from.x;
+  const dz = target.z - from.z;
+  const dist = Math.hypot(dx, dz);
+  if (dist < 2) return null;
+  const hx = dx / dist;
+  const hz = dz / dist;
+  // izquierda del golpeo (mirando al objetivo)
+  const lx = hz;
+  const lz = -hx;
+  let yaw = 0; // desvío lateral respecto de la línea recta
+  let pitch = startPitch ?? clamp(Math.atan2(target.y - from.y, dist) + 0.25, -0.05, 1.1);
+  const v = new Vector3();
+  const spin = new Vector3(0, spinY, 0);
+  const sim = () => {
+    const c = Math.cos(yaw);
+    const s = Math.sin(yaw);
+    const dirX = hx * c + lx * s;
+    const dirZ = hz * c + lz * s;
+    v.set(dirX * Math.cos(pitch) * speed, Math.sin(pitch) * speed, dirZ * Math.cos(pitch) * speed);
+    const b = _probe;
+    b.pos.copy(from);
+    b.pos.y = Math.max(from.y, BALL_RADIUS);
+    b.vel.copy(v);
+    b.spin.copy(spin);
+    b.held = false;
+    const dt = 1 / 60;
+    for (let i = 0; i < 360; i++) {
+      const px = b.pos.x;
+      const py = b.pos.y;
+      const pz = b.pos.z;
+      const along0 = (px - from.x) * hx + (pz - from.z) * hz;
+      b.step(dt);
+      const along = (b.pos.x - from.x) * hx + (b.pos.z - from.z) * hz;
+      if (along >= dist) {
+        const k = (dist - along0) / Math.max(1e-6, along - along0);
+        const x = px + (b.pos.x - px) * k;
+        const y = py + (b.pos.y - py) * k;
+        const z = pz + (b.pos.z - pz) * k;
+        return { lat: (x - target.x) * lx + (z - target.z) * lz, y, ok: true };
+      }
+      if (b.vel.lengthSq() < 0.5) break;
+    }
+    return { lat: 0, y: -1, ok: false };
+  };
+  let best: { err: number; v: Vector3 } | null = null;
+  for (let i = 0; i < 14; i++) {
+    const r = sim();
+    if (!r.ok) { pitch = Math.min(1.1, pitch + 0.08); continue; }
+    const err = Math.hypot(r.lat, r.y - target.y);
+    if (!best || err < best.err) best = { err, v: v.clone() };
+    if (err < 0.08) break;
+    yaw -= r.lat / dist;
+    pitch = clamp(pitch + ((target.y - r.y) / dist) * 1.1, -0.05, 1.1);
+  }
+  if (!best || best.err > 1.5) return null;
+  return { velocity: best.v, spin: spin.clone() };
+}

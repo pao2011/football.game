@@ -37,6 +37,8 @@ export class Team {
   /** Línea defensiva (coordenada u del equipo) y bloque. */
   defensiveLineU = -30;
   scorers: { name: string; minute: number }[] = [];
+  /** Mentalidad: −2 ultradefensiva … 0 equilibrada … +2 ultraofensiva. */
+  mentality = 0;
   /** Órdenes del humano: salida del arquero y presión de un compañero (hasta este instante). */
   gkRushUntil = 0;
   teammatePressUntil = 0;

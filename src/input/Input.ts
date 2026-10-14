@@ -230,6 +230,7 @@ export class Input {
     this.virtualTapped.clear();
     // Mando
     this.padActive = false;
+    this.padTactic = 0;
     this.padAxes.x = 0;
     this.padAxes.y = 0;
     const gp = activePad();
@@ -250,13 +251,13 @@ export class Input {
         if (Math.abs(r.x) > Math.abs(r.y)) this.cur.add(r.x > 0 ? 'skillRight' : 'skillLeft');
         else this.cur.add(r.y > 0 ? 'skillDown' : 'skillUp');
       }
+      // Cruceta como en FIFA: ← → cambian la mentalidad del equipo (no mueve al jugador)
       const d = dpad(gp);
-      if (d.up) this.cur.add('up');
-      if (d.down) this.cur.add('down');
-      if (d.left) this.cur.add('left');
-      if (d.right) this.cur.add('right');
-      // la cruceta cuenta como "mando en uso" para que mande sobre el teclado
-      if (d.up || d.down || d.left || d.right) this.padActive = false;
+      const dir = d.left ? -1 : d.right ? 1 : 0;
+      if (dir !== 0 && dir !== this.padDpadPrev) this.padTactic = dir;
+      this.padDpadPrev = dir;
+    } else {
+      this.padDpadPrev = 0;
     }
     this.justPressed.clear();
     this.justReleased.clear();
@@ -301,6 +302,10 @@ export class Input {
     const l = Math.hypot(x, y);
     return l > 0 ? { x: x / l, y: y / l } : { x: 0, y: 0 };
   }
+
+  /** Pulsación de la cruceta ← (−1) o → (+1) en este fotograma (mentalidad del equipo). */
+  padTactic: -1 | 0 | 1 = 0;
+  private padDpadPrev = 0;
 
   get usingGamepad() {
     return this.padActive;

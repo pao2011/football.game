@@ -18,6 +18,11 @@ export interface KickRequest {
   errorScale: number;
   /** Tipo de disparo (vaselina, rosca, potente, raso) cuando es un tiro. */
   style?: import('../ai/Actions').ShotStyle;
+  /**
+   * Punto al que debe ir el balón (cabezazos): el golpeo se reapunta desde la posición real del balón en el
+   * instante del contacto, que puede ser unas décimas después de decidirlo.
+   */
+  aimAt?: Vector3;
 }
 
 export type ActionKind = 'none' | 'kick' | 'tackle' | 'slide' | 'header' | 'dive' | 'fallen' | 'getup' | 'celebrate' | 'dejected' | 'hold' | 'throw' | 'trap' | 'skill';
@@ -61,6 +66,9 @@ export class Player {
   /** Posición táctica objetivo calculada por el sistema de equipo. */
   readonly tacticalTarget = new Vector3();
   /** Rol táctico dinámico asignado por el equipo. */
+  /** Desmarque pedido por el jugador humano (LB): hasta cuándo y hacia dónde. */
+  forcedRunUntil = -1;
+  readonly forcedRunTarget = new Vector3();
   duty: 'shape' | 'press' | 'cover' | 'mark' | 'chase' | 'support' | 'run' | 'carrier' | 'receive' | 'setpiece' = 'shape';
   markTarget: Player | null = null;
   /** Para IA: siguiente instante en que puede reconsiderar una decisión con balón. */

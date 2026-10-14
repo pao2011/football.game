@@ -724,6 +724,17 @@ export class Match {
     const b = this.ball;
     const a = p.data.attrs;
     const v = req.velocity.clone();
+    if (req.aimAt) {
+      // reapuntar desde donde está ahora el balón, conservando la rapidez horizontal y la vertical
+      const h = Math.hypot(v.x, v.z);
+      const dx = req.aimAt.x - b.pos.x;
+      const dz = req.aimAt.z - b.pos.z;
+      const d = Math.hypot(dx, dz);
+      if (d > 0.5) {
+        v.x = (dx / d) * h;
+        v.z = (dz / d) * h;
+      }
+    }
     const skill = (req.kind === 'shoot' || req.kind === 'finesse' || req.kind === 'penalty' || req.kind === 'chip') ? a.shooting
       : req.kind === 'header' ? (a.shooting + a.control) / 2
         : req.kind === 'gkthrow' || req.kind === 'punt' ? Math.max(a.passing, a.goalkeeping * 0.8)

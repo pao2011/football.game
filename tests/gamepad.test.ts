@@ -40,12 +40,19 @@ describe('Mando', () => {
     expect(inp.held('sprint')).toBe(true);
   });
 
-  it('la cruceta mueve y el stick derecho hace regates', () => {
+  it('la cruceta no mueve al jugador: ← → cambian la mentalidad (como en FIFA); el stick derecho hace regates', () => {
     const inp = new Input(structuredClone(FIFA_CLASSIC));
     stub([pad({ pressed: [14], axes: [0, 0, 0.9, 0] })]);
     inp.poll(1 / 60);
-    expect(inp.move().x).toBeLessThan(-0.5);
+    expect(inp.move()).toEqual({ x: 0, y: 0 });
+    expect(inp.padTactic).toBe(-1);
     expect(inp.held('skillRight')).toBe(true);
+    // mantener la cruceta no repite el cambio
+    inp.poll(1 / 60);
+    expect(inp.padTactic).toBe(0);
+    stub([pad({ pressed: [15] })]);
+    inp.poll(1 / 60);
+    expect(inp.padTactic).toBe(1);
   });
 
   it('ignora dispositivos falsos y elige el mando de mapa estándar', () => {
