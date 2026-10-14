@@ -5,6 +5,7 @@ import { buildPitch } from './pitch';
 import { buildGoalFrames, CornerFlags, GoalNets } from './goals';
 import { buildStands } from './stands';
 import { buildCrowd, type CrowdBuild } from './crowd';
+import { FanEffects } from './fanfx';
 import { lightPreset, makeSky, type LightPreset } from './sky';
 import { makeLedTexture, makeScreenTexture, makeGlowTexture, hashString, LED_PANELS } from './textures';
 import { makeStaticShadowUniforms, patchStaticShadow, type StaticShadowUniforms } from './shadowPatch';
@@ -46,6 +47,8 @@ export class Stadium {
   private nets: GoalNets;
   private flags: CornerFlags;
   private crowd: CrowdBuild;
+  /** Hinchada: banderas, bengalas, fuegos artificiales y papelitos. */
+  readonly fans: FanEffects;
   private sky: THREE.Mesh;
   private lights: THREE.Object3D[] = [];
   private scene: THREE.Scene | null = null;
@@ -201,6 +204,8 @@ export class Stadium {
     this.textures.push(this.crowd.atlas);
     this.materials.push(this.crowd.material);
     this.group.add(...this.crowd.meshes);
+    this.fans = new FanEffects(this.crowd.spots, { homeColor, awayColor, seed, quality });
+    this.group.add(this.fans.group);
 
     // ---- sky
     this.sky = makeSky(this.preset);
@@ -262,7 +267,7 @@ export class Stadium {
     scene.background = new THREE.Color(this.preset.skyHorizon);
   }
 
-  update(dt: number, excitement: number, camera: THREE.Camera): void {
+  update(dt: number, excitement: number, camera: THREE.Camera, viewH = 720): void {
     const d = Math.min(Math.max(dt, 0), 0.1);
     this.time += d;
     const ex = Math.max(0, Math.min(1, excitement));
@@ -284,6 +289,7 @@ export class Stadium {
     }
     this.flags.update(this.time);
     this.nets.update(d);
+    this.fans.update(d, camera, viewH, this.excite);
     camera.getWorldPosition(this.sky.position);
   }
 
@@ -307,6 +313,7 @@ export class Stadium {
       if ((o as THREE.InstancedMesh).isInstancedMesh) (o as THREE.InstancedMesh).dispose();
     });
     this.nets.dispose();
+    this.fans.dispose();
     for (const m of this.materials) m.dispose();
     for (const t of this.textures) t.dispose();
     this.materials = [];

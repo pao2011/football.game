@@ -192,7 +192,7 @@ await check('Botones de tipo de tiro (ROSCA, VASELINA, RASO, POTENTE) y combinac
   await page.screenshot({ path: join(OUT, 'm-shot-buttons.png') });
 });
 
-await check('Tiro libre: cámara del lanzador, trayectoria, mira y botones de efecto', async () => {
+await check('Tiro libre: cámara del lanzador, trayectoria, mira y botones de efecto (sin avisos emergentes)', async () => {
   await page.evaluate(() => {
     const m = window.__runner.match;
     if (m.phase === 'replay') m.skipReplay();
@@ -215,6 +215,8 @@ await check('Tiro libre: cámara del lanzador, trayectoria, mira y botones de ef
   assert(cam < 14, 'la cámara no está detrás del lanzador: ' + cam);
   await page.waitForTimeout(1200);
   await page.screenshot({ path: join(OUT, 'm-freekick.png') });
+  // sin avisos emergentes (desactivados por defecto)
+  assert(!(await page.isVisible('.hud .toast')) && !(await page.isVisible('.hud .hint')), 'siguen apareciendo avisos en pantalla');
   // disparar: tocar TIRO
   const t = await center('.tb-a1');
   await page.evaluate(({ x, y }) => { const el = document.elementFromPoint(x, y); el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 42, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' })); setTimeout(() => window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 42, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' })), 500); }, t);

@@ -19,6 +19,19 @@ export interface CrowdBuild {
   atlas: THREE.Texture;
   uniforms: { uTime: { value: number }; uExcite: { value: number } };
   count: number;
+  /** Muestra de asientos ocupados (para banderas, bengalas, papelitos…). n apunta hacia fuera del campo. */
+  spots: FanSpot[];
+}
+
+export interface FanSpot {
+  x: number;
+  y: number;
+  z: number;
+  nx: number;
+  nz: number;
+  /** Hinchada visitante (fondo del visitante). */
+  away: boolean;
+  tier: number;
 }
 
 const NEUTRAL = ['#f2f2f2', '#1c1c1e', '#2b3a55', '#5a6270', '#8a1c1c', '#3b5e3b', '#d8c9a8', '#6d4c8a', '#c46a1f', '#9aa7b8', '#ffffff', '#2f2f35'];
@@ -35,6 +48,7 @@ export function buildCrowd(rows: RowDef[], o: CrowdOptions, su: StaticShadowUnif
     nx: number;
     nz: number;
     away: boolean;
+    tier: number;
   }
   const seats: Seat[][] = [[], [], [], []];
   const spacing = 0.56;
@@ -45,7 +59,7 @@ export function buildCrowd(rows: RowDef[], o: CrowdOptions, su: StaticShadowUnif
       const am = ((along % 13) + 13) % 13;
       if (am < 1.15) return;
       const q = Math.abs(nz) >= Math.abs(nx) ? (nz > 0 ? 0 : 2) : nx > 0 ? 1 : 3;
-      seats[q].push({ x, y: r.y, z, nx, nz, away: nx > 0.55 && r.tier < 2 });
+      seats[q].push({ x, y: r.y, z, nx, nz, away: nx > 0.55 && r.tier < 2, tier: r.tier });
     });
   }
   const total = seats.reduce((a, s) => a + s.length, 0);
@@ -124,8 +138,10 @@ varying vec3 vDark;
   const darks = DARK.map((c) => new THREE.Color(c));
   const white = new THREE.Color('#f4f4f4');
   let count = 0;
+  const spots: FanSpot[] = [];
   for (const group of seats) {
     const chosen = group.filter(() => rand() < p);
+    for (const s of chosen) if (rand() < 0.035 && spots.length < 1400) spots.push({ x: s.x, y: s.y, z: s.z, nx: s.nx, nz: s.nz, away: s.away, tier: s.tier });
     if (chosen.length === 0) continue;
     const n = chosen.length;
     const g = base.clone();
@@ -170,5 +186,5 @@ varying vec3 vDark;
     count += n;
   }
   base.dispose();
-  return { meshes, material, atlas, uniforms, count };
+  return { meshes, material, atlas, uniforms, count, spots };
 }

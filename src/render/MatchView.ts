@@ -167,7 +167,7 @@ export class MatchView {
     const danger = Math.max(0, (Math.abs(m.ball.pos.x) - (HALF_LENGTH - 30)) / 30);
     const target = m.phase === 'goal' ? 1 : m.phase === 'play' ? danger * 0.8 : 0.15;
     this.excitement += (target - this.excitement) * Math.min(1, dt * (target > this.excitement ? 3 : 0.6));
-    this.stadium.update(dt, this.excitement, this.camera);
+    this.stadium.update(dt, this.excitement, this.camera, this.renderer.domElement.height);
 
     // La luz principal sigue la acción para sombras nítidas
     const b = m.ball.pos;

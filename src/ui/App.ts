@@ -380,6 +380,7 @@ export class App {
     const r = this.runner;
     if (!r) return;
     r.hud.showRadar = this.settings.showRadar;
+    r.hud.popups = this.settings.popups;
     r.view.director.style = this.settings.cameraStyle;
     r.view.director.zoom = this.settings.cameraZoom;
     r.view.opts.showIndicators = this.settings.showIndicators;
@@ -739,6 +740,7 @@ export class App {
           ${toggle('Radar', 'showRadar')}
           ${toggle('Indicadores y ayudas visuales', 'showIndicators')}
           ${toggle('Repeticiones de goles', 'replays')}
+          ${toggle('Avisos en pantalla (atajada, falta, controles…)', 'popups')}
           ${this.stepper('Controles táctiles', ({ auto: 'Automático', on: 'Siempre', off: 'Desactivados' } as const)[st.touchControls], 'touch')}
         </div>
         <div class="panel"><h3>Sonido</h3>

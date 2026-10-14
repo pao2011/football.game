@@ -120,6 +120,12 @@ const CHANTS: Array<Array<[number, number, number, Vowel]>> = [
   [[0, 0, 1, 'o'], [1, 3, 1, 'e'], [2, 5, 2, 'o'], [4, 3, 1, 'e'], [5, 0, 2, 'o']],
   [[0, 5, 0.5, 'a'], [0.5, 5, 0.5, 'a'], [1, 7, 1, 'e'], [2, 5, 1, 'o'], [3, 3, 1, 'e'], [4, 0, 2, 'o']],
   [[0, 0, 1.5, 'o'], [1.5, 0, 0.5, 'e'], [2, 3, 1, 'a'], [3, 0, 1, 'o'], [4, 0, 1.5, 'o'], [5.5, -2, 0.5, 'e'], [6, 0, 2, 'a']],
+  // "o-lé, o-lé, o-lé, o-lé"
+  [[0, 0, 0.5, 'o'], [0.5, 4, 1.5, 'e'], [2, 0, 0.5, 'o'], [2.5, 4, 1.5, 'e'], [4, 0, 0.5, 'o'], [4.5, 4, 1, 'e'], [5.5, 2, 0.5, 'o'], [6, 0, 2, 'e']],
+  // "da-le, da-le, da-le…" (estilo tribuna sudamericana)
+  [[0, 7, 0.5, 'a'], [0.5, 5, 0.5, 'e'], [1, 7, 0.5, 'a'], [1.5, 5, 0.5, 'e'], [2, 4, 1, 'o'], [3, 2, 1, 'o'], [4, 0, 2, 'o'], [6, 2, 0.5, 'a'], [6.5, 4, 1.5, 'e']],
+  // "oh oh oh oh, oh oh oh" ascendente
+  [[0, 0, 1, 'o'], [1, 0, 1, 'o'], [2, 3, 1, 'o'], [3, 5, 1, 'o'], [4, 7, 1.5, 'o'], [5.5, 5, 0.5, 'o'], [6, 3, 2, 'o']],
 ];
 
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
@@ -1285,18 +1291,92 @@ export class AudioEngine {
     });
   }
 
+  /**
+   * Cántico de la hinchada ahora mismo (con bombo). boost 0..1 lo hace más fuerte y largo:
+   * se usa en el recibimiento y después de los goles.
+   */
+  chant(boost = 1): void {
+    this.run((ctx) => {
+      if (!this.amb) return;
+      this.scheduleChant(ctx.currentTime + 0.05, clamp01(boost));
+      this.amb.nextChant = Math.max(this.amb.nextChant, ctx.currentTime + 12);
+    });
+  }
+
+  /** Estallido de fuegos artificiales (trueno grave + chisporroteo), más suave cuanto más lejos. */
+  firework(distance = 60): void {
+    this.run((ctx, g) => {
+      const t = ctx.currentTime;
+      const vol = Math.min(1, 55 / Math.max(20, distance));
+      const dur = 2.2;
+      const v = this.claim('sfx', t, dur);
+      v.connect(this.wetSend(g.sfxWet, 0.6));
+      // trueno: ruido grave + seno que cae
+      const n = this.noise('brown', t, 0.9);
+      const lp = this.filter('lowpass', 420, 0.7);
+      const ng = ctx.createGain();
+      this.perc(ng.gain, t, 0.005, 0.55 * vol, 0.7);
+      n.connect(lp).connect(ng).connect(v);
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(120, t);
+      o.frequency.exponentialRampToValueAtTime(38, t + 0.5);
+      const og = ctx.createGain();
+      this.perc(og.gain, t, 0.004, 0.45 * vol, 0.55);
+      o.connect(og).connect(v);
+      o.start(t);
+      o.stop(t + 0.7);
+      // chisporroteo
+      const k = 18 + Math.floor(Math.random() * 14);
+      for (let i = 0; i < k; i++) {
+        const tt = t + 0.25 + Math.random() * 1.3;
+        const c = this.noise('white', tt, 0.03);
+        const hp = this.filter('highpass', 2500 + Math.random() * 3000, 0.7);
+        const cg = ctx.createGain();
+        this.perc(cg.gain, tt, 0.001, (0.05 + Math.random() * 0.08) * vol, 0.025);
+        c.connect(hp).connect(cg).connect(v);
+      }
+    });
+  }
+
+  /** Bombo de la hinchada en los tiempos del cántico. */
+  private terraceDrum(t: number, beats: number, beat: number, level: number, out: AudioNode): void {
+    const ctx = this.ctx!;
+    for (let k = 0; k < beats; k++) {
+      // golpe en cada tiempo y doble golpe al final de cada compás
+      const hits = k % 4 === 3 ? [0, 0.5] : [0];
+      for (const h of hits) {
+        const tt = t + (k + h) * beat;
+        const o = ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(95, tt);
+        o.frequency.exponentialRampToValueAtTime(48, tt + 0.14);
+        const g = ctx.createGain();
+        this.perc(g.gain, tt, 0.003, 0.55 * level, 0.22);
+        o.connect(g).connect(out);
+        o.start(tt);
+        o.stop(tt + 0.3);
+        const n = this.noise('pink', tt, 0.06);
+        const bp = this.filter('bandpass', 180, 1.2);
+        const ng = ctx.createGain();
+        this.perc(ng.gain, tt, 0.002, 0.25 * level, 0.05);
+        n.connect(bp).connect(ng).connect(out);
+      }
+    }
+  }
+
   /** Distant terrace chant: one vocal cluster stepping through a short melody. */
-  private scheduleChant(t: number): void {
+  private scheduleChant(t: number, boost = 0): void {
     const a = this.amb;
     if (!a) return;
     const pat = CHANTS[Math.floor(Math.random() * CHANTS.length)];
     const beat = rand(0.38, 0.46);
     const base = rand(190, 240);
-    const reps = Math.random() < 0.5 ? 2 : 1;
+    const reps = boost > 0 ? 3 : Math.random() < 0.5 ? 2 : 1;
     const pitch: Array<[number, number]> = [];
     const vowels: Array<[number, Vowel]> = [];
     const env: Array<[number, number]> = [];
-    const level = 0.35 + 0.4 * this.excitement;
+    const level = Math.min(1, 0.35 + 0.4 * this.excitement + 0.35 * boost);
     let phraseLen = 0;
     for (const s of pat) phraseLen = Math.max(phraseLen, s[0] + s[2]);
     for (let r = 0; r < reps; r++) {
@@ -1315,7 +1395,7 @@ export class AudioEngine {
     this.vocalCluster({
       t,
       dur,
-      count: 10,
+      count: boost > 0 ? 14 : 10,
       pitch,
       spread: 1.2,
       vowels,
@@ -1324,8 +1404,10 @@ export class AudioEngine {
       out: a.out,
       lowpass: 1800,
     });
+    // bombo de la tribuna (casi siempre en los cánticos fuertes)
+    if (boost > 0 || Math.random() < 0.55) this.terraceDrum(t, Math.floor(dur / beat), beat, level, a.out);
     // rhythmic clapping on beats for some chants
-    if (Math.random() < 0.5) {
+    if (boost > 0 || Math.random() < 0.5) {
       const ctx = this.ctx!;
       for (let k = 0; k < Math.floor(dur / beat); k += 2) {
         const tt = t + k * beat;
