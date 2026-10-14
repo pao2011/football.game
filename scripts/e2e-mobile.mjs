@@ -44,6 +44,11 @@ await page.goto(url);
 
 await check('Título táctil y valores por defecto para móvil (calidad baja, sin sombras)', async () => {
   await page.waitForSelector('.title-screen');
+  // animación de inicio: aparece y se va sola (o con un toque)
+  await page.waitForSelector('.splash .sp-logo', { timeout: 5000 });
+  await page.waitForTimeout(1700);
+  await page.screenshot({ path: join(OUT, 'm-splash.png') });
+  await page.waitForSelector('.splash', { state: 'detached', timeout: 8000 });
   const txt = await page.textContent('.title-screen');
   assert(/TOCA PARA EMPEZAR/.test(txt), 'texto táctil ausente');
   const s = await page.evaluate(() => window.__app.settings);
@@ -185,6 +190,36 @@ await check('Botones de tipo de tiro (ROSCA, VASELINA, RASO, POTENTE) y combinac
   st = await page.evaluate(() => window.__st);
   assert(st.power && st.low && !st.chip, 'la combinación POTENTE + RASO no funcionó: ' + JSON.stringify(st));
   await page.screenshot({ path: join(OUT, 'm-shot-buttons.png') });
+});
+
+await check('Tiro libre: cámara del lanzador, trayectoria, mira y botones de efecto', async () => {
+  await page.evaluate(() => {
+    const m = window.__runner.match;
+    if (m.phase === 'replay') m.skipReplay();
+    window.__runner.timeScale = 1;
+    const g = m.teams[0].attackDir;
+    m.setupRestart('freekick', 0, new m.ball.pos.constructor(g * 30, 0.11, 6), true);
+  });
+  await waitFor(() => !!window.__runner.controller.freeKick, 30000);
+  await page.waitForSelector('.touch-controls.mode-fk .tc-fk-r', { state: 'visible' });
+  const c0 = await page.evaluate(() => window.__runner.controller.freeKick.curve);
+  const c = await center('.tc-fk-r');
+  await page.evaluate(({ x, y }) => document.elementFromPoint(x, y).dispatchEvent(new PointerEvent('pointerdown', { pointerId: 41, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' })), c);
+  await page.waitForTimeout(900);
+  await page.evaluate(({ x, y }) => window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 41, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' })), c);
+  const fk = await page.evaluate(() => { const f = window.__runner.controller.freeKick; return { curve: f.curve, path: f.path.length }; });
+  assert(fk.curve > c0 + 0.1, 'el botón de efecto no curvó la trayectoria: ' + JSON.stringify([c0, fk]));
+  assert(fk.path > 10, 'sin trayectoria');
+  // cámara detrás del balón (no la lateral de transmisión)
+  const cam = await page.evaluate(() => { const r = window.__runner; const cp = r.view.director.camera.position; const b = r.match.ball.pos; return Math.hypot(cp.x - b.x, cp.z - b.z); });
+  assert(cam < 14, 'la cámara no está detrás del lanzador: ' + cam);
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: join(OUT, 'm-freekick.png') });
+  // disparar: tocar TIRO
+  const t = await center('.tb-a1');
+  await page.evaluate(({ x, y }) => { const el = document.elementFromPoint(x, y); el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 42, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' })); setTimeout(() => window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 42, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' })), 500); }, t);
+  await waitFor(() => window.__runner.match.phase !== 'stoppage', 20000);
+  assert(!(await page.$('.touch-controls.mode-fk')) || !(await page.evaluate(() => !!window.__runner.controller.freeKick)), 'el modo tiro libre no terminó');
 });
 
 await check('Deslizar en la zona de regates = regate (con su nombre en pantalla)', async () => {

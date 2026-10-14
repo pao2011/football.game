@@ -375,3 +375,38 @@ body.touch .scoreboard > div { font-size: 15px; padding: 0 8px; }
 @keyframes miOutR { to { opacity: 0; transform: translateX(60vw); } }
 @keyframes miPop { from { opacity: 0; transform: scale(3); } }
 @keyframes miGo { 0% { opacity: 0; transform: translateY(-50%) scale(2.2); } 25% { opacity: 1; transform: translateY(-50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-50%) scale(1.05); } }
+
+/* Tiro libre directo: botones de efecto (curva) y aviso de uso */
+.mode-fk .tc-attack .tc-shot { opacity: 0; pointer-events: none; }
+.tc-attack .tc-fkbtn { display: none; width: 58px; height: 58px; background: rgba(60, 50, 6, 0.6); border-color: #ffe14d; color: #ffe14d; }
+.mode-fk .tc-attack .tc-fkbtn { display: flex; }
+.tc-fk-l { right: 160px; bottom: 136px; }
+.tc-fk-r { right: 80px; bottom: 162px; }
+
+/* ---------- Animación al abrir el juego ---------- */
+.splash { position: fixed; inset: 0; z-index: 60; overflow: hidden; background: radial-gradient(ellipse at 50% 60%, #0f2a1c 0%, #070b14 70%); font-family: var(--display); color: #fff; }
+.splash.out { animation: spOut 0.45s ease-in forwards; }
+.sp-glow { position: absolute; left: 50%; top: 42%; width: 70vmin; height: 70vmin; transform: translate(-50%, -50%) scale(0.2); border-radius: 50%; background: radial-gradient(circle, rgba(25,230,140,0.45), transparent 65%); animation: spGlow 1s 1.25s ease-out both; }
+.sp-goal { position: absolute; left: 50%; top: 7%; width: min(50vw, 480px); height: min(14vw, 130px); transform: translateX(-50%); overflow: visible; animation: spGoalIn 0.6s 0.1s ease-out both; }
+.sp-frame { fill: none; stroke: #fff; stroke-width: 4; stroke-linejoin: round; }
+.sp-net { stroke: rgba(255,255,255,0.35); stroke-width: 0.8; transform-origin: 50% 40%; animation: spNet 0.7s 1.18s ease-out both; }
+.sp-ball { position: absolute; left: 50%; top: 72%; width: 9vmin; height: 9vmin; margin: -4.5vmin 0 0 -4.5vmin; filter: drop-shadow(0 6px 10px rgba(0,0,0,0.6));
+  animation: spRoll 0.85s cubic-bezier(.25,.8,.35,1) both, spShot 0.38s 0.85s cubic-bezier(.5,0,.9,.6) forwards; }
+.sp-ball svg { width: 100%; height: 100%; animation: spSpin 0.85s linear both; }
+.sp-flash { position: absolute; inset: 0; background: #fff; opacity: 0; animation: spFlash 0.5s 1.2s ease-out both; }
+.sp-logo { position: absolute; left: 0; right: 0; top: 50%; text-align: center; line-height: 0.95; animation: spLogo 0.6s 1.35s cubic-bezier(.2,1.5,.4,1) both; }
+.sp-logo .s1 { display: block; font-size: clamp(30px, 7.5vw, 86px); letter-spacing: 0.06em; font-weight: 800; text-shadow: 0 6px 24px rgba(0,0,0,0.6);
+  background: linear-gradient(100deg, #fff 40%, #19e68c 50%, #fff 60%) 0 0 / 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: spSweep 1.2s 1.8s ease-in-out both; }
+.sp-logo .s2 { display: block; font-size: clamp(22px, 5vw, 58px); color: #19e68c; letter-spacing: 0.3em; margin-top: 6px; text-shadow: 0 0 22px rgba(25,230,140,0.6); }
+.sp-sub { position: absolute; left: 0; right: 0; top: calc(50% + clamp(70px, 15vw, 170px)); text-align: center; font-family: var(--body); font-size: clamp(11px, 1.6vw, 16px); letter-spacing: 0.3em; text-transform: uppercase; opacity: 0.75; animation: spDown 0.5s 1.9s both; }
+@keyframes spOut { to { opacity: 0; transform: scale(1.04); } }
+@keyframes spGlow { 0% { transform: translate(-50%, -50%) scale(0.2); opacity: 1; } 100% { transform: translate(-50%, -50%) scale(1.6); opacity: 0.35; } }
+@keyframes spGoalIn { from { opacity: 0; transform: translateX(-50%) translateY(-20px); } }
+@keyframes spNet { 0% { transform: scale(1, 1); } 30% { transform: scale(1.08, 1.18) translateY(-4px); } 60% { transform: scale(0.97, 0.95); } 100% { transform: scale(1, 1); } }
+@keyframes spRoll { 0% { transform: translateX(-60vw); } 55% { transform: translateX(-6vw) translateY(-6vmin); } 75% { transform: translateX(-2vw); } 100% { transform: translateX(0); } }
+@keyframes spSpin { from { transform: rotate(-900deg); } to { transform: rotate(0); } }
+@keyframes spShot { to { transform: translate(6vw, calc(-72vh + min(7vw, 65px))) scale(0.35); opacity: 0.9; } }
+@keyframes spFlash { 0% { opacity: 0; } 15% { opacity: 0.55; } 100% { opacity: 0; } }
+@keyframes spLogo { from { opacity: 0; transform: scale(2.2); filter: blur(6px); } }
+@keyframes spSweep { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@keyframes spDown { from { opacity: 0; transform: translateY(-12px); } }

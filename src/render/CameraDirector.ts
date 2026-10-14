@@ -24,6 +24,8 @@ export class CameraDirector {
    * ni el jugador controlado. En móvil es más alto porque los botones táctiles tapan esa zona.
    */
   bottomSafe = -0.7;
+  /** Tiro libre directo del jugador: balón y punto de mira (cámara detrás del lanzador). */
+  freeKickAim: { target: THREE.Vector3 } | null = null;
   private readonly probe = new THREE.PerspectiveCamera();
   private readonly tmp = new THREE.Vector3();
 
@@ -95,7 +97,18 @@ export class CameraDirector {
     }
 
     const focus = focusOverride ?? ball;
-    if ((m.phase === 'shootout') || (m.restart?.type === 'penalty' && m.phase === 'stoppage')) {
+    const fk = this.freeKickAim;
+    if (fk && m.phase === 'stoppage') {
+      // Tiro libre: punto de vista del lanzador, algo por detrás y por encima del balón
+      const dx = fk.target.x - ball.x;
+      const dz = fk.target.z - ball.z;
+      const d = Math.max(1, Math.hypot(dx, dz));
+      targetPos.set(ball.x - (dx / d) * 8.5, 2.9, ball.z - (dz / d) * 8.5);
+      // se mira al arco, un poco hacia el punto de mira
+      targetLook.set(fk.target.x, 1.3, fk.target.z * 0.35 + ball.z * 0.1);
+      fov = 44;
+      damp = 4;
+    } else if ((m.phase === 'shootout') || (m.restart?.type === 'penalty' && m.phase === 'stoppage')) {
       // Cámara detrás del ejecutor del penal
       const gx = m.phase === 'shootout' ? HALF_LENGTH : Math.sign(m.restart!.spot.x) * HALF_LENGTH;
       const s = Math.sign(gx);

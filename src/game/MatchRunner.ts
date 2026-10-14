@@ -165,6 +165,11 @@ export class MatchRunner {
           this.audio.onEvent(e);
           if (e.type === 'net' && e.x !== undefined && e.z !== undefined) this.view.netImpact(e.x, e.z, e.power ?? 0.6);
           if (e.type === 'goal' && e.kind !== 'shootout') this.view.director.addShake(0.25);
+          // vibración en el móvil: golpeos propios y goles
+          if (this.touch && navigator.vibrate) {
+            if (e.type === 'kick' && e.team !== undefined && m.teams[e.team]?.human) navigator.vibrate(e.kind === 'shoot' || e.kind === 'finesse' || e.kind === 'chip' ? 28 : 12);
+            if (e.type === 'goal') navigator.vibrate([60, 50, 90]);
+          }
         }
         m.events.length = 0;
         this.acc -= SIM_DT;
@@ -180,6 +185,11 @@ export class MatchRunner {
     const charging = !!(this.controller && team && this.controller.charge && m.owner === team.controlled);
     const showAim = charging ? this.controller!.aimDir : null;
     const aimTarget = charging && this.controller!.charge?.action === 'shoot' ? this.controller!.aimTarget : null;
+    // tiro libre directo: trayectoria prevista, mira y cámara del lanzador
+    const fk = this.controller?.freeKick ?? null;
+    this.view.freeKick = fk ?? this.controller?.penaltyAim ?? null;
+    this.view.director.freeKickAim = fk;
+    this.touch?.setFreeKick(!!fk);
     this.view.update(this.paused ? 0 : dt, preview, showAim, aimTarget);
     this.audio.update(this.view.excitement);
     this.hud.update(dt);

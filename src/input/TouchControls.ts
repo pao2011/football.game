@@ -40,6 +40,8 @@ const I = {
   contain: '<path d="M12 3l8 4v5c0 5-4 8-8 9-4-1-8-4-8-9V7z"/>',
   finesse: '<path d="M4 19c2-9 9-14 16-14"/><path d="M15 3l5 2-2 5"/>',
   chip: '<path d="M3 19c4-16 14-16 18 0"/><path d="M3 21h18"/>',
+  curveL: '<path d="M18 20C18 10 12 6 5 6"/><path d="M9 2L5 6l4 4"/>',
+  curveR: '<path d="M6 20C6 10 12 6 19 6"/><path d="M15 2l4 4-4 4"/>',
   low: '<path d="M3 16h15"/><path d="M14 12l4 4-4 4"/><path d="M3 21h18"/>',
 };
 
@@ -104,7 +106,10 @@ export class TouchControls {
       <div class="tc-skill-zone"><span class="tc-skill-hint">desliza aquí: regate · doble toque: ruleta</span></div>
       <div class="tc-stick hidden"><div class="tc-knob"></div></div>
       <div class="tc-mode"><span class="a">● ATAQUE</span><span class="d">● DEFENSA</span></div>
-      <div class="tc-buttons tc-attack">${ATTACK.map(btn).join('')}</div>
+      <div class="tc-buttons tc-attack">${ATTACK.map(btn).join('')}
+        <div class="tc-btn tc-fkbtn tc-fk-l" data-action="skillLeft">${svg(I.curveL)}<b>EFECTO</b></div>
+        <div class="tc-btn tc-fkbtn tc-fk-r" data-action="skillRight">${svg(I.curveR)}<b>EFECTO</b></div>
+      </div>
       <div class="tc-buttons tc-defense">${DEFENSE.map(btn).join('')}</div>
       <div class="tc-btn tc-pause" data-action="pause"><b>II</b></div>`;
     parent.appendChild(r);
@@ -235,6 +240,11 @@ export class TouchControls {
     void this.modeEl.offsetWidth;
     this.modeEl.classList.add('flash');
     this.skillHint.style.opacity = attacking ? '' : '0';
+  }
+
+  /** Tiro libre directo: muestra los botones de efecto y oculta los de tipo de tiro. */
+  setFreeKick(on: boolean) {
+    this.root.classList.toggle('mode-fk', on);
   }
 
   setVisible(v: boolean) {
