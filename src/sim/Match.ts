@@ -160,7 +160,21 @@ export class Match {
   /** Cambios automáticos también para el equipo humano (opción de configuración). */
   autoSubs: [boolean, boolean] = [false, false];
 
-  constructor(readonly config: MatchConfig) {
+  readonly config: MatchConfig;
+
+  constructor(config: MatchConfig) {
+    this.config = config;
+    // Mismo club en los dos lados (p. ej. online, los dos eligen el mismo equipo): el visitante
+    // necesita identificadores propios o sus jugadores se confunden con los del local.
+    if (config.away.id === config.home.id) {
+      const away = config.away;
+      config = {
+        ...config,
+        away: { ...away, id: `${away.id}~b`, players: away.players.map((p) => ({ ...p, id: `${p.id}~b` })) },
+        awayLineup: config.awayLineup?.map((id) => `${id}~b`),
+      };
+      this.config = config;
+    }
     this.rng = new Rng(config.seed ?? Math.floor(Math.random() * 1e9));
     this.diff = DIFFICULTY[config.difficulty];
     this.teams = [

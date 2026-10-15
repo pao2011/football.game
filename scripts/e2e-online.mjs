@@ -87,8 +87,7 @@ await check('Los dos jugadores se conectan al servidor online', async () => {
   assert((await B.textContent('.div-card')).includes('División 10'), 'división inicial');
 });
 
-await check('Sala privada: Ana crea, Beto se une con el código y empieza el partido', async () => {
-  await A.click('[data-act=teamNext]');
+await check('Sala privada: Ana crea, Beto se une con el código y empieza el partido (los dos con el mismo club)', async () => {
   await A.click('[data-act=create]');
   await waitFor(A, () => /^[A-Z0-9]{5}$/.test(document.querySelector('.room-code')?.textContent ?? ''));
   const code = await A.textContent('.room-code');
@@ -112,6 +111,11 @@ await check('El invitado recibe y dibuja el partido del anfitrión', async () =>
     return { ids: m.playersAll.length, phase: m.phase, t: m.time };
   });
   assert(sync.ids === 22 && sync.t > 0, JSON.stringify(sync));
+  // los 22 jugadores y el árbitro se ven en los dos lados (antes, con el mismo club, solo 11)
+  for (const [n, pg] of [['anfitrión', A], ['invitado', B]]) {
+    const vis = await pg.evaluate(() => [...window.__runner.view.models.values()].filter((x) => x.root.visible).length);
+    assert(vis === 23, `${n}: ${vis} jugadores visibles de 23`);
+  }
   await B.screenshot({ path: join(OUT, 'online-guest.png') });
   await A.screenshot({ path: join(OUT, 'online-host.png') });
 });
@@ -144,6 +148,32 @@ await check('Cambio pedido por el invitado: lo hace el anfitrión y se ve en los
 await check('Mensajes rápidos: el anfitrión recibe el del invitado', async () => {
   await B.evaluate(() => window.__runner.sendChat('¡Buen partido!'));
   await waitFor(A, () => (document.querySelector('.lower-third')?.textContent ?? '').includes('Buen partido'), 10000);
+});
+
+await check('Pausa compartida: si uno pausa, el partido se detiene para los dos', async () => {
+  const t0 = await A.evaluate(() => window.__runner.match.time);
+  await B.keyboard.press('Escape');
+  await B.waitForSelector('.overlay [data-act=resume]');
+  assert((await B.textContent('.online-pause-note')).includes('pausado para los dos'), 'aviso de pausa');
+  await A.waitForSelector('.remote-pause', { timeout: 10000 });
+  assert((await A.textContent('.remote-pause')).includes('Beto'), 'nombre de quien pausó');
+  await A.waitForTimeout(1500);
+  const t1 = await A.evaluate(() => window.__runner.match.time);
+  await A.waitForTimeout(1500);
+  const t2 = await A.evaluate(() => window.__runner.match.time);
+  assert(t2 === t1, `el partido sigue en el anfitrión: ${t1} → ${t2}`);
+  await B.click('.overlay [data-act=resume]');
+  await A.waitForSelector('.remote-pause', { state: 'detached', timeout: 10000 });
+  await waitFor(A, (t) => window.__runner.match.time > t + 0.5, 15000, t2);
+  await waitFor(B, (t) => window.__runner.match.time > t + 0.3, 15000, await B.evaluate(() => window.__runner.match.time));
+  assert(t1 >= t0, 'tiempo');
+  // el anfitrión también puede pausar
+  await A.keyboard.press('Escape');
+  await B.waitForSelector('.remote-pause', { timeout: 10000 });
+  await A.click('.overlay [data-act=resume]');
+  await B.waitForSelector('.remote-pause', { state: 'detached', timeout: 10000 });
+  const left = await B.evaluate(() => window.__runner.pausesLeft);
+  assert(left === 2, `pausas restantes: ${left}`);
 });
 
 await check('Final del amistoso: los dos ven el resultado', async () => {

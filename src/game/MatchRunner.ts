@@ -21,7 +21,13 @@ export interface OnlineLink {
   role: 'host' | 'guest';
   /** Envía un mensaje al rival. */
   send(d: object): void;
+  /** Nombre del rival (para los avisos). */
+  opponentName?: string;
 }
+
+/** Pausas por jugador en un partido online y duración máxima de cada una. */
+export const ONLINE_PAUSES = 3;
+export const ONLINE_PAUSE_MAX_S = 60;
 
 /** Duración de la presentación del partido (s). */
 const INTRO_SECONDS = 5.4;
@@ -32,6 +38,10 @@ export interface MatchResultInfo {
   away: number;
   winner: 0 | 1 | -1;
   penalties: [number, number] | null;
+}
+
+function escapeHtml(t: string) {
+  return t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 }
 
 function controlSettings(s: GameSettings, touch: boolean): ControlSettings {
@@ -86,6 +96,18 @@ export class MatchRunner {
   /** Invitado: instantáneas recibidas. */
   readonly guestSync: GuestSync | null = null;
   private guestFrames: InputFrame[] = [];
+  /** Online: mi pausa detiene el partido para los dos (hasta ONLINE_PAUSE_MAX_S). */
+  private localHalt = false;
+  /** Online: el rival tiene el partido en pausa. */
+  remotePaused = false;
+  /** Pausas que me quedan en este partido online. */
+  pausesLeft = ONLINE_PAUSES;
+  private haltStarted = 0;
+  private remoteHaltStarted = 0;
+  private kaAcc = 0;
+  private haltEl: HTMLElement | null = null;
+  /** La pausa propia llegó al límite: hay que cerrar el menú y reanudar. */
+  onForceResume: () => void = () => {};
   private readonly guestRight = new THREE.Vector3(1, 0, 0);
   private readonly guestForward = new THREE.Vector3(0, 0, -1);
 
@@ -96,7 +118,7 @@ export class MatchRunner {
     readonly settings: GameSettings,
     readonly input: Input,
     audioEngine: AudioEngine,
-    uiRoot: HTMLElement,
+    private readonly uiRoot: HTMLElement,
     online: OnlineLink | null = null,
   ) {
     this.match = new Match(config);
@@ -208,6 +230,8 @@ export class MatchRunner {
       this.input.poll(0);
       // Esc / pausa siempre abre el menú de pausa, también durante la presentación
       if (pausePressed) this.pause();
+    } else if (this.online && this.halted) {
+      this.haltFrame(dt);
     } else if (this.guestSync) {
       this.guestFrame(dt);
     } else if (!this.paused || this.online) {
@@ -217,8 +241,8 @@ export class MatchRunner {
         this.input.poll(SIM_DT);
         if (this.input.pressed('pause')) {
           this.pause();
-          // online el partido no se detiene
-          if (!this.online) break;
+          // online sin pausas restantes el partido sigue
+          if (!this.online || this.halted) break;
         }
         const ri = this.remoteInput;
         if (ri && this.remoteController) {
@@ -316,6 +340,7 @@ export class MatchRunner {
     while (this.acc >= SIM_DT && steps < 8) {
       this.input.poll(SIM_DT);
       if (this.input.pressed('pause')) this.pause();
+      if (this.halted) break;
       this.view.director.basis(this.guestRight, this.guestForward);
       this.guestFrames.push(captureFrame(this.input, this.guestRight, this.guestForward, this.paused));
       this.acc -= SIM_DT;
@@ -326,9 +351,79 @@ export class MatchRunner {
     for (const e of this.guestSync!.update(performance.now())) this.handleEvent(e);
   }
 
+  /** Partido online detenido por una pausa (mía o del rival). */
+  get halted() {
+    return this.localHalt || this.remotePaused;
+  }
+
+  /** Online en pausa: nadie juega; se mantiene viva la conexión y se cuenta el tiempo. */
+  private haltFrame(dt: number) {
+    this.input.poll(dt);
+    if (!this.paused && this.input.pressed('pause')) this.pause();
+    this.acc = 0;
+    // el anfitrión avisa de que sigue ahí (el invitado no recibe instantáneas en la pausa)
+    if (this.remoteInput) {
+      this.kaAcc += dt;
+      if (this.kaAcc >= 1) {
+        this.kaAcc = 0;
+        this.online!.send({ k: 'ka' });
+      }
+    }
+    if (this.guestSync) this.guestSync.lastRecv = performance.now();
+    const now = performance.now();
+    if (this.localHalt && now - this.haltStarted > ONLINE_PAUSE_MAX_S * 1000) this.onForceResume();
+    // por si el aviso de reanudar del rival se pierde
+    if (this.remotePaused && now - this.remoteHaltStarted > (ONLINE_PAUSE_MAX_S + 5) * 1000) this.setRemotePause(false);
+    if (this.remotePaused && this.haltEl) {
+      const left = Math.max(0, Math.ceil(ONLINE_PAUSE_MAX_S - (now - this.remoteHaltStarted) / 1000));
+      const sec = this.haltEl.querySelector('.rp-sec');
+      if (sec) sec.textContent = String(left);
+    }
+  }
+
+  private setRemotePause(on: boolean) {
+    if (on === this.remotePaused) return;
+    const wasHalted = this.halted;
+    this.remotePaused = on;
+    this.remoteHaltStarted = performance.now();
+    if (on) {
+      if (!this.haltEl) {
+        const el = document.createElement('div');
+        el.className = 'remote-pause';
+        el.innerHTML = `<b>⏸ PAUSA</b><span>${escapeHtml(this.online?.opponentName ?? 'Tu rival')} pausó el partido · se reanuda en <span class="rp-sec">${ONLINE_PAUSE_MAX_S}</span> s</span>`;
+        this.uiRoot.appendChild(el);
+        this.haltEl = el;
+      }
+    } else {
+      this.haltEl?.remove();
+      this.haltEl = null;
+    }
+    if (wasHalted && !this.halted) this.afterHalt();
+  }
+
+  /** Al reanudar: se descartan los mandos acumulados y el invitado vuelve a sincronizar el reloj. */
+  private afterHalt() {
+    this.remoteInput?.clear();
+    this.guestFrames.length = 0;
+    this.last = performance.now();
+    this.acc = 0;
+  }
+
   /** Mensaje del rival (reenviado por el servidor). */
   receive(d: { k?: string; [key: string]: unknown }) {
     if (!d || typeof d !== 'object') return;
+    if (d.k === 'pause') {
+      this.setRemotePause(true);
+      return;
+    }
+    if (d.k === 'resume') {
+      this.setRemotePause(false);
+      return;
+    }
+    if (d.k === 'ka') {
+      if (this.guestSync) this.guestSync.lastRecv = performance.now();
+      return;
+    }
     if (this.guestSync) {
       if (d.k === 's') this.guestSync.push(d as unknown as Snapshot, performance.now());
     } else if (this.remoteInput && this.remoteController) {
@@ -382,13 +477,32 @@ export class MatchRunner {
   pause() {
     if (this.match.finished) return;
     this.paused = true;
-    if (this.online) this.input.suppressed = true;
+    if (this.online) {
+      this.input.suppressed = true;
+      // la pausa detiene el partido para los dos (un número limitado de veces)
+      if (!this.inIntro && !this.localHalt && this.pausesLeft > 0) {
+        this.pausesLeft--;
+        this.localHalt = true;
+        this.haltStarted = performance.now();
+        this.online.send({ k: 'pause' });
+      }
+    }
     this.onPause();
+  }
+
+  /** Segundos que quedan de mi pausa online (o −1 si no estoy deteniendo el partido). */
+  get pauseSecondsLeft() {
+    return this.localHalt ? Math.max(0, Math.ceil(ONLINE_PAUSE_MAX_S - (performance.now() - this.haltStarted) / 1000)) : -1;
   }
 
   resume() {
     this.paused = false;
     this.input.suppressed = false;
+    if (this.localHalt) {
+      this.localHalt = false;
+      this.online?.send({ k: 'resume' });
+      if (!this.halted) this.afterHalt();
+    }
     // consumir la pulsación de Esc que cerró el menú para que no vuelva a pausar
     this.input.poll(0);
     this.input.poll(0);
@@ -406,6 +520,7 @@ export class MatchRunner {
 
   dispose() {
     this.disposed = true;
+    this.haltEl?.remove();
     cancelAnimationFrame(this.raf);
     this.audio.stop();
     this.hud.dispose();

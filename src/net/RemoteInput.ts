@@ -91,6 +91,12 @@ export class RemoteInput extends Input {
     }
   }
 
+  /** Descarta lo pendiente (tras una pausa: nada de teclas "colgadas"). */
+  clear() {
+    this.queue.length = 0;
+    this.last = null;
+  }
+
   override poll(dt: number) {
     this.time += dt;
     this.prev = this.cur;
