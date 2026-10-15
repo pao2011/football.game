@@ -26,7 +26,11 @@ export type AnimState =
   | 'celebrate' // celebración
   | 'dejected' // reacción a gol en contra / error
   | 'trap' // control del balón
-  | 'skill'; // regate (variant: ver SKILL_KINDS)
+  | 'skill' // regate (variant: ver SKILL_KINDS)
+  | 'ref_card' // árbitro: muestra la tarjeta en alto
+  | 'ref_warn' // árbitro: aviso verbal (dedo índice)
+  | 'ref_point' // árbitro: señala la dirección del tiro libre
+  | 'ref_whistle'; // árbitro: silba
 
 export interface AnimInfo {
   state: AnimState;
@@ -57,6 +61,7 @@ export type MatchEventType =
   | 'tackle'
   | 'nearMiss'
   | 'skill' // regate (kind: tipo; text: nombre; power 1 = superó al rival)
+  | 'warning' // aviso verbal del árbitro
   | 'phase';
 
 export interface MatchEvent {

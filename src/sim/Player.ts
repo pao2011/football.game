@@ -18,6 +18,11 @@ export interface KickRequest {
   errorScale: number;
   /** Tipo de disparo (vaselina, rosca, potente, raso) cuando es un tiro. */
   style?: import('../ai/Actions').ShotStyle;
+  /**
+   * Punto al que debe ir el balón (cabezazos): el golpeo se reapunta desde la posición real del balón en el
+   * instante del contacto, que puede ser unas décimas después de decidirlo.
+   */
+  aimAt?: Vector3;
 }
 
 export type ActionKind = 'none' | 'kick' | 'tackle' | 'slide' | 'header' | 'dive' | 'fallen' | 'getup' | 'celebrate' | 'dejected' | 'hold' | 'throw' | 'trap' | 'skill';
@@ -61,6 +66,18 @@ export class Player {
   /** Posición táctica objetivo calculada por el sistema de equipo. */
   readonly tacticalTarget = new Vector3();
   /** Rol táctico dinámico asignado por el equipo. */
+  /** Protegiendo el balón con el cuerpo (LT / L2). */
+  shielding = false;
+  /** Conducción de precisión (RB o LB mantenido): balón pegado al pie. */
+  precision = false;
+  /** Primer toque orientado: hasta cuándo y hacia dónde (unitario). */
+  firstTouchUntil = 0;
+  readonly firstTouchDir = new Vector3();
+  /** Avisos verbales del árbitro (el segundo, amarilla). */
+  warnings = 0;
+  /** Desmarque pedido por el jugador humano (LB): hasta cuándo y hacia dónde. */
+  forcedRunUntil = -1;
+  readonly forcedRunTarget = new Vector3();
   duty: 'shape' | 'press' | 'cover' | 'mark' | 'chase' | 'support' | 'run' | 'carrier' | 'receive' | 'setpiece' = 'shape';
   markTarget: Player | null = null;
   /** Para IA: siguiente instante en que puede reconsiderar una decisión con balón. */
@@ -110,7 +127,11 @@ export class Player {
     let s = this.sprinting ? top : jog;
     s *= 0.82 + 0.18 * this.stamina;
     if (withBall) s *= 0.86 + (a.control / 100) * 0.08;
-    if (this.jockeying) s = Math.min(s, 3.2);
+    // contener: más rápido si además se esprinta (LT + RT, "brega rápida")
+    if (this.jockeying) s = Math.min(s, this.sprinting ? 5.2 : 3.2);
+    // proteger el balón: casi parado; conducción de precisión: algo más lenta
+    if (withBall && this.shielding) s = Math.min(s, 2.6);
+    else if (withBall && this.precision) s *= this.sprinting ? 0.86 : 0.7;
     return s;
   }
 

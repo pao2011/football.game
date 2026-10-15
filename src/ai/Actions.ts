@@ -2,7 +2,9 @@ import { Vector3 } from 'three';
 import { BALL_RADIUS, GOAL_HALF_WIDTH, HALF_LENGTH } from '../config/constants';
 import type { Match } from '../sim/Match';
 import type { KickRequest, Player } from '../sim/Player';
-import { aimedShotVelocity, curledShot, groundPassVelocity, loftedVelocity, loftToPoint } from '../sim/Kicks';
+import { aimedShotVelocity, curledShot, groundPassVelocity, loftedVelocity, loftToPoint, solveKickThrough } from '../sim/Kicks';
+import type { Team } from '../sim/Team';
+import { dist2D } from '../util/math';
 import { clamp } from '../util/math';
 
 // Construcción de golpeos compartida por la IA y el control humano.
@@ -27,6 +29,135 @@ export function buildLob(m: Match, p: Player, target: Vector3, elevationDeg: num
     spin.set(0, 18 * side * dirX, 0);
   }
   return { kind, velocity: v, spin, targetId: receiver?.id, power: clamp(v.length() / 32, 0.3, 1), errorScale };
+}
+
+/** Tipo de centro (esquema clásico): normal (X), tenso (RB + X), bajo (X dos veces) y raso (X tres veces). */
+export type CrossStyle = 'normal' | 'driven' | 'low' | 'ground' | 'groundDriven' | 'high' | 'early';
+
+/** Zonas de remate del área según el lado del centro: primer palo, punto de penal, segundo palo y borde. */
+export function crossSpots(team: Team, side: number): Vector3[] {
+  return [
+    team.toWorld(HALF_LENGTH - 5.5, side * 2.8),
+    team.toWorld(HALF_LENGTH - 10.5, side * 0.6),
+    team.toWorld(HALF_LENGTH - 6.5, -side * 3.6),
+    team.toWorld(HALF_LENGTH - 15, -side * 1.5),
+  ];
+}
+
+/**
+ * Elige a quién y a dónde centrar: rematadores que estén en el área o lleguen a ella (si van a una zona
+ * de remate se apunta a esa zona), con espacio respecto de los defensores y, si se da, en la dirección pedida.
+ */
+export function chooseCrossTarget(m: Match, team: Team, p: Player, dir?: Vector3): { receiver: Player | null; point: Vector3 } {
+  const side = Math.sign(team.l(p.pos)) || 1;
+  const opp = m.otherTeam(team.index).active;
+  let best: { receiver: Player | null; point: Vector3 } | null = null;
+  let bestS = -Infinity;
+  for (const q of team.active) {
+    if (q === p || q.isGK || q.sentOff) continue;
+    const u = team.u(q.pos);
+    if (u < HALF_LENGTH - 28 || Math.abs(team.l(q.pos)) > 20) continue;
+    // a dónde llegará: su zona de remate si corre hacia ella, si no, donde estará en ~0,9 s
+    // tiempo de vuelo aproximado del centro: hasta ahí llega el rematador
+    const flight = dist2D(p.pos, q.pos) / 21 + 0.2;
+    let pt: Vector3;
+    if (q.duty === 'run' && team.u(q.tacticalTarget) > HALF_LENGTH - 18) {
+      // va hacia su zona de remate: hasta donde alcance a llegar durante el vuelo
+      const d = dist2D(q.pos, q.tacticalTarget);
+      const reach = Math.min(d, 6.8 * Math.max(0, flight - 0.15));
+      pt = q.pos.clone().lerp(q.tacticalTarget, d > 0 ? reach / d : 0);
+    } else {
+      pt = q.pos.clone().addScaledVector(q.vel, Math.min(0.9, flight));
+    }
+    pt.y = 0;
+    const pu = team.u(pt);
+    if (pu > HALF_LENGTH - 2) continue;
+    let space = Infinity;
+    for (const o of opp) space = Math.min(space, dist2D(o.pos, pt));
+    // defensores cerca de la trayectoria (los que pueden despejar de cabeza antes de que llegue)
+    const sx = pt.x - p.pos.x;
+    const sz = pt.z - p.pos.z;
+    const sl2 = sx * sx + sz * sz || 1;
+    let inLane = 0;
+    for (const o of opp) {
+      const k = ((o.pos.x - p.pos.x) * sx + (o.pos.z - p.pos.z) * sz) / sl2;
+      if (k < 0.25 || k > 1) continue;
+      const d = Math.hypot(p.pos.x + sx * k - o.pos.x, p.pos.z + sz * k - o.pos.z);
+      if (d < 3.5) inLane += o.isGK ? 1.5 : 1;
+    }
+    const goalD = dist2D(pt, team.attackGoal);
+    let score = Math.min(space, 5) * 0.5 - goalD * 0.08 + (q.data.attrs.shooting / 100) * 0.4 - inLane * 1.3 - Math.sqrt(sl2) * 0.04;
+    if (dir && dir.lengthSq() > 0.01) {
+      const vx = pt.x - p.pos.x;
+      const vz = pt.z - p.pos.z;
+      const d = Math.hypot(vx, vz) || 1;
+      score += ((vx * dir.x + vz * dir.z) / d) * 1.4;
+    }
+    if (score > bestS) { bestS = score; best = { receiver: q, point: pt }; }
+  }
+  return best ?? { receiver: null, point: crossSpots(team, side)[1] };
+}
+
+/**
+ * Centro con la física real: el balón pasa por `point` a la altura de remate (cabeza en el normal, más bajo
+ * en el tenso y en el bajo) y se curva alejándose del arquero (hacia los rematadores).
+ */
+export function buildCross(m: Match, p: Player, point: Vector3, style: CrossStyle, errorScale: number, receiver?: Player | null): KickRequest {
+  const from = ballFrom(m);
+  const team = m.teams[p.team];
+  if (style === 'ground' || style === 'groundDriven') {
+    const req = buildGroundPass(m, p, point, 0.7, errorScale, receiver ?? undefined);
+    if (style === 'groundDriven') req.velocity.multiplyScalar(1.3);
+    return { ...req, kind: 'cross' };
+  }
+  const dist = dist2D(from, point);
+  const speed = style === 'driven' ? 19 + dist * 0.36 : style === 'low' ? 17 + dist * 0.32 : 18 + dist * 0.34;
+  const height = style === 'driven' ? 1.45 : style === 'low' ? 0.75 : 1.85;
+  const target = new Vector3(point.x, height, point.z);
+  // efecto: curva alejándose del arco (hacia atrás, a la zona de los rematadores)
+  const hx = (point.x - from.x) / Math.max(1e-3, dist);
+  const hz = (point.z - from.z) / Math.max(1e-3, dist);
+  const leftAway = (hz * -team.attackDir) > 0; // la izquierda del golpeo apunta hacia el propio campo
+  const spinY = (style === 'low' ? 14 : 22) * (leftAway ? 1 : -1);
+  // centro normal: bombeado (~24°) por encima de la primera línea; cae justo detrás del rematador,
+  // así el balón le llega a la altura de la cabeza. Alto: más bombeado (~36°). Anticipado: con más rosca.
+  if (style === 'normal' || style === 'high' || style === 'early') {
+    const el = style === 'high' ? 36 : style === 'early' ? 20 : 24;
+    const sp = style === 'early' ? spinY * 1.6 : spinY;
+    const beyond = new Vector3(point.x + hx * 1.0, 0.7, point.z + hz * 1.0);
+    const lofted = loftedVelocity(from, beyond, el).length();
+    const s2 = solveKickThrough(from, beyond, Math.min(30, lofted), sp, (el * Math.PI) / 180);
+    if (s2) return { kind: 'cross', velocity: s2.velocity, spin: s2.spin, targetId: receiver?.id, power: clamp(s2.velocity.length() / 32, 0.3, 1), errorScale };
+    return buildLob(m, p, beyond, el, errorScale, receiver ?? undefined, 'cross');
+  }
+  const sol = solveKickThrough(from, target, Math.min(32, speed), spinY);
+  if (sol) return { kind: 'cross', velocity: sol.velocity, spin: sol.spin, targetId: receiver?.id, power: clamp(sol.velocity.length() / 32, 0.3, 1), errorScale };
+  return buildLob(m, p, point, style === 'driven' ? 15 : 22, errorScale, receiver ?? undefined, 'cross');
+}
+
+/**
+ * Pase con rosca (LT + A): sale casi a ras de suelo y se curva alrededor del rival que tapa la línea
+ * de pase. Devuelve null si no hace falta o no hay solución (se usa el pase normal).
+ */
+export function buildCurvedPass(m: Match, p: Player, target: Vector3, errorScale: number, receiver?: Player | null): KickRequest | null {
+  const from = ballFrom(m);
+  const dist = dist2D(from, target);
+  if (dist < 6) return null;
+  // curva hacia el lado contrario del rival más cercano a la línea de pase
+  const hx = (target.x - from.x) / dist;
+  const hz = (target.z - from.z) / dist;
+  let side = 1;
+  let best = Infinity;
+  for (const o of m.otherTeam(p.team as 0 | 1).active) {
+    const k = (o.pos.x - from.x) * hx + (o.pos.z - from.z) * hz;
+    if (k < 1 || k > dist) continue;
+    const lat = (o.pos.x - from.x) * hz - (o.pos.z - from.z) * hx; // + = a la izquierda del pase
+    if (Math.abs(lat) < best) { best = Math.abs(lat); side = lat >= 0 ? -1 : 1; }
+  }
+  const speed = Math.min(26, groundPassVelocity(from, target, 0.3).length() * 1.05);
+  const sol = solveKickThrough(from, new Vector3(target.x, 0.35, target.z), speed, 26 * side);
+  if (!sol) return null;
+  return { kind: 'pass', velocity: sol.velocity, spin: sol.spin, targetId: receiver?.id, power: clamp(speed / 30, 0.2, 1), errorScale };
 }
 
 /** Tipo de disparo. Las banderas se combinan (p. ej. rosca + raso, potente + raso, vaselina + rosca). */

@@ -15,6 +15,7 @@ import type { Fixture, StandingRow } from '../modes/Competition';
 import { crestSVG, kitSVG } from './Crest';
 import { Screen, el, esc, type Handlers } from './dom';
 import { isTouchDevice } from '../input/TouchControls';
+import { gamepadBlocked } from '../input/pads';
 
 const DIFFS: Difficulty[] = ['amateur', 'pro', 'world', 'legend'];
 const HALF_OPTIONS = [2, 3, 4, 5, 6, 8, 10];
@@ -129,9 +130,34 @@ export class App {
     const s = this.show(`
       <div class="logo"><div class="l1">FOOTBALL ELITE</div><div class="l2">3D</div></div>
       <button class="press btn" data-act="go" style="background:none;border:none">${isTouchDevice() ? 'TOCA PARA EMPEZAR' : 'PULSA ENTER PARA EMPEZAR'}</button>
+      <div class="pad-hint">${gamepadBlocked()
+        ? '🎮 El navegador bloquea el mando dentro de esta página incrustada. Abre el juego en su propia pestaña (enlace directo) para usarlo.'
+        : '🎮 ¿Usas mando? Pulsa cualquier botón para conectarlo'}</div>
       <div class="version-tag">v${VERSION}</div>`, { go: () => { this.enterMobileFullscreen(); this.mainMenu(); } }, null, 'title-screen');
     void s;
+    this.watchPads();
     this.playSplash();
+  }
+
+  private padWatching = false;
+
+  /** Avisa cuando se conecta o desconecta un mando (el navegador solo lo detecta tras pulsar un botón). */
+  private watchPads() {
+    if (this.padWatching) return;
+    this.padWatching = true;
+    const note = (html: string) => {
+      document.querySelector('.pad-toast')?.remove();
+      const t = el('div', 'pad-toast', html);
+      document.body.appendChild(t);
+      setTimeout(() => t.classList.add('out'), 3200);
+      setTimeout(() => t.remove(), 3700);
+    };
+    window.addEventListener('gamepadconnected', (e) => {
+      const gp = (e as GamepadEvent).gamepad;
+      const id = (gp.id || 'Mando').replace(/\(.*?\)/g, '').trim().slice(0, 40) || 'Mando';
+      note(`🎮 <b>Mando conectado</b><small>${esc(id)}${gp.mapping === 'standard' ? '' : ' · mapa no estándar: si algún botón no responde, usa un mando Xbox/PlayStation'}</small>`);
+    });
+    window.addEventListener('gamepaddisconnected', () => note('🎮 <b>Mando desconectado</b><small>Reconéctalo y pulsa un botón</small>'));
   }
 
   /**
@@ -815,8 +841,8 @@ export class App {
           ${this.stepper('Esquema', st.preset === 'fifa' ? 'Clásico (flechas + QWEASD)' : st.preset === 'wasd' ? 'Alternativo (WASD + IJKL)' : 'Personalizado', 'preset')}
           ${ACTIONS.map((a) => `<div class="row"><label>${ACTION_LABELS[a]}</label><span>${st.bindings[a].map((k, i) => `<span class="keycap ${listening === a && i === 0 ? 'listening' : ''}">${listening === a && i === 0 ? '…' : keyLabel(k)}</span>`).join('')}<button class="btn" style="padding:4px 10px;font-size:12px;margin-left:6px" data-act="rebind" data-a="${a}">Cambiar</button></span></div>`).join('')}
         </div>
-        <div class="panel"><h3>Mando (Xbox / PlayStation)</h3>
-          <div class="row"><label>Mover</label><span>Stick izquierdo / Cruceta</span></div>
+        <div class="panel"><h3>Mando (esquema clásico de FIFA)</h3>
+          <div class="row"><label>Mover</label><span>Stick izquierdo</span></div>
           <div class="row"><label>Pase corto / Cabezazo · Presionar</label><span class="keycap">A / ✕</span></div>
           <div class="row"><label>Tiro / Volea · Entrada</label><span class="keycap">B / ○</span></div>
           <div class="row"><label>Pase elevado / Centro · Barrida</label><span class="keycap">X / □</span></div>
@@ -825,6 +851,21 @@ export class App {
           <div class="row"><label>Cambiar jugador (sin balón)</label><span class="keycap">LB / L1</span></div>
           <div class="row"><label>Presión de compañero (defensa)</label><span class="keycap">RB / R1</span></div>
           <div class="row"><label>Contener (defensa)</label><span class="keycap">LT / L2</span></div>
+          <div class="row"><label>Pase tenso</label><span>RB + A</span></div>
+          <div class="row"><label>Pase al hueco bombeado</label><span>LB + Y</span></div>
+          <div class="row"><label>Centro tenso · bajo · raso</label><span>RB + X · X X · X X X</span></div>
+          <div class="row"><label>Pedir desmarque (con balón)</label><span class="keycap">LB / L1</span></div>
+          <div class="row"><label>Mentalidad del equipo</label><span>Cruceta ← / →</span></div>
+          <div class="row"><label>Cambiar jugador (sin balón)</label><span>Stick derecho</span></div>
+          <div class="row"><label>Pared · pared avanzada</label><span>LB + A · RB + A y stick der.</span></div>
+          <div class="row"><label>Pase con rosca · vaselina corta</label><span>LT + A · LT + RB + A</span></div>
+          <div class="row"><label>Centro raso potente · alto · 2.º palo · anticipado</label><span>RB + X · LB + X · LB + RB + X · LT + X</span></div>
+          <div class="row"><label>Finalización perfecta · amago</label><span>B y B al impactar · LT + B</span></div>
+          <div class="row"><label>Proteger · precisión · dejar pasar</label><span>LT · RB · LB (mantener)</span></div>
+          <div class="row"><label>Autopase · primer toque orientado</label><span>RT + 2× stick der. · RB + stick der.</span></div>
+          <div class="row"><label>Cancelar pase/tiro</label><span>LB + RB</span></div>
+          <div class="row"><label>Presión de equipo · arquero en la línea</label><span>RB RB (mantener) · Y Y</span></div>
+          <div class="row"><label>Colocar al arquero · soltar el balón</label><span>R3 + stick der. · Y (tocar)</span></div>
           <div class="row"><label>Regates</label><span>Stick derecho · R3 ruleta</span></div>
           <div class="row"><label>Pausa</label><span class="keycap">Start / Options</span></div>
           <p class="muted">Mantén pulsado el botón de pase o tiro para cargar la barra de potencia y suéltalo para golpear. Pulsar antes de recibir el balón realiza un golpeo de primera.</p>

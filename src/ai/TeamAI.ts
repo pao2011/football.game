@@ -4,7 +4,8 @@ import type { Match } from '../sim/Match';
 import type { Player } from '../sim/Player';
 import type { Team } from '../sim/Team';
 import { clamp, dist2D } from '../util/math';
-import { interceptFor, type Intercept } from './Predict';
+import { aerialIntercept, interceptFor, type Intercept } from './Predict';
+import { crossSpots } from './Actions';
 import { offsideLineU } from '../sim/Rules';
 
 /**
@@ -24,6 +25,8 @@ export function shapeTarget(m: Match, team: Team, p: Player, attacking: boolean,
   const ballU = team.u(ball);
   const ballL = team.l(ball);
   const lineHeight = team.human ? 0.45 : m.diff.lineHeight;
+  // mentalidad (cruceta ← → en el mando, como en FIFA): adelanta o atrasa todo el bloque
+  const ment = team.mentality * 4;
   let u: number;
   let l: number;
   if (attacking) {
@@ -48,6 +51,7 @@ export function shapeTarget(m: Match, team: Team, p: Player, attacking: boolean,
     // la línea defensiva no se adelanta más allá de lo razonable
     u = Math.min(u, ballU - 4);
   }
+  if (s.position !== 'GK') u += ment;
   u = clamp(u, -HALF_LENGTH + 4, HALF_LENGTH - 6);
   l = clamp(l, -HALF_WIDTH + 2.5, HALF_WIDTH - 2.5);
   return team.toWorld(u, l, out);
@@ -171,6 +175,49 @@ export function updateTeamTactics(m: Match, team: Team) {
     }
   }
 
+  // Centro en preparación: si el portador está en zona de centro, los rematadores atacan el área
+  // (primer palo, punto de penal, segundo palo y borde del área).
+  if (carrier && carrier.team === team.index) {
+    const cu = team.u(carrier.pos);
+    const cl = team.l(carrier.pos);
+    if (cu > HALF_LENGTH - 32 && Math.abs(cl) > 10) {
+      const spots = crossSpots(team, Math.sign(cl) || 1);
+      const cands = players.filter((p) => p !== carrier && p.duty !== 'support' && (p.slot.position === 'FWD' || (p.slot.position === 'MID' && p.slot.attackFreedom > 0.5)));
+      const used = new Set<Player>();
+      for (const spot of spots.slice(0, Math.min(spots.length, 1 + Math.max(2, cands.length)))) {
+        let best: Player | null = null;
+        let bd = Infinity;
+        for (const p of cands) {
+          if (used.has(p)) continue;
+          const d = dist2D(p.pos, spot);
+          if (d < bd) { bd = d; best = p; }
+        }
+        if (!best) break;
+        used.add(best);
+        best.duty = 'run';
+        best.tacticalTarget.copy(spot);
+      }
+    }
+  }
+
+  // Balón aéreo hacia un compañero (centro, pase elevado): va al punto de remate, no a donde bota
+  const rec = m.intendedReceiver;
+  if (rec && rec.team === team.index && !rec.isGK && !m.owner && (ball.y > 1 || m.ball.vel.y > 2)) {
+    const ai = aerialIntercept(m, rec);
+    if (ai) {
+      rec.duty = 'receive';
+      rec.tacticalTarget.copy(ai.point);
+    }
+  }
+
+  // Desmarque pedido por el jugador (LB / Q con el balón)
+  for (const p of players) {
+    if (p.forcedRunUntil > m.time && m.possessionTeam === team.index) {
+      p.duty = 'run';
+      p.tacticalTarget.copy(p.forcedRunTarget);
+    }
+  }
+
   // Evitar aglomeraciones: separar objetivos demasiado próximos
   for (let i = 0; i < players.length; i++) {
     const a = players[i];
@@ -193,7 +240,7 @@ export function updateTeamTactics(m: Match, team: Team) {
 
 /** Asigna presionadores (presión al portador y cobertura). */
 function assignPress(m: Match, team: Team, carrier: Player, players: Player[]): Player[] {
-  const n = team.human ? (team.teammatePressUntil > m.time ? 2 : 1) : m.diff.pressers;
+  const n = team.human ? (team.teamPressUntil > m.time ? 3 : team.teammatePressUntil > m.time ? 2 : 1) : m.diff.pressers;
   const pressDist = team.human ? 18 : m.diff.pressDistance;
   const sorted = players.filter((p) => !(team.human && p === team.controlled && team.teammatePressUntil <= m.time)).sort((a, b) => dist2D(a.pos, carrier.pos) - dist2D(b.pos, carrier.pos));
   const res: Player[] = [];

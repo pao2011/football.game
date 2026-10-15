@@ -142,9 +142,11 @@ export function updateGoalkeeperAI(m: Match, gk: Player, dt: number) {
     return;
   }
 
+  // --- Mantener al arquero en la línea (doble toque de Y / W) ---
+  const holdLine = team.gkHoldLineUntil > m.time;
   // --- Mano a mano: achicar ---
   const carrier = m.owner;
-  if (carrier && carrier.team !== gk.team) {
+  if (carrier && carrier.team !== gk.team && !holdLine) {
     const cDist = dist2D(carrier.pos, { x: goalX, z: 0 });
     const defendersBetween = team.active.filter((d) => !d.isGK && Math.abs(d.pos.x - goalX) < Math.abs(carrier.pos.x - goalX) && Math.abs(d.pos.z - carrier.pos.z) < 6).length;
     if (cDist < 20 && defendersBetween === 0 && Math.abs(carrier.pos.z) < PENALTY_AREA_HALF_WIDTH) {
@@ -176,6 +178,12 @@ export function updateGoalkeeperAI(m: Match, gk: Player, dt: number) {
   // no salirse del área chica salvo situaciones especiales
   tx = side > 0 ? clamp(tx, HALF_LENGTH - GOAL_AREA_DEPTH, HALF_LENGTH - 0.3) : clamp(tx, -HALF_LENGTH + 0.3, -HALF_LENGTH + GOAL_AREA_DEPTH);
   tz = clamp(tz, -GOAL_HALF_WIDTH + 0.3, GOAL_HALF_WIDTH - 0.3);
+  if (holdLine) tx = goalX - side * 0.6;
+  // colocación manual (R3 + stick derecho): hacia un palo, adelante o atrás
+  if (team.gkManualUntil > m.time) {
+    tx = side > 0 ? clamp(tx + team.gkManual.x, HALF_LENGTH - GOAL_AREA_DEPTH, HALF_LENGTH - 0.3) : clamp(tx + team.gkManual.x, -HALF_LENGTH + 0.3, -HALF_LENGTH + GOAL_AREA_DEPTH);
+    tz = clamp(tz + team.gkManual.z, -GOAL_HALF_WIDTH + 0.2, GOAL_HALF_WIDTH - 0.2);
+  }
   // centros: el balón alto hacia el área chica
   if (m.ball.pos.y > 2 && !m.owner) {
     const ic = interceptFor(m, gk, 2.6, 0.1);

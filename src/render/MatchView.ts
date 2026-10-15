@@ -4,6 +4,7 @@ import type { Player } from '../sim/Player';
 import type { StadiumData } from '../data/types';
 import type { AnimInfo, AnimState } from '../sim/types';
 import { PlayerModel, type ModelQuality } from './player/PlayerModel';
+import { BONE } from './player/rig';
 import { Stadium, type GfxQuality } from './stadium/Stadium';
 import { BallModel } from './BallModel';
 import { CameraDirector, type CameraStyle } from './CameraDirector';
@@ -87,6 +88,18 @@ export class MatchView {
         this.scene.add(model.root);
       }
     }
+    // Árbitro: equipación negra con detalles amarillos y una tarjeta en la mano derecha
+    this.refModel = new PlayerModel({
+      kit: { shirt: '#141414', shirt2: '#e6c200', pattern: 'solid', shorts: '#111111', socks: '#111111', number: '#e6c200' },
+      number: 0, name: '', skinTone: 2, hairColor: '#2b1d14', hairStyle: 1, height: 1.8, isGoalkeeper: false,
+    }, mq);
+    this.refModel.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = opts.shadows; });
+    this.refCard = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.18), new THREE.MeshBasicMaterial({ color: 0xffd400, side: THREE.DoubleSide }));
+    this.refCard.position.set(0, -0.11, 0.02);
+    this.refCard.visible = false;
+    this.refModel.attachToBone(BONE.handR, this.refCard);
+    this.models.set('referee', this.refModel);
+    this.scene.add(this.refModel.root);
     for (const t of match.teams) {
       if (t.human) {
         const ind = makeIndicator(t.index === 0 ? '#ffd23f' : '#3fd2ff');
@@ -131,6 +144,8 @@ export class MatchView {
     this.stadium.keyLight.castShadow = opts.shadows;
   }
 
+  private refModel: PlayerModel;
+  private refCard: THREE.Mesh;
   /** Tiro libre directo en curso: recorrido previsto y punto de mira (lo actualiza el bucle del partido). */
   freeKick: { path: THREE.Vector3[]; target: THREE.Vector3 } | null = null;
   private fkLine: THREE.Line;
@@ -185,6 +200,17 @@ export class MatchView {
       model.root.rotation.y = p.facing;
       model.update(p.anim, dt);
     }
+    // árbitro
+    const ref = m.referee;
+    this.refModel.root.visible = true;
+    this.refModel.root.position.set(ref.pos.x, 0, ref.pos.z);
+    this.refModel.root.rotation.y = ref.facing;
+    this.refModel.update(ref.anim, dt);
+    this.refCard.visible = ref.anim.state === 'ref_card' && ref.anim.time > 0.12 && !!ref.cardColor;
+    (this.refCard.material as THREE.MeshBasicMaterial).color.set(ref.cardColor === 'red' ? 0xe0201c : 0xffd400);
+    // cámara de la amonestación: árbitro e infractor en primer plano
+    const g = ref.gesture;
+    this.director.cardFocus = g && (g.kind === 'card' || g.kind === 'warn') && m.phase === 'stoppage' ? { a: ref.pos, b: g.at } : null;
     this.ball.update(m.ball.pos, m.ball.vel, m.ball.spin.y, dt);
     this.ball.mesh.visible = true;
 
@@ -284,6 +310,7 @@ export class MatchView {
       model.update(a, dt * REPLAY_SPEED);
     }
     for (const [id, model] of this.models) if (!seen.has(id)) model.root.visible = false;
+    this.refCard.visible = false;
     const prev = frames[Math.max(0, idx - 1)];
     const bp = new THREE.Vector3(...f.ball);
     const fdt = Math.max(1 / 60, f.tm - prev.tm);

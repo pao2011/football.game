@@ -97,3 +97,18 @@ export function interceptFor(m: Match, p: Player, maxHeight = 1.6, reaction = 0.
   const last = pts[PRED_STEPS];
   return { t: PRED_STEPS * PRED_DT + timeToReach(p, last, reaction), point: last };
 }
+
+/**
+ * Punto de remate de un balón aéreo (centro o pase elevado): el primero de la trayectoria a altura de
+ * cabeza (1,2–2,5 m) al que el jugador llega a tiempo. null si no hay ninguno.
+ */
+export function aerialIntercept(m: Match, p: Player, reaction = 0.1): Intercept | null {
+  const pts = getBallPrediction(m);
+  for (let i = 1; i <= PRED_STEPS; i++) {
+    const pt = pts[i];
+    if (pt.y < 1.2 || pt.y > 2.5) continue;
+    const t = i * PRED_DT;
+    if (timeToReach(p, pt, reaction) <= t + 0.08) return { t, point: pt };
+  }
+  return null;
+}

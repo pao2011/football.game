@@ -15,6 +15,7 @@
     "electron": "electron .",
     "package": "npm run build && node scripts/package.mjs",
     "test:e2e:mobile": "node scripts/e2e-mobile.mjs",
+    "test:e2e:gamepad": "node scripts/e2e-gamepad.mjs",
     "android:sync": "npm run build && npx cap sync android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "build:single": "npm run build && node scripts/single-file.mjs"
