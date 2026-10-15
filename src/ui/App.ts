@@ -1223,6 +1223,7 @@ export class App {
           ${this.stepper('Música', pct(st.musicVolume), 'vmusic')}
           ${this.stepper('Efectos', pct(st.sfxVolume), 'vsfx')}
           ${this.stepper('Público', pct(st.crowdVolume), 'vcrowd')}
+          ${toggle('Vibración (mando y móvil)', 'vibration')}
         </div>
         <div class="panel"><h3>Jugabilidad</h3>
           ${this.stepper('Dificultad por defecto', DIFFICULTY_LABELS[st.difficulty], 'diff')}

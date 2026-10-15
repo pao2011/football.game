@@ -4,10 +4,15 @@
 
 <p align="center">
   <a href="https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk"><img alt="Descargar APK" src="https://img.shields.io/badge/DESCARGAR%20APK-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white"></a>
+  <a href="https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D-Windows.zip"><img alt="Descargar para Windows" src="https://img.shields.io/badge/DESCARGAR-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white"></a>
   <img alt="Icono" src="docs/art/icon-1024.png" width="96">
 </p>
 
 **📲 [Descargar el APK para Android](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk)** — se publica automáticamente en *Releases* cada vez que se actualiza `main`. También desde el servidor online: **https://football-elite-3d-19vc.onrender.com/apk**, o con el botón *Descargar APK* del menú de la versión web.
+
+**💻 [Descargar para Windows](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D-Windows.zip)** (extrae el ZIP y abre `FootballElite3D.exe`) · **[Juego en un solo archivo HTML](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.html)** (cualquier PC: doble clic). Se publican en *Releases* con cada actualización de `main`.
+
+**💻 Jugar en PC (Windows, Mac o Linux) sin instalar nada:** pulsa **`<> Code` → `Download ZIP`**, **extrae** el ZIP (en Windows: clic derecho → *Extraer todo…*; no lo abras desde dentro del ZIP) y haz doble clic en **`index.html`** o en **`jugar.html`**. Se abre en tu navegador (Chrome, Edge o Firefox) y funciona sin conexión. Más opciones en la [sección 3](#3-cómo-iniciar-el-juego).
 
 Juego de fútbol 3D completo, 11 contra 11 con arquero, con física de balón propia, inteligencia artificial táctica, reglas y arbitraje, cuatro modos de juego y controles con el esquema clásico de los juegos de fútbol de PC (FIFA) para teclado y mando.
 
@@ -46,12 +51,28 @@ Todos los recursos (modelos, animaciones, estadio, público, texturas, escudos, 
 
 ## 3. Cómo iniciar el juego
 
+### Sin instalar nada (ZIP del repositorio)
+
+1. En GitHub, pulsa **`<> Code` → `Download ZIP`**.
+2. **Extrae** el ZIP (Windows: clic derecho → *Extraer todo…* → *Extraer*; Mac: doble clic; Linux: `unzip`).
+3. Abre la carpeta extraída y haz doble clic en **`index.html`** (o directamente en **`jugar.html`**).
+
+`jugar.html` es el juego completo en **un solo archivo** (código, estilos y sonidos incluidos), por eso funciona al abrirlo con doble clic, sin servidor y sin Internet (el modo online sí necesita conexión). `index.html` es la página del proyecto para desarrolladores: cuando se abre como archivo redirige sola a `jugar.html`.
+
+> **¿Pantalla en blanco?** Antes pasaba porque `index.html` carga el código fuente TypeScript, que el navegador no puede ejecutar sin el servidor de desarrollo. Ahora redirige a `jugar.html`. Si aun así ves la pantalla en blanco, comprueba que **extrajiste** el ZIP (no lo abras desde dentro) y que usas un navegador actualizado con WebGL2 (Chrome, Edge o Firefox).
+
+**Ejecutable de Windows:** [descarga `FootballElite3D-Windows.zip`](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D-Windows.zip), extráelo y abre `FootballElite3D.exe` (si Windows SmartScreen avisa, pulsa *Más información → Ejecutar de todas formas*: el ejecutable no está firmado). GitHub Actions lo compila en cada push y lo publica en [Releases → latest](https://github.com/pao2011/football.game/releases/latest) cuando se actualiza `main`; en otras ramas queda como artefacto **FootballElite3D-Windows** en la pestaña *Actions*.
+
+### Desde el código fuente
+
 Requisito: **Node.js 18 o superior**.
 
 ```bash
 npm install          # instalar dependencias (una sola vez)
-npm run build        # compilar el juego en dist/
+npm run build        # compilar el juego en dist/ y regenerar jugar.html
 ```
+
+> Después de cambiar el código, ejecuta `npm run build` y sube también `jugar.html`, para que el ZIP del repositorio tenga la versión nueva (el CI avisa si está desactualizado).
 
 Luego elige una de estas opciones:
 
@@ -74,7 +95,7 @@ El mismo juego funciona en móviles con **controles táctiles**, una interfaz ad
 |---|---|
 | **App instalable (PWA)** | Publica `dist/` en cualquier hosting HTTPS (GitHub Pages, Netlify…), abre la página en Chrome o Safari del móvil y elige *Instalar aplicación* / *Añadir a pantalla de inicio*. Se abre a pantalla completa en horizontal y **funciona sin conexión** después de la primera carga. |
 | **APK de Android** | El flujo de GitHub Actions (`.github/workflows/ci.yml`) compila el APK automáticamente en cada push: en cada push a `main` se publica como descarga directa en [Releases → latest](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk) (`FootballElite3D.apk`); en otras ramas queda como artefacto **FootballElite3D-android-apk** en la pestaña *Actions*. Arte (icono, splash y key art FHD 1920×1080 renderizados con el propio motor): `npm run art`. Localmente: `npm run android:apk` (requiere Android Studio / Android SDK y JDK 17) o abre la carpeta `android/` en Android Studio. |
-| **Un solo archivo HTML** | `npm run build:single` genera `release/FootballElite3D.html` con todo el juego dentro: ábrelo con doble clic (sin servidor) o súbelo a cualquier hosting. |
+| **Un solo archivo HTML** | `npm run build` genera `jugar.html` (en la raíz y en `dist/`) y `release/FootballElite3D.html` con todo el juego dentro: ábrelo con doble clic (sin servidor) o súbelo a cualquier hosting. |
 | **Probar en la red local** | `npm run build && npm start` y abre `http://IP-del-ordenador:8080` desde el móvil. |
 
 ![Botones de defensa](docs/capturas/movil-defensa.png)
@@ -262,13 +283,15 @@ Se puede jugar entre PC, móvil (APK o navegador) y mando: cada uno usa sus prop
 - Estadio de tres anillos con techo, más de 20.000 espectadores animados que reaccionan al juego, vallas LED con marcas ficticias, banquillos, túnel, videomarcadores y banderines.
 - Césped con franjas de corte, desgaste y detalle; sombras dinámicas e iluminación de día, atardecer y noche.
 - **Animación al abrir el juego** (balón que entra rodando, disparo a la red y logo; se salta con un toque o una tecla).
-- Vibración en el móvil al golpear el balón y con los goles.
+- **Vibración** en el móvil y en el **mando** (si el navegador lo admite: mandos de Xbox y PlayStation en Chrome/Edge): golpeos y tiros propios, entradas, postes y goles. Se desactiva en *Configuración → Sonido → Vibración*.
 - **Barra brava** detrás de un arco: salta sin parar al ritmo de los **bombos** (la batería de la barra suena todo el partido: varios bombos, redoblante y platillo), con su **bandera gigante** que se despliega en el recibimiento y en los goles del local, bombos visibles en la primera fila y la mayoría de las bengalas.
 - **Banderas mejoradas**: más banderas con mástil, de distintos tamaños y diseños (tricolor, franjas, banda diagonal, mitades, escudo), con pliegues sombreados y tela; **trapos** colgados en la baranda de la primera fila con textos (nombre del club, "LA BARRA", "VAMOS", "ALENTANDO").
 - **Hinchada viva**: banderas que flamean en las gradas (más fuerte cuanto más emoción), **bengalas con humo** del color del club (algunas rojas o blancas) que se encienden de vez en cuando, **recibimiento** al empezar el partido con fuegos artificiales, bengalas de ambas hinchadas y lluvia de papelitos, y en cada gol la hinchada del que marca enciende bengalas, tira papelitos y lanza cohetes. **Cánticos** nuevos ("olé", "dale", "oh oh oh") con **bombo** y palmas; la hinchada canta en el recibimiento y tras cada gol. Todo procedural (sin imágenes ni grabaciones).
 - **Sin avisos emergentes** por defecto (atajada, falta, tiro libre, ayuda de controles…): la pantalla queda limpia. Se pueden reactivar en *Configuración → Avisos en pantalla*. Se mantienen el marcador y los rótulos grandes de gol, descanso y final.
 - Cámaras de transmisión (tres estilos y zoom), barrido de presentación con **presentación del partido** (estadio, escudos, nombres y formaciones; se salta con cualquier botón o un toque), encuadre que mantiene el balón y tu jugador dentro de la zona visible (también junto a la banda cercana y por encima de los botones táctiles), plano de celebración, **repeticiones en cámara lenta** de la jugada completa: empiezan antes del disparo y terminan con el balón en la red (el final siempre desde detrás del arco); se omiten con S o D y cámara de penales.
 - HUD con marcador, reloj, tiempo añadido, radar, jugador controlado con su resistencia, barra de potencia, avisos (gol, falta, tarjeta, fuera de juego), ayudas en balón parado e indicadores del receptor y la dirección de pase.
+- **Sonidos del balón**: golpeo (más seco y con silbido del aire en los tiros fuertes), **cabezazo**, **control y primer toque**, **toques de conducción** al ritmo de la carrera, **balón rodando por el césped** (según su velocidad), botes, postes, red, **balonazo contra las vallas publicitarias**, **blocaje del arquero** (palmada de guantes) y **despeje con los puños**; saques con la mano sin sonido de patada.
+- **Bocina del estadio** después de cada gol.
 - Audio procedural original: golpeos, botes, postes, red, silbato, ambiente de estadio, gritos de gol, "¡uy!", aplausos, abucheos, sonidos de interfaz y música de menú.
 - Menús animados navegables con ratón, teclado y mando; pantalla de carga con consejos; pausa; configuración de gráficos (calidad baja/media/alta, sombras, escala de resolución, antialiasing, radar, ayudas, repeticiones), sonido y jugabilidad. Todo se guarda en el almacenamiento local.
 
@@ -302,14 +325,16 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Prueba | Comando | Resultado |
 |---|---|---|
 | Comprobación de tipos (TypeScript estricto) | `npx tsc --noEmit` | ✅ sin errores |
-| Unitarias y de simulación | `npm test` | ✅ **156/156** |
+| Unitarias y de simulación | `npm test` | ✅ **159/159** |
 | Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **15/15** |
 | Extremo a extremo con mando (mando estándar simulado) | `npm run build && npm run test:e2e:gamepad` | ✅ **7/7** |
 | Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **17/17** |
 | Online: servidor real + dos navegadores jugando entre sí | `npm run build && npm run test:e2e:online` | ✅ **12/12** |
+| Jugar sin servidor (doble clic en `index.html` → `jugar.html`, `file://`) | `npm run build && npm run test:e2e:file` | ✅ pantalla de inicio sin errores |
 | Ejecutable de Linux bajo Xvfb | — | ✅ sin errores (detalle abajo) |
 
-**Unitarias y de simulación (155 pruebas)**
+**Unitarias y de simulación (159 pruebas)**
+- **Sonidos (3)**: cada evento suena con el suyo (golpeo, cabezazo, saque con la mano, control, blocaje, despeje, gol con bocina), el balón rueda y el que conduce da toques al ritmo de la carrera, y la simulación avisa de los controles y blocajes.
 - **Cambios (5)**: 7 suplentes, el cambio espera a una interrupción, máximo 5, no vuelve quien salió ni se cambia a un expulsado, el que entra hereda el control y el balón, y la IA cambia a los cansados en partidos completos.
 - **Online (8)**: divisiones y puntos de Rivals; el servidor empareja, reenvía, reparte puntos solo si los dos informan el mismo resultado, castiga el abandono, crea salas con código y no junta divisiones muy distintas enseguida; el invitado reproduce el estado del anfitrión (jugadores, balón, fase y cambios); los mandos remotos no pierden pulsaciones breves; direcciones de servidor.
 - **Valoraciones (2)**: notas de 3 a 10 para todos los que jugaron, pases individuales que suman los del equipo, y goles/asistencias que suben la nota y deciden el jugador del partido.
@@ -352,6 +377,8 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 
 ## 9. Problemas pendientes y limitaciones reales
 
+El plan de mejoras futuras está en **[ROADMAP.md](ROADMAP.md)**.
+
 - **Rendimiento en GPU real no medido.** El entorno de desarrollo no tiene tarjeta gráfica y todo se probó con renderizado por software (SwiftShader), que da pocos FPS. Por diseño (unas 250 llamadas de dibujo, mallas de entre 1.600 y 5.000 vértices por jugador, público instanciado), una GPU integrada moderna debería mantener 60 FPS en calidad media, pero no está verificado. Si va lento, baja la calidad, desactiva las sombras o reduce la escala de resolución en *Configuración*.
 - **Audio procedural** (sintetizado, sin grabaciones): se verificó por análisis de señal (sin silencios, sin saturación y con espectros correctos), pero no se escuchó.
 - **Reglas no implementadas**: ley de la ventaja, mano, faltas del arquero en sus estiradas a los pies y saque de banda mal ejecutado. En un tiro libre indirecto se acepta un gol directo.
@@ -361,5 +388,7 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 - **Equipación del visitante**: se elige automáticamente para que contraste con la del local; no se puede seleccionar a mano.
 - **Animaciones procedurales**: más simples que una captura de movimiento real; las caras son estilizadas.
 - **IA**: tiende a jugar mucho por el centro del campo y a generar pocas ocasiones claras en dificultades bajas. Es funcional y táctica, pero mejorable.
-- Los ejecutables de Windows se generaron pero **solo se probó el de Linux** (no había Windows disponible).
+- Los ejecutables de Windows se generaron pero **solo se probó el de Linux** (no había Windows disponible). El ZIP de Windows lo compila GitHub Actions en `windows-latest` y se publica en *Releases*; no está firmado, así que SmartScreen puede avisar la primera vez. `jugar.html` se probó abriéndolo como archivo (`file://`) en Chromium para Linux, no en un PC con Windows.
+- **`jugar.html` hay que regenerarlo** (`npm run build`) y subirlo después de cambiar el código; si no, el ZIP del repositorio trae la versión anterior.
+- **Vibración del mando**: usa la API `vibrationActuator` de Chrome/Edge; Firefox y Safari no la admiten (no vibra, pero no da error).
 - **Móvil**: probado con emulación táctil en Chromium, no en un teléfono físico. El APK **no se pudo compilar en el entorno de desarrollo**: la política de red bloquea la descarga del Android SDK (dl.google.com). Se compila en GitHub Actions o con Android Studio. El rendimiento en teléfonos de gama baja no está medido; si va lento, reduce la escala de resolución.

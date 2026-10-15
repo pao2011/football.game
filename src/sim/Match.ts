@@ -584,6 +584,7 @@ export class Match {
     this.debug.controls++;
     this.setLastTouch(p, false, 'control');
     if (this.intendedReceiver && this.intendedReceiver.team !== p.team) this.intendedReceiver = null;
+    this.emit({ type: 'touch', power: Math.min(1, relSpeed / 18), playerId: p.id, team: p.team });
     if (relSpeed > 5 && p.action.kind === 'none') p.startAction('trap', 'trap', 0.35);
     // El humano pasa a controlar a quien recibe
     if (team.human && team.controlled !== p && !p.isGK) team.controlled = p;
@@ -604,6 +605,7 @@ export class Match {
     this.offsideSet.clear();
     this.offsideTeam = -1;
     if (gk.action.kind === 'none') gk.startAction('hold', 'gk_catch', 0.5);
+    this.emit({ type: 'catch', team: gk.team, playerId: gk.id });
     gk.nextDecisionAt = this.time + 1.2 + this.rng.next() * 0.8;
     this.registerSave(gk);
     const team = this.teams[gk.team];
