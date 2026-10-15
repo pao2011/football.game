@@ -1,5 +1,14 @@
 # ⚽ Football Elite 3D — v1.0.0
 
+![Football Elite 3D](docs/art/key-art.png)
+
+<p align="center">
+  <a href="https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk"><img alt="Descargar APK" src="https://img.shields.io/badge/DESCARGAR%20APK-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white"></a>
+  <img alt="Icono" src="docs/art/icon-1024.png" width="96">
+</p>
+
+**📲 [Descargar el APK para Android](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk)** — se publica automáticamente en *Releases* cada vez que se actualiza `main`.
+
 Juego de fútbol 3D completo, 11 contra 11 con arquero, con física de balón propia, inteligencia artificial táctica, reglas y arbitraje, cuatro modos de juego y controles con el esquema clásico de los juegos de fútbol de PC (FIFA) para teclado y mando.
 
 ![Saque inicial](docs/capturas/saque-inicial.png)
@@ -64,7 +73,7 @@ El mismo juego funciona en móviles con **controles táctiles**, una interfaz ad
 | Forma de instalar | Cómo |
 |---|---|
 | **App instalable (PWA)** | Publica `dist/` en cualquier hosting HTTPS (GitHub Pages, Netlify…), abre la página en Chrome o Safari del móvil y elige *Instalar aplicación* / *Añadir a pantalla de inicio*. Se abre a pantalla completa en horizontal y **funciona sin conexión** después de la primera carga. |
-| **APK de Android** | El flujo de GitHub Actions (`.github/workflows/ci.yml`) compila el APK automáticamente en cada push: descárgalo desde la pestaña *Actions* → ejecución → artefacto **FootballElite3D-android-apk**. Localmente: `npm run android:apk` (requiere Android Studio / Android SDK y JDK 17) o abre la carpeta `android/` en Android Studio. |
+| **APK de Android** | El flujo de GitHub Actions (`.github/workflows/ci.yml`) compila el APK automáticamente en cada push: en cada push a `main` se publica como descarga directa en [Releases → latest](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk) (`FootballElite3D.apk`); en otras ramas queda como artefacto **FootballElite3D-android-apk** en la pestaña *Actions*. Arte (icono, splash y key art FHD 1920×1080 renderizados con el propio motor): `npm run art`. Localmente: `npm run android:apk` (requiere Android Studio / Android SDK y JDK 17) o abre la carpeta `android/` en Android Studio. |
 | **Un solo archivo HTML** | `npm run build:single` genera `release/FootballElite3D.html` con todo el juego dentro: ábrelo con doble clic (sin servidor) o súbelo a cualquier hosting. |
 | **Probar en la red local** | `npm run build && npm start` y abre `http://IP-del-ordenador:8080` desde el móvil. |
 
