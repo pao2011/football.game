@@ -113,26 +113,28 @@ export interface InputSettings {
 export class Input {
   bindings: Bindings;
   settings: InputSettings = { deadzone: 0.18, sensitivity: 1 };
-  private keys = new Set<string>();
+  protected keys = new Set<string>();
   /** Teclas pulsadas desde el último sondeo (para no perder toques muy breves). */
-  private tapped = new Set<string>();
-  private prev = new Set<Action>();
-  private cur = new Set<Action>();
-  private holdStart = new Map<Action, number>();
-  private justPressed = new Set<Action>();
-  private justReleased = new Map<Action, number>(); // acción -> duración pulsada
-  private padAxes = { x: 0, y: 0 };
-  private padActive = false;
+  protected tapped = new Set<string>();
+  protected prev = new Set<Action>();
+  protected cur = new Set<Action>();
+  protected holdStart = new Map<Action, number>();
+  protected justPressed = new Set<Action>();
+  protected justReleased = new Map<Action, number>(); // acción -> duración pulsada
+  protected padAxes = { x: 0, y: 0 };
+  protected padActive = false;
   /** Callback de captura para reasignar teclas. */
   captureNext: ((code: string) => void) | null = null;
-  private time = 0;
+  protected time = 0;
   private listeners: [string, EventListener][] = [];
 
-  constructor(bindings: Bindings = FIFA_CLASSIC) {
+  constructor(bindings: Bindings = FIFA_CLASSIC, listen = true) {
     this.bindings = structuredClone(bindings);
-    if (typeof window !== 'undefined') {
+    if (listen && typeof window !== 'undefined') {
       const down = (e: Event) => {
         const ke = e as KeyboardEvent;
+        const tg = ke.target as HTMLElement | null;
+        if (tg && (tg.tagName === 'INPUT' || tg.tagName === 'TEXTAREA')) return; // escribiendo un nombre o un código
         if (this.captureNext) {
           ke.preventDefault();
           const cb = this.captureNext;
@@ -163,7 +165,7 @@ export class Input {
   }
 
   // --- Gestos táctiles (deslizamientos) ---
-  private gestures: TouchGesture[] = [];
+  protected gestures: TouchGesture[] = [];
   /** Botones táctiles de tipo de tiro pulsados ahora mismo (para la ayuda visual mientras se carga). */
   readonly touchShot: TouchShotStyle = { chip: false, finesse: false, power: false, low: false };
 
@@ -186,9 +188,9 @@ export class Input {
   }
 
   // --- Controles táctiles (móvil): botones y joystick virtuales ---
-  private virtualHeld = new Set<Action>();
-  private virtualTapped = new Set<Action>();
-  private virtualAxes = { x: 0, y: 0 };
+  protected virtualHeld = new Set<Action>();
+  protected virtualTapped = new Set<Action>();
+  protected virtualAxes = { x: 0, y: 0 };
 
   /** Pulsa o suelta un botón virtual (pantalla táctil). */
   setVirtual(a: Action, down: boolean) {
@@ -215,6 +217,9 @@ export class Input {
   setKey(code: string, down: boolean) {
     if (down) { this.keys.add(code); this.tapped.add(code); } else this.keys.delete(code);
   }
+
+  /** Entrada ignorada (p. ej. con el menú abierto en un partido online, que no se detiene). */
+  suppressed = false;
 
   /** Lee el estado actual. Llamar una vez por fotograma de juego. */
   poll(dt: number) {
@@ -268,6 +273,20 @@ export class Input {
     } else {
       this.padDpadPrev = 0;
     }
+    if (this.suppressed) {
+      this.cur.clear();
+      this.padActive = false;
+      this.rsFlick = null;
+      this.padTactic = 0;
+      this.rs.x = 0;
+      this.rs.y = 0;
+      this.gestures.length = 0;
+    }
+    this.computeEdges();
+  }
+
+  /** Pulsaciones y sueltas de este sondeo (comparando con el anterior). */
+  protected computeEdges() {
     this.justPressed.clear();
     this.justReleased.clear();
     for (const a of this.cur) {
@@ -300,6 +319,7 @@ export class Input {
 
   /** Vector de movimiento en pantalla (x derecha, y arriba), magnitud 0..1. */
   move(): { x: number; y: number } {
+    if (this.suppressed) return { x: 0, y: 0 };
     if (this.padActive) return { ...this.padAxes };
     if (Math.hypot(this.virtualAxes.x, this.virtualAxes.y) > 0.12) return { ...this.virtualAxes };
     let x = 0;
@@ -324,6 +344,16 @@ export class Input {
 
   get usingGamepad() {
     return this.padActive;
+  }
+
+  /** Acciones mantenidas en este sondeo. */
+  heldSet(): ReadonlySet<Action> {
+    return this.cur;
+  }
+
+  /** Gestos táctiles pendientes (los saca de la cola). */
+  drainGestures(): TouchGesture[] {
+    return this.gestures.splice(0);
   }
 
   /** Cualquier tecla/botón de "aceptar" (para menús y pantallas de título). */

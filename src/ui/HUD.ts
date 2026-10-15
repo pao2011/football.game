@@ -1,3 +1,4 @@
+import { esc } from './dom';
 import { HALF_LENGTH, HALF_WIDTH } from '../config/constants';
 import type { HumanController } from '../control/HumanController';
 import type { Match } from '../sim/Match';
@@ -193,6 +194,17 @@ export class HUD {
       case 'warning': {
         const team = m.teams[e.team ?? 0];
         this.lowerThird('<span class="warn-icon">!</span>AVISO DEL ÁRBITRO', `${e.text ?? ''} · ${team?.data.name ?? ''} · la próxima es amarilla`, 2.2);
+        break;
+      }
+      case 'sub': {
+        const team = m.teams[e.team ?? 0];
+        const [outN, inN] = (e.text ?? '').split(' ⇄ ');
+        this.lowerThird(`<span class="sub-icon">⇅</span>CAMBIO · ${esc(team?.data.name ?? '')}`, `<span class="sub-in">▲ ${esc(inN ?? '')}</span> <span class="sub-out">▼ ${esc(outN ?? '')}</span>`, 3);
+        break;
+      }
+      case 'chat': {
+        const team = m.teams[e.team ?? 0];
+        this.lowerThird(`💬 ${esc(team?.data.short ?? '')}`, esc(e.text ?? ''), 2.6);
         break;
       }
       case 'offside':

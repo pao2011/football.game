@@ -58,6 +58,7 @@ export class MatchView {
   private replayFrames: ReplayFrame[] = [];
   private replayStart = 0;
   private replayIdx = 0;
+  private rosterVersion = 0;
   private replayGoalX = HALF_LENGTH;
   private lastPhase = '';
   private tmpAnim: AnimInfo = { state: 'idle', time: 0, duration: 0, speed: 0, variant: 0, foot: 1 };
@@ -76,18 +77,8 @@ export class MatchView {
     this.scene.add(this.stadium.group);
     this.scene.add(this.ball.mesh, this.ball.shadow);
     const mq: ModelQuality = opts.quality;
-    for (const t of match.teams) {
-      for (const p of t.players) {
-        const kit = p.isGK ? t.data.gkKit : t.kit;
-        const model = new PlayerModel({
-          kit, number: p.data.number, name: p.data.name.split(' ').slice(-1)[0], skinTone: p.data.skinTone,
-          hairColor: p.data.hairColor, hairStyle: p.data.hairStyle, height: p.data.height, isGoalkeeper: p.isGK,
-        }, mq);
-        model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = opts.shadows; } });
-        this.models.set(p.id, model);
-        this.scene.add(model.root);
-      }
-    }
+    for (const t of match.teams) for (const p of t.players) this.createModel(p);
+    this.rosterVersion = match.rosterVersion;
     // Árbitro: equipación negra con detalles amarillos y una tarjeta en la mano derecha
     this.refModel = new PlayerModel({
       kit: { shirt: '#141414', shirt2: '#e6c200', pattern: 'solid', shorts: '#111111', socks: '#111111', number: '#e6c200' },
@@ -170,6 +161,8 @@ export class MatchView {
       this.replayIdx = 0;
       this.replayGoalX = Math.sign(m.ball.pos.x) * HALF_LENGTH;
     }
+    // al volver de la repetición se recalcula quién está en el campo
+    if (this.lastPhase === 'replay' && m.phase !== 'replay') this.rosterVersion = -1;
     this.lastPhase = m.phase;
 
     if (m.phase === 'replay' && this.replayFrames.length > 0) {
@@ -192,8 +185,14 @@ export class MatchView {
 
   private updateLive(dt: number, receiverPreview: Player | null, aimDir: THREE.Vector3 | null, aimTarget: THREE.Vector3 | null) {
     const m = this.match;
+    if (m.rosterVersion !== this.rosterVersion) {
+      // cambios: los que salen desaparecen del campo
+      this.rosterVersion = m.rosterVersion;
+      const live = new Set(m.playersAll.map((p) => p.id));
+      for (const [id, model] of this.models) if (id !== 'referee' && !live.has(id)) model.root.visible = false;
+    }
     for (const p of m.playersAll) {
-      const model = this.models.get(p.id)!;
+      const model = this.models.get(p.id) ?? this.createModel(p);
       model.root.visible = !p.sentOff;
       if (p.sentOff) continue;
       model.root.position.set(p.pos.x, 0, p.pos.z);
@@ -322,6 +321,20 @@ export class MatchView {
     // tiempo de clip que queda: el final (el balón entrando) se ve siempre desde detrás del arco
     const left = (frames[frames.length - 1].tm - target) / REPLAY_SPEED;
     this.director.updateReplay(bp, this.replayGoalX, t, left);
+  }
+
+  /** Modelo 3D de un jugador (los suplentes se crean al entrar). */
+  private createModel(p: Player) {
+    const t = this.match.teams[p.team];
+    const kit = p.isGK ? t.data.gkKit : t.kit;
+    const model = new PlayerModel({
+      kit, number: p.data.number, name: p.data.name.split(' ').slice(-1)[0], skinTone: p.data.skinTone,
+      hairColor: p.data.hairColor, hairStyle: p.data.hairStyle, height: p.data.height, isGoalkeeper: p.isGK,
+    }, this.opts.quality);
+    model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = this.opts.shadows; } });
+    this.models.set(p.id, model);
+    this.scene.add(model.root);
+    return model;
   }
 
   render() {

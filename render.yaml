@@ -1,0 +1,17 @@
+# Render Blueprint: publica GRATIS el servidor online (y el juego web) con un clic.
+# Render → New → Blueprint → elige este repositorio → Apply.
+# El plan gratuito se duerme tras ~15 min sin uso: la primera conexión tarda hasta 1 minuto en despertarlo.
+services:
+  - type: web
+    name: football-elite-3d
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: node server/index.mjs
+    healthCheckPath: /estado
+    envVars:
+      - key: ELECTRON_SKIP_BINARY_DOWNLOAD
+        value: "1"
+      - key: NODE_VERSION
+        value: "22"

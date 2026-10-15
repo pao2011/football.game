@@ -23,6 +23,10 @@ export interface TeamStats {
 export class Team {
   players: Player[] = [];
   readonly bench: Player[] = [];
+  /** Jugadores sustituidos (ya no pueden volver a entrar). */
+  readonly subbedOff: Player[] = [];
+  /** Cambios realizados. */
+  subsUsed = 0;
   /** +1 si ataca hacia x positivo, -1 si ataca hacia x negativo. */
   attackDir: 1 | -1;
   /** Jugador controlado por el humano (null si el equipo es de la IA). */

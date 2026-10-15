@@ -93,6 +93,22 @@ export class Screen {
 
   private onKey(e: KeyboardEvent) {
     if ((window as any).__captureKey) return;
+    // escribiendo en un campo de texto: solo Enter (acción del campo) y Esc
+    const field = e.target as HTMLElement | null;
+    if (field && (field.tagName === 'INPUT' || field.tagName === 'TEXTAREA')) {
+      if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+        e.preventDefault();
+        const act = field.dataset.enter;
+        if (act) this.handlers[act]?.(field);
+      } else if (e.code === 'Escape') {
+        field.blur();
+      } else if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
+        field.blur();
+        this.move(e.code === 'ArrowDown' ? 1 : -1);
+        e.preventDefault();
+      }
+      return;
+    }
     switch (e.code) {
       case 'ArrowDown': case 'KeyS': if (e.code === 'KeyS') { this.activate(); break; } this.move(1); break;
       case 'ArrowUp': this.move(-1); break;

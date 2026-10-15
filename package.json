@@ -19,12 +19,15 @@
     "android:sync": "npm run build && npx cap sync android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "build:single": "npm run build && node scripts/single-file.mjs",
-    "art": "npm run build && node scripts/make-art.mjs all"
+    "art": "npm run build && node scripts/make-art.mjs all",
+    "server": "node server/index.mjs",
+    "test:e2e:online": "node scripts/e2e-online.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",
     "@capacitor/core": "^6.2.0",
-    "three": "^0.170.0"
+    "three": "^0.170.0",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.2.0",

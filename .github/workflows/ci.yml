@@ -23,6 +23,12 @@ jobs:
         run: npm test
       - name: Compilación
         run: npm run build
+      - name: Servidor online (arranca y responde)
+        run: |
+          PORT=18555 DATA_DIR=$(mktemp -d) node server/index.mjs &
+          for i in $(seq 1 30); do curl -sf http://localhost:18555/estado && break; sleep 0.5; done
+          curl -sf http://localhost:18555/estado | grep -q football-elite-3d
+          kill %1
       - uses: actions/upload-artifact@v4
         with:
           name: football-elite-3d-web
