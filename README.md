@@ -212,7 +212,7 @@ El partido se simula en el navegador del **anfitrión** y el servidor solo empar
 
 | Opción | Cómo |
 |---|---|
-| **Servidor público gratis (Render)** | En [render.com](https://render.com) (cuenta gratuita, sin tarjeta): *New → Blueprint →* elige este repositorio → *Apply*. `render.yaml` ya lo configura todo (plan **free**): compila el juego y arranca `server/index.mjs`. Queda en `https://football-elite-3d.onrender.com`, que es el servidor que el juego usa por defecto. Si Render te da otro nombre, escríbelo en *ONLINE → Servidor*. Abriendo esa dirección también se juega desde el navegador. |
+| **Servidor público gratis (Render)** | En [render.com](https://render.com) (cuenta gratuita, sin tarjeta): *New → Blueprint →* elige este repositorio → *Apply*. `render.yaml` ya lo configura todo (plan **free**): compila el juego y arranca `server/index.mjs`. El servidor por defecto del juego es `https://football-elite-3d-19vc.onrender.com` (el de este proyecto); si publicas el tuyo y Render te da otro nombre, escríbelo en *ONLINE → Servidor* o cambia `DEFAULT_SERVER` en `src/net/NetClient.ts`. Abriendo esa dirección también se juega desde el navegador. |
 | **Red local (misma Wi-Fi), sin Internet** | En un PC: `npm run build && npm run server`. La consola muestra la IP (p. ej. `192.168.1.20:8080`): escríbela en *ONLINE → Servidor* en cada dispositivo (o abre `http://192.168.1.20:8080` en el navegador del móvil). |
 | **Cualquier otro hosting gratuito con Node** | `npm ci && npm run build` y `node server/index.mjs` (variables `PORT` y `DATA_DIR`). |
 

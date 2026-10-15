@@ -5,7 +5,7 @@ import type { DivisionInfo } from '../../server/divisions.mjs';
 // (`npm run server`, para jugar en la red local) o publicar con un clic en un plan gratuito (render.yaml).
 
 /** Servidor público predeterminado (el de render.yaml). Se puede cambiar en ONLINE → Servidor. */
-export const DEFAULT_SERVER = 'wss://football-elite-3d.onrender.com/ws';
+export const DEFAULT_SERVER = 'wss://football-elite-3d-19vc.onrender.com/ws';
 
 export interface OnlineProfile {
   name: string;
@@ -65,12 +65,12 @@ export function normalizeServer(input: string): string {
   return s;
 }
 
-/** Servidores a probar, en orden: el configurado, el que sirve la página (si es un servidor del juego) y el público. */
+/** Servidores a probar, en orden: el configurado, el que sirve la página (si es un servidor del juego; no en la app de Android, que corre en https://localhost) y el público. */
 export function serverCandidates(custom: string): string[] {
   const c = normalizeServer(custom);
   if (c) return [c];
   const list: string[] = [];
-  if (typeof location !== 'undefined' && /^https?:$/.test(location.protocol) && !/claude|usercontent|github\.io/.test(location.hostname)) {
+  if (typeof location !== 'undefined' && /^https?:$/.test(location.protocol) && !/claude|usercontent|github\.io/.test(location.hostname) && !(location.hostname === 'localhost' && !location.port)) {
     // en desarrollo (Vite, puerto 5173) el servidor está en el 8080
     const host = location.port === '5173' ? `${location.hostname}:8080` : location.host;
     list.push(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${host}/ws`);
