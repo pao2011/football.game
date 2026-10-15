@@ -864,6 +864,7 @@ export class App {
           <div class="row"><label>Proteger · precisión · dejar pasar</label><span>LT · RB · LB (mantener)</span></div>
           <div class="row"><label>Autopase · primer toque orientado</label><span>RT + 2× stick der. · RB + stick der.</span></div>
           <div class="row"><label>Cancelar pase/tiro</label><span>LB + RB</span></div>
+          <div class="row"><label>Centro filtrado · pase filtrado · bombeado al pie</label><span>Y + X · A + Y · A + X (a la vez)</span></div>
           <div class="row"><label>Presión de equipo · arquero en la línea</label><span>RB RB (mantener) · Y Y</span></div>
           <div class="row"><label>Colocar al arquero · soltar el balón</label><span>R3 + stick der. · Y (tocar)</span></div>
           <div class="row"><label>Regates</label><span>Stick derecho · R3 ruleta</span></div>

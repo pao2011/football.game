@@ -167,6 +167,12 @@ R1 = RB = **Shift** · L1 = LB = **Q** · L2 = LT = **Ctrl** · R2 = RT = **E** 
 | Arquero | Salida · **quedarse en la línea** · **colocarlo** (palos, adelante, atrás) | △ mantenido · △ △ · R3 + stick derecho | W · W W · — |
 | Arquero | **Soltar el balón** al suelo · saque de puerta potente | △ (tocar) con el balón en las manos · R1 + ✕ / R1 + □ | W · Shift + S / Shift + A |
 | Táctica | Mentalidad del equipo | cruceta ← / → | — |
+| **Dos botones a la vez** | **Centro filtrado** (bombeado al espacio, a la espalda de la defensa, para el que llega) | △ + □ | W + A |
+| **Dos botones a la vez** | **Pase filtrado raso** entre los dos centrales | ✕ + △ | S + W |
+| **Dos botones a la vez** | **Pase bombeado al pie** (por encima del rival que tapa la línea) | ✕ + □ | S + A |
+| **Dos botones a la vez** | Amago | ○ + ✕ | D + S |
+
+En el móvil también funcionan pulsando dos botones a la vez (p. ej. ELEVADO + AL HUECO = centro filtrado). La **barra de potencia** es pequeña y aparece **encima de la cabeza** del jugador, sin rótulos en el centro de la pantalla.
 
 No se implementaron: el regate en órbita sin tocar el balón (L1 + L2 + stick) y la tijereta/chilena como animación propia (los remates de primera con el balón alto siguen siendo voleas o cabezazos).
 
@@ -271,20 +277,20 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Prueba | Comando | Resultado |
 |---|---|---|
 | Comprobación de tipos (TypeScript estricto) | `npx tsc --noEmit` | ✅ sin errores |
-| Unitarias y de simulación | `npm test` | ✅ **135/135** |
+| Unitarias y de simulación | `npm test` | ✅ **140/140** |
 | Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **14/14** |
 | Extremo a extremo con mando (mando estándar simulado) | `npm run build && npm run test:e2e:gamepad` | ✅ **7/7** |
 | Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **17/17** |
 | Ejecutable de Linux bajo Xvfb | — | ✅ sin errores (detalle abajo) |
 
-**Unitarias y de simulación (135 pruebas)**
+**Unitarias y de simulación (140 pruebas)**
 - **Tipos de tiro (5)**: la vaselina supera los 3 m y entra bajo el travesaño; el raso no pasa de 0,8 m; el potente es más rápido y menos preciso; la rosca lleva efecto; y las combinaciones funcionan.
 - **Regates (4)**: los 6 regates se ejecutan con su animación y control del balón; la bicicleta cambia de dirección; un regate puede superar al defensor (que entonces no puede entrar) pero no siempre; y la ruleta protege el balón.
 - **Controles de tiros y regates (7)**: Q+D vaselina, Q+Shift+D potente, Ctrl+D amago, doble toque raso, D y luego S amago, I/K/J/L/R regates, gestos táctiles, y Q con balón como modificador (no cambia de jugador).
 - **Física del balón**: gravedad, rebotes y reposo; los botes pierden energía; distancia de los pases rasos; el balón nunca se acelera solo; puntería de los tiros; curva con efecto; rebote en el poste sin atravesarlo; la red retiene el balón; la red lateral impide entrar desde fuera.
 - **Partidos IA contra IA**: con varias semillas se completan sin bloqueos, sin coordenadas inválidas, con pases, tiros y posesión de ambos equipos; también se marcan goles y la eliminatoria pasa por la prórroga y los penales hasta tener ganador.
 - **Reglas**: detección de goles, saque de banda y córner correctos, fuera de juego, falta y tarjeta por barrida trasera sin tocar el balón, y entrada limpia que no es falta.
-- **Árbitro y esquema avanzado (26)**: tarjeta con gesto y cámara, aviso verbal y amarilla al reincidir; stick derecho (cambio de jugador, colocar al arquero, pared avanzada, primer toque orientado, autopase); pases, tiros y centros con modificadores; finalización perfecta; cancelar; proteger el balón, precisión y dejar pasar; contener, barrida con alcance, presión de equipo, arquero en la línea, carga con el hombro y soltar el balón.
+- **Árbitro y esquema avanzado (31)**: incluye las combinaciones de dos botones a la vez (centro filtrado, pase filtrado entre centrales, bombeado al pie, amago) y que pulsarlos uno detrás de otro no las active; tarjeta con gesto y cámara, aviso verbal y amarilla al reincidir; stick derecho (cambio de jugador, colocar al arquero, pared avanzada, primer toque orientado, autopase); pases, tiros y centros con modificadores; finalización perfecta; cancelar; proteger el balón, precisión y dejar pasar; contener, barrida con alcance, presión de equipo, arquero en la línea, carga con el hombro y soltar el balón.
 - **Centros y esquema clásico (12)**: el balón pasa por el punto y la altura pedidos; centro normal, tenso y bajo llegan a la altura correcta; los rematadores atacan el área; los centros de la IA acaban en remates y goles; X / RB + X / X X / X X X, RB + A, LB + Y, LB para el desmarque y la mentalidad con la cruceta.
 - **Recepción (5)**: la IA sale al encuentro del pase y el jugador controlado lo busca y lo recibe con el stick hacia el pase, hacia un costado, hacia atrás o sin tocarlo.
 - **Mando (7)**: stick, botones, gatillos analógicos, cruceta, stick derecho, dispositivos falsos, mapas no estándar y sin mando.

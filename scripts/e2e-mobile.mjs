@@ -105,7 +105,7 @@ await check('Botón PASE realiza el saque inicial / el joystick mueve al jugador
   void before;
 });
 
-await check('Botón TIRO carga la potencia y dispara', async () => {
+await check('Botón TIRO carga la potencia (barra pequeña sobre el jugador, sin rótulo) y dispara', async () => {
   await page.evaluate(() => {
     const m = window.__runner.match; m.phase = 'play';
     const t = m.teams[0]; const p = t.players[9]; t.controlled = p; const g = t.attackDir;
@@ -119,6 +119,18 @@ await check('Botón TIRO carga la potencia y dispara', async () => {
     el.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 7, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' }));
   }, c);
   await page.waitForTimeout(1200);
+  // barra de potencia: pequeña, sin rótulo y encima de la cabeza del jugador (no en el centro de la pantalla)
+  const bar = await page.evaluate(() => {
+    const el = document.querySelector('.hud .powerbar');
+    const r = el.getBoundingClientRect();
+    const a = window.__runner.hud.powerAnchor;
+    return { visible: !el.classList.contains('hidden'), w: r.width, cx: r.left + r.width / 2, bottom: r.bottom, text: el.textContent.trim(), ax: a?.x, ay: a?.y };
+  });
+  await page.screenshot({ path: join(OUT, 'm-powerbar.png') });
+  assert(bar.visible, 'la barra no se ve al cargar');
+  assert(bar.w < 70, 'la barra es grande: ' + bar.w);
+  assert(bar.text === '', 'la barra tiene rótulo: ' + bar.text);
+  assert(Math.abs(bar.cx - bar.ax) < 3 && Math.abs(bar.bottom - bar.ay) < 3, 'la barra no está sobre el jugador: ' + JSON.stringify(bar));
   await page.evaluate(({ x, y }) => window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 7, bubbles: true, clientX: x, clientY: y, pointerType: 'touch' })), c);
   await waitFor(() => window.__runner.match.teams[0].stats.shots > window.__s0, 15000);
 });

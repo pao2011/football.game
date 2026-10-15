@@ -54,7 +54,16 @@ interface Buffered {
   notBefore?: number;
   /** LT (L2) mantenido al soltar: pase con rosca, vaselina corta, globo al hueco, centro anticipado. */
   l2?: boolean;
+  /** Dos botones a la vez: △+□ centro filtrado, ✕+△ pase filtrado entre centrales, ✕+□ bombeado al pie. */
+  combo?: ButtonCombo;
 }
+type ButtonCombo = 'throughCross' | 'splitPass' | 'loftToFeet';
+/** Combinaciones de dos botones pulsados a la vez (orden indiferente). */
+const COMBOS: Record<string, ButtonCombo> = {
+  'lob+through': 'throughCross',
+  'pass+through': 'splitPass',
+  'lob+pass': 'loftToFeet',
+};
 const KICK_ACTIONS: KickAction[] = ['pass', 'through', 'lob', 'shoot'];
 
 /**
@@ -86,6 +95,9 @@ export class HumanController implements TeamController {
   private lbUsed = false;
   private rbUsed = false;
   private teamPressHold = false;
+  private pressAt: Partial<Record<KickAction, number>> = {};
+  private suppress = new Set<KickAction>();
+  private combo: { kind: ButtonCombo; fired: boolean } | null = null;
   private knockFlick: { x: number; y: number; at: number } | null = null;
   private rbTapAt = -10;
   private yTapAt = -10;
@@ -493,6 +505,20 @@ export class HumanController implements TeamController {
     const input = this.input;
     this.charge = null;
     const owner = m.owner === p;
+    // Dos botones pulsados casi a la vez (< 0,15 s): combinación (centro filtrado, pase filtrado…)
+    for (const a of KICK_ACTIONS) {
+      if (!input.pressed(a)) continue;
+      for (const b of KICK_ACTIONS) {
+        if (b === a || !input.held(b) || m.time - (this.pressAt[b] ?? -9) > 0.15) continue;
+        const kind = COMBOS[[a, b].sort().join('+')];
+        if (kind) {
+          this.combo = { kind, fired: false };
+          this.suppress.add(a);
+          this.suppress.add(b);
+        }
+      }
+      this.pressAt[a] = m.time;
+    }
     // Amago de tiro: con el tiro cargando, pulsar pase (como en FIFA: tiro + pase)
     if (owner && input.held('shoot') && input.pressed('pass') && (p.mobile || p.action.kind === 'trap')) {
       const left = new Vector3(Math.cos(p.facing), 0, -Math.sin(p.facing));
@@ -549,6 +575,21 @@ export class HumanController implements TeamController {
         this.charge = { action: a, value: clamp(input.holdTime(a) / this.settings.powerBarTime, 0, 1), label: this.chargeLabel(a) };
       }
       const rel = input.released(a);
+      if (rel >= 0 && this.suppress.has(a)) {
+        // combinación: se golpea al soltar el primero de los dos botones
+        this.suppress.delete(a);
+        const c = this.combo;
+        if (c && !c.fired) {
+          c.fired = true;
+          const power = clamp(rel / this.settings.powerBarTime, 0.3, 1);
+          const dir = hasStick ? stick.clone().normalize() : p.forward();
+          const main: KickAction = c.kind === 'splitPass' ? 'through' : c.kind === 'loftToFeet' ? 'pass' : 'lob';
+          this.buffered = { action: main, power, finesse: input.held('finesse'), until: m.time + 0.7, dir, noStick: !hasStick, combo: c.kind };
+          this.lastCharge = { action: main, value: power, at: m.time };
+        }
+        if (this.suppress.size === 0) this.combo = null;
+        continue;
+      }
       if (rel >= 0) {
         if (a === 'shoot' && this.cancelShootRelease) { this.cancelShootRelease = false; input.takeGesture('shot'); continue; }
         if (a === 'pass' && this.cancelPassRelease) { this.cancelPassRelease = false; continue; }
@@ -654,6 +695,10 @@ export class HumanController implements TeamController {
   private makeKick(m: Match, team: Team, p: Player, b: Omit<Buffered, 'until'>, header: boolean) {
     const err = 1;
     const dir = b.dir;
+    if (b.combo && !header) {
+      const req = this.comboKick(m, team, p, b, err);
+      if (req) return req;
+    }
     switch (b.action) {
       case 'shoot': {
         const st: ShotStyle = header ? { ...NORMAL_SHOT } : b.style ?? { ...NORMAL_SHOT, finesse: b.finesse };
@@ -737,6 +782,57 @@ export class HumanController implements TeamController {
         return buildLob(m, p, target, b.finesse ? 17 + b.power * 5 : 28 + b.power * 10, err, q ?? undefined, 'lob');
       }
     }
+  }
+
+  /**
+   * Golpeos de dos botones a la vez:
+   *  · △ + □ (Y + X): centro filtrado, bombeado al espacio a la espalda de la defensa para el que llega
+   *  · ✕ + △ (A + Y): pase filtrado raso, entre los dos defensores más cercanos al receptor
+   *  · ✕ + □ (A + X): pase bombeado al pie, por encima del rival que tapa la línea
+   */
+  private comboKick(m: Match, team: Team, p: Player, b: Omit<Buffered, 'until'>, err: number) {
+    const dir = b.dir;
+    const goal = team.attackGoal;
+    if (b.combo === 'throughCross') {
+      const q = this.pickReceiver(m, team, p, dir, true, !b.noStick) ?? chooseCrossTarget(m, team, p).receiver;
+      if (!q) return null;
+      // al espacio entre el receptor y el arco, dentro del área
+      const gx = goal.x - q.pos.x;
+      const gz = -q.pos.z * 0.6;
+      const gl = Math.hypot(gx, gz) || 1;
+      const lead = Math.min(9, Math.max(4, gl - 6));
+      const point = new Vector3(q.pos.x + (gx / gl) * lead, 0, q.pos.z + (gz / gl) * lead);
+      point.x = clamp(point.x, -HALF_LENGTH + 5, HALF_LENGTH - 5);
+      q.duty = 'receive';
+      q.tacticalTarget.copy(point);
+      q.forcedRunUntil = m.time + 2.5;
+      q.forcedRunTarget.copy(point);
+      return buildCross(m, p, point, 'normal', err, q);
+    }
+    if (b.combo === 'splitPass') {
+      const q = this.pickReceiver(m, team, p, dir, true, !b.noStick);
+      if (!q) return null;
+      // hueco entre los dos defensores más cercanos al receptor, y un poco por delante
+      const defs = m.otherTeam(team.index).active.filter((o) => !o.isGK).sort((x, y) => dist2D(x.pos, q.pos) - dist2D(y.pos, q.pos)).slice(0, 2);
+      const gap = defs.length === 2 ? defs[0].pos.clone().add(defs[1].pos).multiplyScalar(0.5) : q.pos.clone();
+      const ahead = new Vector3(team.attackDir, 0, 0);
+      const target = gap.lerp(q.pos, 0.35).addScaledVector(ahead, 5 + b.power * 6);
+      target.x = clamp(target.x, -HALF_LENGTH + 3, HALF_LENGTH - 3);
+      target.z = clamp(target.z, -HALF_WIDTH + 2, HALF_WIDTH - 2);
+      q.duty = 'receive';
+      q.tacticalTarget.copy(target);
+      q.forcedRunUntil = m.time + 2.5;
+      q.forcedRunTarget.copy(target);
+      const req = buildGroundPass(m, p, target, 0.45, err, q, 'through');
+      req.velocity.multiplyScalar(1.12);
+      return req;
+    }
+    if (b.combo === 'loftToFeet') {
+      const q = this.pickReceiver(m, team, p, dir, false, !b.noStick);
+      if (!q) return null;
+      return buildLob(m, p, q.pos.clone().addScaledVector(q.vel, 0.9), 46, err, q, 'lob');
+    }
+    return null;
   }
 
   /** RB (Shift) mantenido al pasar: pase tenso, un 25 % más rápido. */

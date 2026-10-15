@@ -478,3 +478,66 @@ describe('Defensa y arquero', () => {
     expect(s.m.ball.held).toBe(false);
   });
 });
+
+describe('Combinaciones de dos botones a la vez', () => {
+  const both = (s: ReturnType<typeof setup>, k1: string, k2: string, frames = 6) => {
+    s.input.setKey(k1, true);
+    s.input.setKey(k2, true);
+    s.step(frames);
+    s.input.setKey(k1, false);
+    s.input.setKey(k2, false);
+    s.step(3);
+  };
+
+  it('△ + □ (W + A): centro filtrado al espacio para el que llega', () => {
+    const s = setup();
+    s.p.pos.set(HALF_LENGTH - 30, 0, 18);
+    s.m.ball.reset(HALF_LENGTH - 29.5, 18);
+    s.m.owner = s.p;
+    s.A.pos.set(HALF_LENGTH - 22, 0, 2);
+    both(s, 'KeyW', 'KeyA');
+    const k = s.kicks.pop()!;
+    expect(k.kind).toBe('cross');
+    expect(k.target).toBe(s.A.id);
+    expect(k.vy).toBeGreaterThan(3);
+    // el destino está por delante del receptor, hacia el arco
+    expect(s.A.forcedRunTarget.x).toBeGreaterThan(s.A.pos.x + 2);
+  });
+
+  it('✕ + △ (S + W): pase filtrado raso entre los dos centrales', () => {
+    const s = setup();
+    const d1 = s.m.teams[1].players[2];
+    const d2 = s.m.teams[1].players[3];
+    d1.pos.set(24, 0, -4);
+    d2.pos.set(24, 0, 4);
+    both(s, 'KeyS', 'KeyW');
+    const k = s.kicks.pop()!;
+    expect(k.kind).toBe('through');
+    expect(k.vy).toBeLessThan(1);
+    expect(Math.abs(s.A.forcedRunTarget.z)).toBeLessThan(3); // por el hueco entre los dos
+    expect(s.A.forcedRunTarget.x).toBeGreaterThan(24);
+  });
+
+  it('✕ + □ (S + A): pase bombeado al pie', () => {
+    const s = setup();
+    both(s, 'KeyS', 'KeyA');
+    const k = s.kicks.pop()!;
+    expect(k.kind).toBe('lob');
+    expect(k.target).toBe(s.A.id);
+    expect(k.vy).toBeGreaterThan(6);
+  });
+
+  it('pulsados uno después de otro (no a la vez) no hacen la combinación', () => {
+    const s = setup();
+    s.tap('KeyS', 3);
+    s.step(2);
+    expect(s.kicks[0].kind).toBe('pass');
+  });
+
+  it('○ + ✕ (D + S): amago', () => {
+    const s = setup();
+    both(s, 'KeyD', 'KeyS', 2);
+    expect(s.p.action.kind).toBe('skill');
+    expect(s.kicks.length).toBe(0);
+  });
+});
