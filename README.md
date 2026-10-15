@@ -4,10 +4,13 @@
 
 <p align="center">
   <a href="https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk"><img alt="Descargar APK" src="https://img.shields.io/badge/DESCARGAR%20APK-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white"></a>
+  <a href="https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D-Windows.zip"><img alt="Descargar para Windows" src="https://img.shields.io/badge/DESCARGAR-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white"></a>
   <img alt="Icono" src="docs/art/icon-1024.png" width="96">
 </p>
 
 **📲 [Descargar el APK para Android](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk)** — se publica automáticamente en *Releases* cada vez que se actualiza `main`. También desde el servidor online: **https://football-elite-3d-19vc.onrender.com/apk**, o con el botón *Descargar APK* del menú de la versión web.
+
+**💻 [Descargar para Windows](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D-Windows.zip)** (extrae el ZIP y abre `FootballElite3D.exe`) · **[Juego en un solo archivo HTML](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.html)** (cualquier PC: doble clic). Se publican en *Releases* con cada actualización de `main`.
 
 **💻 Jugar en PC (Windows, Mac o Linux) sin instalar nada:** pulsa **`<> Code` → `Download ZIP`**, **extrae** el ZIP (en Windows: clic derecho → *Extraer todo…*; no lo abras desde dentro del ZIP) y haz doble clic en **`index.html`** o en **`jugar.html`**. Se abre en tu navegador (Chrome, Edge o Firefox) y funciona sin conexión. Más opciones en la [sección 3](#3-cómo-iniciar-el-juego).
 
@@ -58,7 +61,7 @@ Todos los recursos (modelos, animaciones, estadio, público, texturas, escudos, 
 
 > **¿Pantalla en blanco?** Antes pasaba porque `index.html` carga el código fuente TypeScript, que el navegador no puede ejecutar sin el servidor de desarrollo. Ahora redirige a `jugar.html`. Si aun así ves la pantalla en blanco, comprueba que **extrajiste** el ZIP (no lo abras desde dentro) y que usas un navegador actualizado con WebGL2 (Chrome, Edge o Firefox).
 
-**Ejecutable de Windows:** cada push compila `FootballElite3D.exe` en GitHub Actions. Descárgalo en la pestaña *Actions* → la ejecución más reciente → artefacto **FootballElite3D-Windows**, descomprímelo y abre `FootballElite3D.exe`.
+**Ejecutable de Windows:** [descarga `FootballElite3D-Windows.zip`](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D-Windows.zip), extráelo y abre `FootballElite3D.exe` (si Windows SmartScreen avisa, pulsa *Más información → Ejecutar de todas formas*: el ejecutable no está firmado). GitHub Actions lo compila en cada push y lo publica en [Releases → latest](https://github.com/pao2011/football.game/releases/latest) cuando se actualiza `main`; en otras ramas queda como artefacto **FootballElite3D-Windows** en la pestaña *Actions*.
 
 ### Desde el código fuente
 
@@ -385,7 +388,7 @@ El plan de mejoras futuras está en **[ROADMAP.md](ROADMAP.md)**.
 - **Equipación del visitante**: se elige automáticamente para que contraste con la del local; no se puede seleccionar a mano.
 - **Animaciones procedurales**: más simples que una captura de movimiento real; las caras son estilizadas.
 - **IA**: tiende a jugar mucho por el centro del campo y a generar pocas ocasiones claras en dificultades bajas. Es funcional y táctica, pero mejorable.
-- Los ejecutables de Windows se generaron pero **solo se probó el de Linux** (no había Windows disponible). El ZIP de Windows lo compila GitHub Actions en `windows-latest`. `jugar.html` se probó abriéndolo como archivo (`file://`) en Chromium para Linux, no en un PC con Windows.
+- Los ejecutables de Windows se generaron pero **solo se probó el de Linux** (no había Windows disponible). El ZIP de Windows lo compila GitHub Actions en `windows-latest` y se publica en *Releases*; no está firmado, así que SmartScreen puede avisar la primera vez. `jugar.html` se probó abriéndolo como archivo (`file://`) en Chromium para Linux, no en un PC con Windows.
 - **`jugar.html` hay que regenerarlo** (`npm run build`) y subirlo después de cambiar el código; si no, el ZIP del repositorio trae la versión anterior.
 - **Vibración del mando**: usa la API `vibrationActuator` de Chrome/Edge; Firefox y Safari no la admiten (no vibra, pero no da error).
 - **Móvil**: probado con emulación táctil en Chromium, no en un teléfono físico. El APK **no se pudo compilar en el entorno de desarrollo**: la política de red bloquea la descarga del Android SDK (dl.google.com). Se compila en GitHub Actions o con Android Studio. El rendimiento en teléfonos de gama baja no está medido; si va lento, reduce la escala de resolución.

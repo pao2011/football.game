@@ -43,7 +43,10 @@ jobs:
   windows:
     name: Ejecutable de Windows (ZIP)
     runs-on: windows-latest
-    needs: test-web
+    # después del APK: así el Release "latest" ya existe cuando se sube el ZIP
+    needs: [test-web, android]
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,10 +58,23 @@ jobs:
         run: npm run package
         env:
           PLATFORMS: win32
+      - name: Comprimir
+        shell: pwsh
+        run: Compress-Archive -Path release/FootballElite3D-win32-x64 -DestinationPath FootballElite3D-Windows.zip
       - uses: actions/upload-artifact@v4
         with:
           name: FootballElite3D-Windows
-          path: release/FootballElite3D-win32-x64/
+          path: FootballElite3D-Windows.zip
+      - name: Publicar ZIP de Windows y juego en un solo archivo (Release "latest")
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp dist/jugar.html FootballElite3D.html
+          gh release edit latest --title "Football Elite 3D — descargas más recientes" --latest \
+            --notes "Compilado automáticamente desde la rama main. Android: instala FootballElite3D.apk (permite \"orígenes desconocidos\"). Windows: descarga FootballElite3D-Windows.zip, extráelo y abre FootballElite3D.exe. Cualquier PC: abre FootballElite3D.html con doble clic en Chrome, Edge o Firefox."
+          gh release upload latest FootballElite3D-Windows.zip FootballElite3D.html --clobber
 
   android:
     name: APK de Android
@@ -99,9 +115,9 @@ jobs:
           git tag -f latest
           git push -f origin latest
           if gh release view latest >/dev/null 2>&1; then
-            gh release edit latest --title "Football Elite 3D — APK más reciente" --latest
+            gh release edit latest --title "Football Elite 3D — descargas más recientes" --latest
           else
-            gh release create latest --title "Football Elite 3D — APK más reciente" --latest \
+            gh release create latest --title "Football Elite 3D — descargas más recientes" --latest \
               --notes "APK de Android compilado automáticamente desde la rama main. Descárgalo e instálalo (permite \"orígenes desconocidos\")."
           fi
           gh release upload latest FootballElite3D.apk --clobber

@@ -2,7 +2,7 @@
 
 Plan de lo que falta o se puede mejorar, ordenado por fases. Cada punto dice **qué** hacer, **por qué** importa y **dónde** está el código que hay que tocar, para poder tomarlo como tarea suelta. Esfuerzo aproximado: **S** (horas), **M** (1–3 días), **L** (una semana o más).
 
-Ya hecho en esta versión: `jugar.html` (el juego en un solo archivo, se abre con doble clic tras descargar el ZIP), sonidos nuevos del balón (cabezazo, control, toques de conducción, rodar por el césped, vallas, guantes del arquero), bocina de gol, vibración del mando y prueba automática sin servidor.
+Ya hecho en esta versión: `jugar.html` (el juego en un solo archivo, se abre con doble clic tras descargar el ZIP), sonidos nuevos del balón (cabezazo, control, toques de conducción, rodar por el césped, vallas, guantes del arquero), bocina de gol, vibración del mando prueba automática sin servidor y ZIP de Windows publicado en *Releases*.
 
 ---
 
@@ -10,7 +10,7 @@ Ya hecho en esta versión: `jugar.html` (el juego en un solo archivo, se abre co
 
 | # | Mejora | Por qué | Dónde | Esfuerzo |
 |---|---|---|---|---|
-| 1.1 | **Publicar el ZIP de Windows en *Releases*** junto al APK (hoy solo es un artefacto de *Actions*) | Descarga directa para PC con un enlace fijo, como el APK | `.github/workflows/ci.yml` (trabajo `windows`) | S |
+| 1.1 | ~~Publicar el ZIP de Windows en *Releases* junto al APK~~ ✅ hecho | Descarga directa para PC con un enlace fijo, como el APK | `.github/workflows/ci.yml` (trabajo `windows`) | S |
 | 1.2 | **Regenerar `jugar.html` automáticamente** en `main` (o un *hook* de pre-commit) | Que el ZIP del repositorio nunca quede con una versión vieja | `ci.yml`, `scripts/single-file.mjs` | S |
 | 1.3 | **Sonido 3D del balón**: panear y atenuar golpeos y botes según la posición respecto a la cámara | Ahora todo suena en el centro; con paneo se "ve" con el oído dónde está la jugada | `src/audio/AudioEngine.ts` (añadir `StereoPannerNode` por voz), `MatchAudio.ts` (pasar `x,z` del evento) | M |
 | 1.4 | **Volumen separado para el balón** y para el árbitro en *Configuración → Sonido* | Hay jugadores que quieren el público alto y el balón bajo, o al revés | `Settings.ts`, `App.ts` (panel Sonido), un bus `ball` en `AudioEngine` | S |
