@@ -21,6 +21,15 @@ import { NetClient, cachedProfile, serverCandidates, type FinalMsg, type MatchSt
 import { DIVISIONS } from '../../server/divisions.mjs';
 import type { OnlineLink } from '../game/MatchRunner';
 
+/** Descarga directa de la APK de Android (la publica GitHub Actions en cada actualización de main). */
+export const APK_URL = 'https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk';
+
+/** ¿Se está ejecutando dentro de la app de Android? */
+function isNativeApp() {
+  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+  return !!cap?.isNativePlatform?.() || (location.protocol === 'https:' && location.hostname === 'localhost' && !location.port);
+}
+
 const QUICK_CHAT = ['¡Buen partido!', '¡Qué golazo!', '¡Uy, casi!', '¡Vamos!', 'Perdón', '¡Gracias!'];
 
 const DIFFS: Difficulty[] = ['amateur', 'pro', 'world', 'legend'];
@@ -231,6 +240,7 @@ export class App {
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
           <button class="menu-item" data-act="controls">Controles<small>Teclado y mando · reasignar teclas</small></button>
+          ${!isElectron && !isNativeApp() ? '<button class="menu-item apk-item" data-act="apk">📲 Descargar APK<small>Instala el juego en tu Android</small></button>' : ''}
           ${isElectron ? '<button class="menu-item" data-act="quit">Salir</button>' : ''}
         </div>
         <div class="menu-hero">
@@ -247,6 +257,7 @@ export class App {
       settings: () => this.settingsScreen(() => this.mainMenu()),
       controls: () => this.controlsScreen(() => this.mainMenu()),
       quit: () => window.close(),
+      apk: () => { window.open(APK_URL, '_blank', 'noopener'); },
     }, () => this.start());
   }
 

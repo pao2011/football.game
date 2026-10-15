@@ -490,3 +490,4 @@ body.touch .lower-third { bottom: 230px; }
 .remote-pause b { font-family: var(--display); font-size: clamp(36px, 7vw, 64px); letter-spacing: .12em; }
 .remote-pause span { color: #cfd8ee; font-size: 16px; }
 .remote-pause .rp-sec { color: #19e68c; font-weight: 800; }
+.menu-item.apk-item { border-color: rgba(61,220,132,0.5); } .menu-item.apk-item small { color: #3ddc84; }

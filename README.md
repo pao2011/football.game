@@ -7,7 +7,7 @@
   <img alt="Icono" src="docs/art/icon-1024.png" width="96">
 </p>
 
-**📲 [Descargar el APK para Android](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk)** — se publica automáticamente en *Releases* cada vez que se actualiza `main`.
+**📲 [Descargar el APK para Android](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk)** — se publica automáticamente en *Releases* cada vez que se actualiza `main`. También desde el servidor online: **https://football-elite-3d-19vc.onrender.com/apk**, o con el botón *Descargar APK* del menú de la versión web.
 
 Juego de fútbol 3D completo, 11 contra 11 con arquero, con física de balón propia, inteligencia artificial táctica, reglas y arbitraje, cuatro modos de juego y controles con el esquema clásico de los juegos de fútbol de PC (FIFA) para teclado y mando.
 

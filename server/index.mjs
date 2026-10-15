@@ -19,6 +19,7 @@ const TYPES = {
   '.webmanifest': 'application/manifest+json', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg',
 };
 
+const APK_URL = 'https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk';
 const store = new JsonStore(process.env.DATA_DIR || join(ROOT, 'server', 'data'));
 const lobby = new Lobby(store);
 
@@ -31,6 +32,12 @@ async function serve(req, res) {
   if (url.pathname === '/estado') {
     res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'no-store' });
     res.end(JSON.stringify({ ok: true, juego: 'football-elite-3d', online: lobby.clients.size, partidos: lobby.matches.size }));
+    return;
+  }
+  if (url.pathname === '/apk' || url.pathname === '/apk/') {
+    // atajo para compartir: lleva a la última APK publicada en GitHub
+    res.writeHead(302, { location: APK_URL, 'cache-control': 'no-store' });
+    res.end();
     return;
   }
   let path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '');
