@@ -124,11 +124,12 @@ Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y 
 | Cambiar de jugador (sin balón) | **Q** (con dirección: al compañero en esa dirección) | LB / L1 |
 | **Tiro raso** | **D** + **D** (doble toque) | B + B |
 | **Vaselina** | **Q + D** | LB + B |
-| **Tiro potente** | **Q + Shift + D** o **Ctrl + D** | LB + RB + B o LT + B |
-| Combinaciones | rosca rasa (Shift+D, D) · potente raso (Ctrl+D, D) · rosca potente (Ctrl+Shift+D) · vaselina potente (Ctrl+Q+D) | ídem |
+| **Tiro potente** (la cámara hace zoom) | **Q + Shift + D** | LB + RB + B / L1 + R1 + ○ |
+| Combinaciones | rosca rasa (Shift+D, D) · **potente raso** (Q+Shift+D con pulsación muy breve) | ídem |
+| **Finalización perfecta** | **D** y otra vez **D** justo antes del impacto | ○ y ○ al impactar |
 | **Amago de tiro** | mientras cargas **D**, pulsa **S** | B y luego A |
 | **Regates** | **J / L** bicicleta · **Shift + J / L** elástico · **I** sombrero · **K** arrastre · **R** ruleta (o teclado numérico 4/6/8/2/5) | stick derecho · R3 ruleta |
-| Contener (jockey) | **Ctrl** o **C** | LT / L2 |
+| Contener (jockey) · **proteger el balón** (con balón) | **Ctrl** o **C** | LT / L2 |
 | Pausa | **Esc** o **P** | Start / Options |
 | **En defensa**: presionar al portador | mantener **S** | mantener A / ✕ |
 | **En defensa**: entrada | **D** | B / ○ |
@@ -138,6 +139,36 @@ Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y 
 | Arquero con el balón | **S** saque con la mano · **A / D** despeje · **W** saque alto | A · X / B · Y |
 | Penal a favor | flechas para apuntar + mantener **D** | stick + B / ○ |
 | Penal en contra | mantén ← / → al patear el rival (lado de la estirada) | stick |
+
+### Esquema avanzado (mando PlayStation · teclado)
+
+R1 = RB = **Shift** · L1 = LB = **Q** · L2 = LT = **Ctrl** · R2 = RT = **E** · ✕ = A = **S** · ○ = B = **D** · □ = X = **A** · △ = Y = **W** · R3 = **R**
+
+| Situación | Acción | Mando | Teclado |
+|---|---|---|---|
+| Sin balón | **Cambiar de jugador** al compañero en esa dirección | stick derecho | — (Q + flecha) |
+| Pases | Raso potente · al hueco potente · bombeado potente | R1 + ✕ · R1 + △ · R1 + □ | Shift + S · Shift + W · Shift + A |
+| Pases | Con rosca (rodea al rival) · vaselina corta | L2 + ✕ · L2 + R1 + ✕ | Ctrl + S · Ctrl + Shift + S |
+| Pases | Al hueco bombeado | L1 + △ o L2 + △ | Q + W o Ctrl + W |
+| Pases | **Pared** (el pasador corre y la devolución va para él) | L1 + ✕ | Q + S |
+| Pases | **Pared avanzada**: tras pasar con R1, el pasador corre hacia donde marques | R1 + ✕ y stick derecho | — |
+| Pases | Pedir que un compañero venga en corto · mandar a uno al espacio (hacia donde apuntes) | R1 (tocar) · L1 (tocar) + stick izq. | Shift · Q (+ flecha) |
+| Pases | **Cancelar** el pase o tiro que se arma | L1 + R1 | Q + Shift |
+| Tiros | Con rosca · vaselina · potente · raso potente | R1 + ○ · L1 + ○ · L1 + R1 + ○ · L1 + R1 + ○ breve | Shift + D · Q + D · Q + Shift + D (breve) |
+| Tiros | **Amago de tiro** · **finalización perfecta** | L2 + ○ · ○ y ○ al impactar | Ctrl + D · D y D |
+| Centros | Normal · bajo · raso | □ · □ □ · □ □ □ | A · A A · A A A |
+| Centros | Raso potente · bombeado alto · al segundo palo · anticipado con rosca (desde tres cuartos) | R1 + □ · L1 + □ · L1 + R1 + □ · L2 + □ | Shift + A · Q + A · Q + Shift + A · Ctrl + A |
+| Conducción | **Proteger el balón** con el cuerpo · conducción de precisión · regate estático de cara al arco | L2 · R1 mantenido · L1 mantenido | Ctrl · Shift · Q |
+| Conducción | **Dejar pasar** el balón (amago de control) | L1 mantenido antes de recibir | Q |
+| Conducción | **Autopase largo** en carrera · **primer toque orientado** | R2 + doble toque del stick derecho · R1 + stick derecho antes de recibir | — |
+| Defensa | Contener / **cerrar líneas de pase** automáticamente · **carga con el hombro** | ✕ mantenido · ✕ repetido pegado al rival | S |
+| Defensa | Entrada · **barrida** (más alcance cuanto más se mantiene) · brega rápida | ○ · □ (soltar) · L2 + R2 | D · A · Ctrl + E |
+| Defensa | Presión de un compañero · **presión de equipo** | R1 mantenido · doble toque de R1 y mantener | Shift · Shift Shift |
+| Arquero | Salida · **quedarse en la línea** · **colocarlo** (palos, adelante, atrás) | △ mantenido · △ △ · R3 + stick derecho | W · W W · — |
+| Arquero | **Soltar el balón** al suelo · saque de puerta potente | △ (tocar) con el balón en las manos · R1 + ✕ / R1 + □ | W · Shift + S / Shift + A |
+| Táctica | Mentalidad del equipo | cruceta ← / → | — |
+
+No se implementaron: el regate en órbita sin tocar el balón (L1 + L2 + stick) y la tijereta/chilena como animación propia (los remates de primera con el balón alto siguen siendo voleas o cabezazos).
 
 El mando sigue el **esquema clásico de FIFA**: mismos botones y mismas combinaciones (RB + A pase tenso, LB + Y globo al hueco, RB + X centro tenso, X X centro bajo, X X X centro raso, LB para pedir el desmarque, LB + B vaselina, RB + B rosca, B B raso, B y luego A amago) y la **cruceta no mueve al jugador**: ← / → cambian la mentalidad del equipo (de ultradefensiva a ultraofensiva; se ve un indicador bajo el marcador).
 
@@ -188,6 +219,7 @@ El mando sigue el **esquema clásico de FIFA**: mismos botones y mismas combinac
 - Faltas: el pie llega antes al rival que al balón; la gravedad depende de si la entrada es por detrás, de la velocidad y de la distancia al balón.
 - Tarjeta amarilla, segunda amarilla y roja (incluida la ocasión manifiesta de gol del último defensor); el expulsado sale del campo y, si es el arquero, lo sustituye un jugador de campo.
 - Tiros libres con barrera a 9,15 m y penales.
+- **Árbitro** en el campo: sigue el juego en diagonal, silba, señala la dirección de los tiros libres y, en las faltas, corre hacia el infractor para hacer un **aviso verbal** (gesto con el dedo; si el jugador reincide, amarilla) o **mostrar la tarjeta amarilla o roja** con el brazo en alto. La cámara hace un plano del árbitro con el jugador, aparece un rótulo con la tarjeta y la reanudación espera a que termine. Segunda amarilla = roja.
 - **Centros**: la trayectoria se calcula con la física real para que el balón llegue a la cabeza del rematador (centro normal, bombeado por encima de la primera línea), a media altura (tenso) o a la cintura (bajo), con efecto alejándose del arquero. Cuando un compañero va a centrar, los delanteros **atacan el área** (primer palo, punto de penal, segundo palo y borde), el que recibe va al **punto de remate** y no a donde bota, y se elige al rematador con espacio y sin defensores en la trayectoria. Los cabezazos se dirigen al palo contrario al arquero y se apuntan en el instante del contacto. En pruebas con 40 centros desde la banda, un atacante toca primero en el 100 % (antes, 90 %) y hay el doble de goles.
 - **Recepción de pases**: el jugador al que le pasas va a buscar el balón aunque el stick siga apuntando a otro lado; el stick vuelve a mandar al recibirlo.
 - **Tiros libres directos con trayectoria (estilo FC)**: cerca del arco, la cámara se coloca detrás del lanzador (algo más atrás y por encima) y se ve el recorrido previsto del balón con puntos y una mira en el arco. Con el stick / flechas / joystick se mueve la mira (lado y altura), con **J / L**, el stick derecho o los botones táctiles **EFECTO ↶ ↷** se curva la trayectoria, y manteniendo **TIRO** se elige la potencia (poca potencia = parábola más alta; mucha = más tenso). El recorrido se calcula con la misma física del balón, así que lo que ves es lo que hace (más un pequeño error según el lanzador). PASE y ELEVADO siguen sirviendo para jugarlo en corto o centrar.
@@ -239,19 +271,20 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Prueba | Comando | Resultado |
 |---|---|---|
 | Comprobación de tipos (TypeScript estricto) | `npx tsc --noEmit` | ✅ sin errores |
-| Unitarias y de simulación | `npm test` | ✅ **109/109** |
+| Unitarias y de simulación | `npm test` | ✅ **135/135** |
 | Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **14/14** |
-| Extremo a extremo con mando (mando estándar simulado) | `npm run build && npm run test:e2e:gamepad` | ✅ **6/6** |
+| Extremo a extremo con mando (mando estándar simulado) | `npm run build && npm run test:e2e:gamepad` | ✅ **7/7** |
 | Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **17/17** |
 | Ejecutable de Linux bajo Xvfb | — | ✅ sin errores (detalle abajo) |
 
-**Unitarias y de simulación (109 pruebas)**
+**Unitarias y de simulación (135 pruebas)**
 - **Tipos de tiro (5)**: la vaselina supera los 3 m y entra bajo el travesaño; el raso no pasa de 0,8 m; el potente es más rápido y menos preciso; la rosca lleva efecto; y las combinaciones funcionan.
 - **Regates (4)**: los 6 regates se ejecutan con su animación y control del balón; la bicicleta cambia de dirección; un regate puede superar al defensor (que entonces no puede entrar) pero no siempre; y la ruleta protege el balón.
-- **Controles de tiros y regates (7)**: Q+D vaselina, Q+Shift+D o Ctrl+D potente, doble toque raso, D y luego S amago, I/K/J/L/R regates, gestos táctiles, y Q con balón como modificador (no cambia de jugador).
+- **Controles de tiros y regates (7)**: Q+D vaselina, Q+Shift+D potente, Ctrl+D amago, doble toque raso, D y luego S amago, I/K/J/L/R regates, gestos táctiles, y Q con balón como modificador (no cambia de jugador).
 - **Física del balón**: gravedad, rebotes y reposo; los botes pierden energía; distancia de los pases rasos; el balón nunca se acelera solo; puntería de los tiros; curva con efecto; rebote en el poste sin atravesarlo; la red retiene el balón; la red lateral impide entrar desde fuera.
 - **Partidos IA contra IA**: con varias semillas se completan sin bloqueos, sin coordenadas inválidas, con pases, tiros y posesión de ambos equipos; también se marcan goles y la eliminatoria pasa por la prórroga y los penales hasta tener ganador.
 - **Reglas**: detección de goles, saque de banda y córner correctos, fuera de juego, falta y tarjeta por barrida trasera sin tocar el balón, y entrada limpia que no es falta.
+- **Árbitro y esquema avanzado (26)**: tarjeta con gesto y cámara, aviso verbal y amarilla al reincidir; stick derecho (cambio de jugador, colocar al arquero, pared avanzada, primer toque orientado, autopase); pases, tiros y centros con modificadores; finalización perfecta; cancelar; proteger el balón, precisión y dejar pasar; contener, barrida con alcance, presión de equipo, arquero en la línea, carga con el hombro y soltar el balón.
 - **Centros y esquema clásico (12)**: el balón pasa por el punto y la altura pedidos; centro normal, tenso y bajo llegan a la altura correcta; los rematadores atacan el área; los centros de la IA acaban en remates y goles; X / RB + X / X X / X X X, RB + A, LB + Y, LB para el desmarque y la mentalidad con la cruceta.
 - **Recepción (5)**: la IA sale al encuentro del pase y el jugador controlado lo busca y lo recibe con el stick hacia el pase, hacia un costado, hacia atrás o sin tocarlo.
 - **Mando (7)**: stick, botones, gatillos analógicos, cruceta, stick derecho, dispositivos falsos, mapas no estándar y sin mando.

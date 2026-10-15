@@ -240,7 +240,7 @@ export function updateTeamTactics(m: Match, team: Team) {
 
 /** Asigna presionadores (presión al portador y cobertura). */
 function assignPress(m: Match, team: Team, carrier: Player, players: Player[]): Player[] {
-  const n = team.human ? (team.teammatePressUntil > m.time ? 2 : 1) : m.diff.pressers;
+  const n = team.human ? (team.teamPressUntil > m.time ? 3 : team.teammatePressUntil > m.time ? 2 : 1) : m.diff.pressers;
   const pressDist = team.human ? 18 : m.diff.pressDistance;
   const sorted = players.filter((p) => !(team.human && p === team.controlled && team.teammatePressUntil <= m.time)).sort((a, b) => dist2D(a.pos, carrier.pos) - dist2D(b.pos, carrier.pos));
   const res: Player[] = [];

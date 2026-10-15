@@ -138,6 +138,24 @@ export class HUD {
     setTimeout(() => el.remove(), 380);
   }
 
+  private third: HTMLElement | null = null;
+  private thirdUntil = 0;
+
+  /** Rótulo inferior de transmisión (tarjetas y avisos del árbitro). */
+  lowerThird(title: string, sub: string, seconds: number) {
+    if (!this.third) {
+      this.third = document.createElement('div');
+      this.third.className = 'lower-third hidden';
+      this.root.appendChild(this.third);
+    }
+    this.third.innerHTML = `<b>${title}</b><small>${sub}</small>`;
+    this.third.classList.remove('hidden');
+    this.third.style.animation = 'none';
+    void this.third.offsetWidth;
+    this.third.style.animation = '';
+    this.thirdUntil = this.match.time + seconds;
+  }
+
   showToast(html: string, color = '#ffcf3f', duration = 2.2) {
     if (!this.popups) return;
     this.toast.innerHTML = html;
@@ -165,6 +183,17 @@ export class HUD {
         const col = e.kind === 'yellow' ? '#ffd400' : '#ff2b3b';
         const label = e.kind === 'yellow' ? 'Tarjeta amarilla' : e.kind === 'second' ? 'Segunda amarilla · Expulsado' : 'Tarjeta roja · Expulsado';
         this.showToast(`<span class="card-icon" style="background:${col}"></span>${label}: ${e.text ?? ''}`, col, 3);
+        // rótulo de transmisión mientras el árbitro muestra la tarjeta (siempre visible)
+        const team = m.teams[e.team ?? 0];
+        const third = e.kind === 'second'
+          ? '<span class="card-icon" style="background:#ffd400"></span><span class="card-icon" style="background:#e0201c"></span>SEGUNDA AMARILLA · EXPULSADO'
+          : e.kind === 'red' ? '<span class="card-icon" style="background:#e0201c"></span>TARJETA ROJA · EXPULSADO' : '<span class="card-icon" style="background:#ffd400"></span>TARJETA AMARILLA';
+        this.lowerThird(third, `${e.text ?? ''} · ${team?.data.name ?? ''}`, 3.4);
+        break;
+      }
+      case 'warning': {
+        const team = m.teams[e.team ?? 0];
+        this.lowerThird('<span class="warn-icon">!</span>AVISO DEL ÁRBITRO', `${e.text ?? ''} · ${team?.data.name ?? ''} · la próxima es amarilla`, 2.2);
         break;
       }
       case 'offside':
@@ -213,6 +242,7 @@ export class HUD {
     this.show(this.sbAdded, added);
     if (added) this.setText(this.sbAdded, `+${m.announcedAdded}`);
     if (m.time > this.bannerUntil || m.phase === 'replay') this.show(this.banner, false);
+    if (this.third && (m.time > this.thirdUntil || m.phase === 'replay')) this.third.classList.add('hidden');
     if (m.time > this.toastUntil) this.show(this.toast, false);
     this.show(this.replayTag, m.phase === 'replay');
 

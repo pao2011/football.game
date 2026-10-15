@@ -32,7 +32,7 @@ export function buildLob(m: Match, p: Player, target: Vector3, elevationDeg: num
 }
 
 /** Tipo de centro (esquema clásico): normal (X), tenso (RB + X), bajo (X dos veces) y raso (X tres veces). */
-export type CrossStyle = 'normal' | 'driven' | 'low' | 'ground';
+export type CrossStyle = 'normal' | 'driven' | 'low' | 'ground' | 'groundDriven' | 'high' | 'early';
 
 /** Zonas de remate del área según el lado del centro: primer palo, punto de penal, segundo palo y borde. */
 export function crossSpots(team: Team, side: number): Vector3[] {
@@ -105,8 +105,9 @@ export function chooseCrossTarget(m: Match, team: Team, p: Player, dir?: Vector3
 export function buildCross(m: Match, p: Player, point: Vector3, style: CrossStyle, errorScale: number, receiver?: Player | null): KickRequest {
   const from = ballFrom(m);
   const team = m.teams[p.team];
-  if (style === 'ground') {
+  if (style === 'ground' || style === 'groundDriven') {
     const req = buildGroundPass(m, p, point, 0.7, errorScale, receiver ?? undefined);
+    if (style === 'groundDriven') req.velocity.multiplyScalar(1.3);
     return { ...req, kind: 'cross' };
   }
   const dist = dist2D(from, point);
@@ -119,17 +120,44 @@ export function buildCross(m: Match, p: Player, point: Vector3, style: CrossStyl
   const leftAway = (hz * -team.attackDir) > 0; // la izquierda del golpeo apunta hacia el propio campo
   const spinY = (style === 'low' ? 14 : 22) * (leftAway ? 1 : -1);
   // centro normal: bombeado (~24°) por encima de la primera línea; cae justo detrás del rematador,
-  // así el balón le llega a la altura de la cabeza
-  if (style === 'normal') {
+  // así el balón le llega a la altura de la cabeza. Alto: más bombeado (~36°). Anticipado: con más rosca.
+  if (style === 'normal' || style === 'high' || style === 'early') {
+    const el = style === 'high' ? 36 : style === 'early' ? 20 : 24;
+    const sp = style === 'early' ? spinY * 1.6 : spinY;
     const beyond = new Vector3(point.x + hx * 1.0, 0.7, point.z + hz * 1.0);
-    const lofted = loftedVelocity(from, beyond, 24).length();
-    const s2 = solveKickThrough(from, beyond, Math.min(30, lofted), spinY, (24 * Math.PI) / 180);
+    const lofted = loftedVelocity(from, beyond, el).length();
+    const s2 = solveKickThrough(from, beyond, Math.min(30, lofted), sp, (el * Math.PI) / 180);
     if (s2) return { kind: 'cross', velocity: s2.velocity, spin: s2.spin, targetId: receiver?.id, power: clamp(s2.velocity.length() / 32, 0.3, 1), errorScale };
-    return buildLob(m, p, beyond, 24, errorScale, receiver ?? undefined, 'cross');
+    return buildLob(m, p, beyond, el, errorScale, receiver ?? undefined, 'cross');
   }
   const sol = solveKickThrough(from, target, Math.min(32, speed), spinY);
   if (sol) return { kind: 'cross', velocity: sol.velocity, spin: sol.spin, targetId: receiver?.id, power: clamp(sol.velocity.length() / 32, 0.3, 1), errorScale };
   return buildLob(m, p, point, style === 'driven' ? 15 : 22, errorScale, receiver ?? undefined, 'cross');
+}
+
+/**
+ * Pase con rosca (LT + A): sale casi a ras de suelo y se curva alrededor del rival que tapa la línea
+ * de pase. Devuelve null si no hace falta o no hay solución (se usa el pase normal).
+ */
+export function buildCurvedPass(m: Match, p: Player, target: Vector3, errorScale: number, receiver?: Player | null): KickRequest | null {
+  const from = ballFrom(m);
+  const dist = dist2D(from, target);
+  if (dist < 6) return null;
+  // curva hacia el lado contrario del rival más cercano a la línea de pase
+  const hx = (target.x - from.x) / dist;
+  const hz = (target.z - from.z) / dist;
+  let side = 1;
+  let best = Infinity;
+  for (const o of m.otherTeam(p.team as 0 | 1).active) {
+    const k = (o.pos.x - from.x) * hx + (o.pos.z - from.z) * hz;
+    if (k < 1 || k > dist) continue;
+    const lat = (o.pos.x - from.x) * hz - (o.pos.z - from.z) * hx; // + = a la izquierda del pase
+    if (Math.abs(lat) < best) { best = Math.abs(lat); side = lat >= 0 ? -1 : 1; }
+  }
+  const speed = Math.min(26, groundPassVelocity(from, target, 0.3).length() * 1.05);
+  const sol = solveKickThrough(from, new Vector3(target.x, 0.35, target.z), speed, 26 * side);
+  if (!sol) return null;
+  return { kind: 'pass', velocity: sol.velocity, spin: sol.spin, targetId: receiver?.id, power: clamp(speed / 30, 0.2, 1), errorScale };
 }
 
 /** Tipo de disparo. Las banderas se combinan (p. ej. rosca + raso, potente + raso, vaselina + rosca). */

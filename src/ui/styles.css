@@ -408,3 +408,12 @@ body.touch .scoreboard > div { font-size: 15px; padding: 0 8px; }
 .mentality { position: absolute; top: 66px; left: 22px; font-family: var(--display); font-size: 12px; letter-spacing: 0.12em; background: rgba(10,14,24,0.8); padding: 4px 10px; border-radius: 10px; color: #e8eefc; }
 .mentality .bars { color: #19e68c; letter-spacing: 0; margin-right: 6px; }
 body.touch .mentality { top: 48px; left: 10px; }
+
+/* Rótulo de tarjetas y avisos del árbitro */
+.lower-third { position: absolute; left: 50%; bottom: 160px; transform: translateX(-50%); background: linear-gradient(90deg, rgba(10,14,24,0.95), rgba(20,26,44,0.92)); border-left: 4px solid #ffd400; border-radius: 6px; padding: 8px 18px; font-family: var(--display); color: #fff; white-space: nowrap; animation: ltIn 0.35s cubic-bezier(.2,.9,.3,1.1) both; }
+.lower-third b { display: flex; align-items: center; gap: 8px; font-size: 18px; letter-spacing: 0.1em; }
+.lower-third small { display: block; font-family: var(--body); font-size: 12px; letter-spacing: 0.08em; opacity: 0.8; margin-top: 2px; }
+.lower-third .card-icon { width: 14px; height: 19px; border-radius: 2px; display: inline-block; box-shadow: 0 1px 3px rgba(0,0,0,0.6); }
+.lower-third .warn-icon { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #ffd400; color: #111; font-size: 14px; }
+body.touch .lower-third { bottom: 230px; }
+@keyframes ltIn { from { opacity: 0; transform: translateX(-50%) translateY(16px); } }

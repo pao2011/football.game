@@ -4,7 +4,7 @@ import type { Input, Action, TouchGesture } from '../input/Input';
 import type { Match, TeamController } from '../sim/Match';
 import type { Player } from '../sim/Player';
 import type { Team } from '../sim/Team';
-import { buildCross, buildGroundPass, buildLob, buildShot, chooseCrossTarget, NORMAL_SHOT, shotStyleName, type CrossStyle, type ShotStyle } from '../ai/Actions';
+import { buildCross, buildCurvedPass, buildGroundPass, buildLob, buildShot, chooseCrossTarget, crossSpots, NORMAL_SHOT, shotStyleName, type CrossStyle, type ShotStyle } from '../ai/Actions';
 import type { SkillKind } from '../sim/types';
 import { requestDive } from '../ai/GoalkeeperAI';
 import { aerialIntercept, getBallPrediction } from '../ai/Predict';
@@ -52,6 +52,8 @@ interface Buffered {
   taps?: number;
   /** El centro espera un instante para poder contar más toques de X. */
   notBefore?: number;
+  /** LT (L2) mantenido al soltar: pase con rosca, vaselina corta, globo al hueco, centro anticipado. */
+  l2?: boolean;
 }
 const KICK_ACTIONS: KickAction[] = ['pass', 'through', 'lob', 'shoot'];
 
@@ -82,6 +84,19 @@ export class HumanController implements TeamController {
   freeKick: { restart: Restart; aimZ: number; aimY: number; curve: number; path: Vector3[]; target: Vector3; power: number } | null = null;
   private lbDownAt = -1;
   private lbUsed = false;
+  private rbUsed = false;
+  private teamPressHold = false;
+  private knockFlick: { x: number; y: number; at: number } | null = null;
+  private rbTapAt = -10;
+  private yTapAt = -10;
+  /** Último pase del humano (para la pared avanzada con el stick derecho y la pared clásica). */
+  private lastPass: { player: Player; at: number; r1: boolean } | null = null;
+  /** Pared clásica (LB + A): el pasador corre y el siguiente pase va para él. */
+  private giveAndGo: { runner: Player; until: number } | null = null;
+  /** Instante del último tiro potente (la cámara hace un pequeño zoom). */
+  powerShotAt = -10;
+  /** Finalización perfecta (segundo toque de tiro en el instante justo). */
+  timedShotAt = -10;
   /** Último centro ordenado (para convertirlo en bajo o raso con toques seguidos de X). */
   private lastLob: { b: Omit<Buffered, 'until'>; at: number } | null = null;
   /** Instante del último cambio de mentalidad (para mostrarlo en el HUD). */
@@ -91,12 +106,14 @@ export class HumanController implements TeamController {
    * Desmarque pedido (LB, como en FIFA): el compañero adelantado mejor situado corre al espacio,
    * a la espalda de la defensa, durante unos segundos.
    */
-  private callRun(m: Match, team: Team, p: Player) {
+  private callRun(m: Match, team: Team, p: Player, dir: Vector3 | null = null) {
     const pu = team.u(p.pos);
     const off = offsideLineU(m, team);
     let best: Player | null = null;
     let bestS = -Infinity;
-    for (const q of team.active) {
+    // apuntando con el stick: el compañero en esa dirección
+    if (dir && dir.lengthSq() > 0.01) best = this.inDirection(m, team, p, dir.clone().normalize());
+    if (!best) for (const q of team.active) {
       if (q === p || q.isGK || q.sentOff) continue;
       const qu = team.u(q.pos);
       if (qu < pu - 8) continue;
@@ -112,6 +129,17 @@ export class HumanController implements TeamController {
     best.forcedRunUntil = m.time + 3.5;
     best.forcedRunTarget.copy(team.toWorld(u, l));
     m.emit({ type: 'skill', kind: 'run', team: team.index, text: 'Desmarque' });
+  }
+
+  /** RB tocado con el balón: el compañero más cercano viene a ofrecerse en corto. */
+  private callShort(m: Match, team: Team, p: Player) {
+    const q = team.active.filter((x) => x !== p && !x.isGK && !x.sentOff).sort((a, b) => dist2D(a.pos, p.pos) - dist2D(b.pos, p.pos))[0];
+    if (!q) return;
+    const d = dist2D(q.pos, p.pos);
+    const k = d > 8 ? (d - 7) / d : 0;
+    q.forcedRunUntil = m.time + 2;
+    q.forcedRunTarget.set(q.pos.x + (p.pos.x - q.pos.x) * k, 0, q.pos.z + (p.pos.z - q.pos.z) * k);
+    m.emit({ type: 'skill', kind: 'run', team: team.index, text: 'Pide la pelota' });
   }
 
   /** Penal del jugador: punto del arco al que irá (solo para la ayuda visual). */
@@ -149,7 +177,7 @@ export class HumanController implements TeamController {
 
     // ----- Selección del jugador controlado -----
     let p = team.controlled;
-    if (!p || p.sentOff || (p.isGK && m.gkHolding !== p && !(m.restart?.taker === p && m.phase !== 'play') && !(m.phase === 'shootout'))) {
+    if (!p || p.sentOff || (p.isGK && m.gkHolding !== p && m.owner !== p && !(m.restart?.taker === p && m.phase !== 'play') && !(m.phase === 'shootout'))) {
       p = this.nearestToBall(m, team, null);
       team.controlled = p;
     }
@@ -187,13 +215,46 @@ export class HumanController implements TeamController {
       if (input.pressed('switch')) { this.lbDownAt = m.time; this.lbUsed = false; }
       if (input.held('switch') && KICK_ACTIONS.some((a) => input.held(a))) this.lbUsed = true;
       const lbRel = input.released('switch');
-      if (lbRel >= 0 && lbRel < 0.45 && !this.lbUsed) this.callRun(m, team, p);
+      if (lbRel >= 0 && lbRel < 0.45 && !this.lbUsed) this.callRun(m, team, p, hasStick ? stick : null);
+      // RB (R1) tocado solo, con el balón: un compañero viene a pedirla en corto
+      if (input.pressed('finesse')) this.rbUsed = false;
+      if (input.held('finesse') && (KICK_ACTIONS.some((a) => input.held(a)) || input.holdTime('finesse') > 0.35)) this.rbUsed = true;
+      const rbRel = input.released('finesse');
+      if (rbRel >= 0 && rbRel < 0.35 && !this.rbUsed) this.callShort(m, team, p);
     }
     // Cambio manual (Q / LB)
-    if (inPlay && input.pressed('switch') && m.gkHolding !== p && m.owner !== p) {
+    if (inPlay && input.pressed('switch') && m.gkHolding !== p && m.owner !== p && !(m.intendedReceiver === p && !m.owner)) {
       const next = hasStick ? this.inDirection(m, team, p, stick) : this.nearestToBall(m, team, p);
       // el cambio manual tiene prioridad: el cambio automático espera un rato
       if (next) { team.controlled = next; p = next; this.switchCooldown = 2.5; }
+    }
+    // Stick derecho (mando), como en FIFA:
+    //  · sin balón: cambia al compañero en esa dirección
+    //  · R3 mantenido: coloca al arquero (hacia un palo, adelante o atrás)
+    //  · justo después de un pase con RB: el pasador corre en esa dirección (pared avanzada)
+    //  · RB mantenido con un pase viniendo: primer toque orientado hacia ese lado
+    const flick = input.rsFlick;
+    if (flick && inPlay) {
+      const w = new Vector3().addScaledVector(this.view.right, flick.x).addScaledVector(this.view.forward, flick.y);
+      w.y = 0;
+      w.normalize();
+      const lp = this.lastPass;
+      if (input.held('skillSpin')) {
+        team.gkManual.set(w.x * 2, 0, w.z * 2.6);
+        team.gkManualUntil = m.time + 4;
+      } else if (lp && m.time - lp.at < 1.6 && lp.r1 && lp.player !== p && m.owner !== p) {
+        lp.player.forcedRunUntil = m.time + 3;
+        lp.player.forcedRunTarget.copy(lp.player.pos).addScaledVector(w, 13);
+        lp.player.forcedRunTarget.x = clamp(lp.player.forcedRunTarget.x, -HALF_LENGTH + 3, HALF_LENGTH - 3);
+        lp.player.forcedRunTarget.z = clamp(lp.player.forcedRunTarget.z, -HALF_WIDTH + 2, HALF_WIDTH - 2);
+        this.lastPass = null;
+      } else if (input.held('finesse') && ((m.intendedReceiver === p && !m.owner) || (this.receiveLock?.player === p && m.time < this.receiveLock.until))) {
+        p.firstTouchDir.copy(w);
+        p.firstTouchUntil = m.time + 2.5;
+      } else if (m.owner !== p && m.gkHolding !== p) {
+        const next = this.inDirection(m, team, p, w);
+        if (next) { team.controlled = next; p = next; this.switchCooldown = 2.5; }
+      }
     }
     // Cambio automático en defensa
     if (inPlay && this.settings.autoSwitch && this.switchCooldown <= 0 && m.owner !== p && m.gkHolding !== p) {
@@ -263,14 +324,51 @@ export class HumanController implements TeamController {
     const incoming = !owner && !m.owner && !m.ball.held && m.intendedReceiver === p && !!pt && pt.team === team.index && pt.player !== p && pt.deliberate && m.time - pt.time < 4;
     const windup = !!lock && lock.player === p && m.time < lock.until && !owner && !!m.owner && m.owner.team === team.index;
     if (lock && !windup && !incoming) this.receiveLock = null;
-    if (incoming || windup) {
+    if (incoming && input.held('switch')) {
+      // LB (L1) mantenido antes de recibir: deja pasar el balón (amago) para el compañero de atrás
+      receiving = true;
+      p.noTouchUntil = m.time + 0.15;
+      if (hasStick) p.desiredVel.copy(stick).multiplyScalar(4);
+      else p.desiredVel.set(0, 0, 0);
+    } else if (incoming || windup) {
       receiving = true;
       if (!this.autoReceive(m, p)) {
         p.desiredVel.set(0, 0, 0);
       }
     }
+    // Con el balón: LT (L2) protege con el cuerpo; RB (R1) o LB (L1) mantenidos, conducción de precisión
+    const mine = m.owner === p;
+    p.shielding = mine && input.held('jockey');
+    p.precision = mine && !p.shielding && (input.held('finesse') || (input.held('switch') && input.holdTime('switch') > 0.3));
+    if (p.shielding) {
+      // de espaldas al rival más cercano, el balón del otro lado
+      let near: Player | null = null;
+      let nd = Infinity;
+      for (const o of m.otherTeam(team.index).active) {
+        const d = dist2D(o.pos, p.pos);
+        if (d < nd) { nd = d; near = o; }
+      }
+      if (near && nd < 5) p.desiredFacing = Math.atan2(p.pos.x - near.pos.x, p.pos.z - near.pos.z);
+    } else if (p.precision && input.held('switch') && !input.held('finesse')) {
+      // regate estático (LB): de cara al arco rival mientras se mueve en cualquier dirección
+      p.desiredFacing = Math.atan2(team.attackGoal.x - p.pos.x, team.attackGoal.z - p.pos.z);
+    }
+    // R2 (RT) + doble toque del stick derecho: autopase largo en carrera
+    if (mine && input.held('sprint') && input.rsFlick) {
+      const f = input.rsFlick;
+      if (this.knockFlick && m.time - this.knockFlick.at < 0.4 && f.x * this.knockFlick.x + f.y * this.knockFlick.y > 0.6) {
+        const w = new Vector3().addScaledVector(this.view.right, f.x).addScaledVector(this.view.forward, f.y);
+        w.y = 0;
+        w.normalize();
+        const target = m.ball.pos.clone().addScaledVector(w, 10);
+        m.requestKick(p, { ...buildGroundPass(m, p, target, 0.4, 1), kind: 'pass', targetId: p.id });
+        this.knockFlick = null;
+      } else {
+        this.knockFlick = { x: f.x, y: f.y, at: m.time };
+      }
+    }
     if (receiving) {
-      // va a buscar el balón
+      // va a buscar el balón (o lo deja pasar)
     } else if (hasStick) {
       p.desiredVel.copy(stick).multiplyScalar(9.5);
     } else if (!owner && this.autoReceive(m, p)) {
@@ -328,7 +426,7 @@ export class HumanController implements TeamController {
     const st: ShotStyle = {
       chip: q && !sh, // Q (LB) + tiro = vaselina
       finesse: sh && !q, // Shift (RB) + tiro = rosca
-      power: (q && sh) || input.held('jockey'), // Q + Shift (LB + RB) o Ctrl/LT/POTENTE = potente
+      power: q && sh, // Q + Shift (LB + RB) = potente (LT / Ctrl ahora es proteger el balón y el amago)
       low: false,
     };
     if (t.chip) st.chip = true;
@@ -356,6 +454,8 @@ export class HumanController implements TeamController {
     const input = this.input;
     const g = input.takeGesture('skill');
     if (m.owner !== p || !(p.mobile || p.action.kind === 'trap')) return;
+    // con RT (R2) el stick derecho hace el autopase largo, no un regate
+    if (!g && input.held('sprint') && Math.hypot(input.rs.x, input.rs.y) > 0.45) return;
     let flick: { x: number; y: number } | null = null;
     let spin = input.pressed('skillSpin');
     if (g) {
@@ -403,15 +503,46 @@ export class HumanController implements TeamController {
         return;
       }
     }
-    // Tiro raso: doble toque del botón de tiro mientras el jugador arma el disparo
+    // LB + RB (L1 + R1): cancela el pase o el tiro que se está armando
+    if ((input.pressed('switch') && input.held('finesse')) || (input.pressed('finesse') && input.held('switch'))) {
+      if (p.action.kind === 'kick' && !p.action.done) {
+        p.clearAction();
+        this.buffered = null;
+        if (input.held('shoot')) this.cancelShootRelease = true;
+        if (input.held('pass')) this.cancelPassRelease = true;
+        this.lastCharge = { action: 'pass', value: 0, at: m.time, label: 'CANCELADO' };
+        return;
+      }
+    }
+    // LT + B (L2 + círculo) con el balón en el suelo: amago de tiro
+    if (owner && input.held('jockey') && input.pressed('shoot') && (p.mobile || p.action.kind === 'trap')) {
+      const left = new Vector3(Math.cos(p.facing), 0, -Math.sin(p.facing));
+      const side: 1 | -1 = hasStick ? (stick.dot(left) >= 0 ? 1 : -1) : (m.rng.next() < 0.5 ? 1 : -1);
+      if (m.requestSkill(p, 'fakeshot', side)) {
+        this.cancelShootRelease = true;
+        return;
+      }
+    }
+    // Segundo toque de tiro durante el armado:
+    //  · justo al impactar (≈0,1 s antes del contacto) = finalización perfecta (mucho más precisa)
+    //  · enseguida (bastante antes) = tiro raso
     const k = p.action.kick;
     if (input.pressed('shoot') && p.action.kind === 'kick' && !p.action.done && k && this.lastShot
-      && (k.kind === 'shoot' || k.kind === 'finesse') && !k.style?.low && !k.style?.chip) {
-      const st: ShotStyle = { ...this.lastShot.style, low: true };
-      const { z, y } = this.shotAim(m, team, p, this.lastShot.dir, this.lastShot.power, st.finesse);
-      p.action.kick = buildShot(m, p, z, y, this.lastShot.power, st, 1);
-      this.lastCharge = { action: 'shoot', value: this.lastShot.power, at: m.time, label: shotStyleName(st) };
-      this.cancelShootRelease = true;
+      && (k.kind === 'shoot' || k.kind === 'finesse' || k.kind === 'chip')) {
+      const remaining = p.action.contactAt - p.action.time;
+      if (remaining <= 0.11) {
+        k.errorScale *= 0.3;
+        k.power = Math.min(1, k.power * 1.08);
+        this.timedShotAt = m.time;
+        this.lastCharge = { action: 'shoot', value: this.lastShot.power, at: m.time, label: 'FINALIZACIÓN PERFECTA' };
+        this.cancelShootRelease = true;
+      } else if (!k.style?.low && !k.style?.chip) {
+        const st: ShotStyle = { ...this.lastShot.style, low: true };
+        const { z, y } = this.shotAim(m, team, p, this.lastShot.dir, this.lastShot.power, st.finesse);
+        p.action.kick = buildShot(m, p, z, y, this.lastShot.power, st, 1);
+        this.lastCharge = { action: 'shoot', value: this.lastShot.power, at: m.time, label: shotStyleName(st) };
+        this.cancelShootRelease = true;
+      }
     }
     for (const a of KICK_ACTIONS) {
       if (input.held(a)) {
@@ -426,6 +557,12 @@ export class HumanController implements TeamController {
         const style = a === 'shoot' ? this.currentStyle(input.takeGesture('shot')) : undefined;
         // modo asistido: un toque rápido (sin cargar la barra) golpea con potencia automática
         if (this.settings.assist && rel < 0.28) power = this.autoPower(m, team, p, a, style);
+        // LB + RB + B con una pulsación muy breve: tiro raso potente
+        if (style && style.power && !style.chip && rel < 0.2 && input.held('switch') && input.held('finesse')) {
+          style.low = true;
+          style.chip = false;
+          power = Math.max(power, 0.78);
+        }
         // X (A en teclado) varias veces seguidas: centro bajo (2) o raso (3), como en FIFA
         if (a === 'lob' && this.lastLob && m.time - this.lastLob.at < 0.4) {
           const taps = Math.min(3, (this.lastLob.b.taps ?? 1) + 1);
@@ -444,7 +581,7 @@ export class HumanController implements TeamController {
         }
         this.lastCharge = { action: a, value: power, at: m.time, label: style ? shotStyleName(style) : undefined };
         const crossZone = a === 'lob' && team.u(p.pos) > HALF_LENGTH - 30 && Math.abs(p.pos.z) > 12;
-        this.buffered = { action: a, power, finesse: input.held('finesse'), lb: input.held('switch'), until: m.time + (crossZone ? 1.0 : 0.7), dir, noStick: !hasStick, style, taps: 1, notBefore: crossZone ? m.time + 0.25 : undefined };
+        this.buffered = { action: a, power, finesse: input.held('finesse'), lb: input.held('switch'), l2: input.held('jockey'), until: m.time + (crossZone ? 1.0 : 0.7), dir, noStick: !hasStick, style, taps: 1, notBefore: crossZone ? m.time + 0.25 : undefined };
         if (a === 'lob') this.lastLob = { b: { ...this.buffered }, at: m.time };
       }
     }
@@ -468,14 +605,36 @@ export class HumanController implements TeamController {
       const req = this.makeKick(m, team, p, b, true);
       req.kind = 'header';
       req.velocity.multiplyScalar(0.7);
-      if (b.action === 'shoot') req.targetId = undefined;
+      if (b.action === 'shoot') {
+        req.targetId = undefined;
+        // el cabezazo se reapunta en el contacto hacia el mismo punto del arco
+        const gx = HALF_LENGTH * team.attackDir;
+        if (Math.abs(req.velocity.x) > 0.5) {
+          const t = (gx - ball.x) / req.velocity.x;
+          if (t > 0) req.aimAt = new Vector3(gx, 0, ball.z + req.velocity.z * t);
+        }
+      }
       return m.requestKick(p, req);
     }
     if (!isOwner && (dH > 1.25 || ball.y > 1.2)) return false;
     if (m.owner && m.owner !== p) return false;
     const req = this.makeKick(m, team, p, b, false);
     const ok = m.requestKick(p, req);
-    if (ok) this.switchToReceiver(m, team, req.targetId);
+    if (ok) {
+      this.switchToReceiver(m, team, req.targetId);
+      if (b.action !== 'shoot') {
+        this.lastPass = { player: p, at: m.time, r1: b.finesse };
+        // LB + A (L1 + X): pared clásica, el pasador sale corriendo al espacio y la devolución va para él
+        if (b.lb && b.action === 'pass') {
+          const run = team.toWorld(clamp(team.u(p.pos) + 14, -HALF_LENGTH + 8, HALF_LENGTH - 8), team.l(p.pos) * 0.8);
+          p.forcedRunUntil = m.time + 3.2;
+          p.forcedRunTarget.copy(run);
+          this.giveAndGo = { runner: p, until: m.time + 4.5 };
+        }
+      } else if (b.style?.power) {
+        this.powerShotAt = m.time;
+      }
+    }
     return ok;
   }
 
@@ -504,8 +663,22 @@ export class HumanController implements TeamController {
       }
       case 'pass': {
         let q = this.pickReceiver(m, team, p, dir, false, !b.noStick);
+        // pared: la devolución va para el que salió corriendo
+        const gg = this.giveAndGo;
+        if (gg && gg.runner !== p && m.time < gg.until && !gg.runner.sentOff) {
+          q = gg.runner;
+          this.giveAndGo = null;
+          const lead = q.pos.clone().addScaledVector(q.vel, 0.7);
+          return this.driven(buildGroundPass(m, p, lead, b.power - 0.2, err, q), b);
+        }
         // sin dirección y sin nadie delante: al compañero mejor situado en cualquier dirección
         if (!q && b.noStick) q = this.pickFrom(p, team.active.filter((x) => x !== p && !x.isGK), dir);
+        // LT + RB + A: vaselina corta (saca el balón del suelo); LT + A: pase con rosca
+        if (q && b.l2 && b.finesse) return buildLob(m, p, q.pos.clone().addScaledVector(q.vel, 0.6), 44, err, q, 'lob');
+        if (q && b.l2) {
+          const curved = buildCurvedPass(m, p, q.pos.clone().addScaledVector(q.vel, 0.5), err, q);
+          if (curved) return curved;
+        }
         if (!q) {
           const target = p.pos.clone().addScaledVector(dir, 8 + b.power * 25);
           return buildGroundPass(m, p, target, b.power - 0.3, err);
@@ -527,8 +700,8 @@ export class HumanController implements TeamController {
         const target = base.clone().addScaledVector(run, lead);
         target.x = clamp(target.x, -HALF_LENGTH + 3, HALF_LENGTH - 3);
         target.z = clamp(target.z, -HALF_WIDTH + 2, HALF_WIDTH - 2);
-        // LB + Y: pase al hueco bombeado por encima de la defensa
-        const req = b.lb ? buildLob(m, p, target, 34, err, q ?? undefined, 'lob') : buildGroundPass(m, p, target, 0.25, err, q ?? undefined, 'through');
+        // LB + Y o LT + Y: pase al hueco bombeado por encima de la defensa; RB + Y: al hueco potente
+        const req = b.lb || b.l2 ? buildLob(m, p, target, 34, err, q ?? undefined, 'lob') : this.driven(buildGroundPass(m, p, target, 0.25, err, q ?? undefined, 'through'), b);
         if (q) {
           q.duty = 'receive';
           q.tacticalTarget.copy(target);
@@ -539,11 +712,20 @@ export class HumanController implements TeamController {
       default: {
         // Centro si estamos en zona de centro; si no, pase elevado
         const pu = team.u(p.pos);
-        const crossing = pu > HALF_LENGTH - 30 && Math.abs(p.pos.z) > 12;
+        // LT + X: centro anticipado con rosca, ya desde tres cuartos de campo
+        const crossing = (pu > HALF_LENGTH - 30 && Math.abs(p.pos.z) > 12) || (!!b.l2 && pu > HALF_LENGTH - 45 && Math.abs(p.pos.z) > 7);
         if (crossing) {
-          // FIFA clásico: X centro, RB + X centro tenso, X X centro bajo, X X X centro raso
-          const style: CrossStyle = (b.taps ?? 1) >= 3 ? 'ground' : (b.taps ?? 1) === 2 ? 'low' : b.finesse ? 'driven' : 'normal';
-          const { receiver, point } = chooseCrossTarget(m, team, p, b.noStick ? undefined : dir);
+          // Centros como en FIFA: X normal · RB + X raso potente · LB + X bombeado alto · LB + RB + X al segundo palo
+          // · LT + X anticipado con rosca · X X bajo · X X X raso
+          const taps = b.taps ?? 1;
+          const style: CrossStyle = taps >= 3 ? 'ground' : taps === 2 ? 'low' : b.finesse && !b.lb ? 'groundDriven' : b.lb && !b.finesse ? 'high' : b.l2 ? 'early' : 'normal';
+          let { receiver, point } = chooseCrossTarget(m, team, p, b.noStick ? undefined : dir);
+          if (b.lb && b.finesse) {
+            // al segundo palo
+            const side = Math.sign(team.l(p.pos)) || 1;
+            point = crossSpots(team, side)[2];
+            receiver = team.active.filter((x) => x !== p && !x.isGK).sort((x, y) => dist2D(x.pos, point) - dist2D(y.pos, point))[0] ?? null;
+          }
           // la potencia corre el punto hacia el segundo palo (más) o el primero (menos)
           point.addScaledVector(new Vector3(team.attackDir, 0, 0), (b.power - 0.5) * 3);
           return buildCross(m, p, point, style, err, receiver);
@@ -616,21 +798,38 @@ export class HumanController implements TeamController {
     this.charge = null;
     const carrier = m.owner;
     const ball = m.ball.pos;
-    // Presionar (mantener pase): ir automáticamente a por el portador cerrando hacia el arco
+    // A (X) mantenido: posicionamiento automático. Cerca del portador, contener por delante del arco
+    // (sin entrar); lejos, cerrar la línea de pase hacia su compañero más peligroso.
     if (input.held('pass') && carrier) {
       const goal = team.ownGoal;
-      const gx = goal.x - carrier.pos.x;
-      const gz = goal.z - carrier.pos.z;
-      const gl = Math.hypot(gx, gz) || 1;
-      const tx = carrier.pos.x + (gx / gl) * 1.0 + carrier.vel.x * 0.2;
-      const tz = carrier.pos.z + (gz / gl) * 1.0 + carrier.vel.z * 0.2;
+      let tx: number;
+      let tz: number;
+      const dc = dist2D(p.pos, carrier.pos);
+      if (dc < 8) {
+        const gx = goal.x - carrier.pos.x;
+        const gz = goal.z - carrier.pos.z;
+        const gl = Math.hypot(gx, gz) || 1;
+        tx = carrier.pos.x + (gx / gl) * 1.8 + carrier.vel.x * 0.25;
+        tz = carrier.pos.z + (gz / gl) * 1.8 + carrier.vel.z * 0.25;
+      } else {
+        const ct = m.teams[carrier.team];
+        const danger = ct.active.filter((q) => q !== carrier && !q.isGK).sort((a, b) => dist2D(a.pos, goal) - dist2D(b.pos, goal))[0];
+        const to = danger ? danger.pos : goal;
+        tx = carrier.pos.x + (to.x - carrier.pos.x) * 0.4;
+        tz = carrier.pos.z + (to.z - carrier.pos.z) * 0.4;
+      }
       const dx = tx - p.pos.x;
       const dz = tz - p.pos.z;
       const d = Math.hypot(dx, dz);
       const sp = Math.min(9.5, d * 3);
       if (d > 0.1) p.desiredVel.set((dx / d) * sp, 0, (dz / d) * sp);
       p.sprinting = input.held('sprint') || d > 4;
-      if (d < 2.5) p.desiredFacing = Math.atan2(ball.x - p.pos.x, ball.z - p.pos.z);
+      if (d < 2.5) {
+        p.desiredFacing = Math.atan2(ball.x - p.pos.x, ball.z - p.pos.z);
+        p.jockeying = dc < 4;
+      }
+      // pulsar A repetidamente corriendo al lado del rival: carga con el hombro
+      if (input.pressed('pass') && dc < 1.6 && Math.hypot(p.vel.x, p.vel.z) > 3.5) m.shoulderChallenge(p, carrier);
     } else if (input.held('pass') && !carrier) {
       const ic = interceptCache.get(p);
       if (ic) {
@@ -641,6 +840,8 @@ export class HumanController implements TeamController {
         p.sprinting = true;
       }
     }
+    // carga con el hombro también con una pulsación suelta pegado al portador
+    if (!input.held('pass') && input.pressed('pass') && carrier && dist2D(p.pos, carrier.pos) < 1.6 && Math.hypot(p.vel.x, p.vel.z) > 3.5) m.shoulderChallenge(p, carrier);
     // Contener (jockey)
     if (input.held('jockey')) {
       p.jockeying = true;
@@ -652,15 +853,33 @@ export class HumanController implements TeamController {
     if (input.pressed('shoot')) {
       if ((!hasStick || faceBall) && carrier) p.facing = Math.atan2(ball.x - p.pos.x, ball.z - p.pos.z);
       m.requestTackle(p, false);
-    } else if (input.pressed('lob')) {
+    } else if (input.released('lob') >= 0) {
+      // X (cuadrado): barrida al soltar; cuanto más se mantiene, más alcance
+      const hold = input.released('lob');
       if (!hasStick || faceBall) p.facing = Math.atan2(ball.x - p.pos.x, ball.z - p.pos.z);
       else p.facing = Math.atan2(stick.x, stick.z);
-      m.requestTackle(p, true);
+      m.requestTackle(p, true, 1 + clamp(hold - 0.15, 0, 0.5) * 0.5);
     }
-    // Salida del arquero (Y / W)
-    if (input.held('through')) team.gkRushUntil = m.time + 0.3;
-    // Presión de un compañero (RB / Shift)
-    if (input.held('finesse')) team.teammatePressUntil = m.time + 0.3;
+    // Salida del arquero (Y mantenido); doble toque de Y: el arquero se queda en la línea
+    if (input.pressed('through')) {
+      if (m.time - this.yTapAt < 0.35) team.gkHoldLineUntil = m.time + 5;
+      this.yTapAt = m.time;
+    }
+    if (input.held('through') && input.holdTime('through') > 0.15) {
+      team.gkRushUntil = m.time + 0.3;
+      team.gkHoldLineUntil = 0;
+    }
+    // Presión de un compañero (RB mantenido); doble toque de RB y mantener: presión de equipo
+    if (input.pressed('finesse')) {
+      this.teamPressHold = m.time - this.rbTapAt < 0.35;
+      this.rbTapAt = m.time;
+    }
+    if (input.held('finesse')) {
+      team.teammatePressUntil = m.time + 0.3;
+      if (this.teamPressHold) team.teamPressUntil = m.time + 0.3;
+    } else {
+      this.teamPressHold = false;
+    }
     // Balón suelto: permitir golpeos de primera
     if (!carrier) this.trackCharges(m, team, p, stick, hasStick);
   }
@@ -683,6 +902,11 @@ export class HumanController implements TeamController {
       const rel = input.released(a);
       if (rel < 0) continue;
       const power = clamp(rel / this.settings.powerBarTime, 0.1, 1);
+      // Y (triángulo) tocado con el balón en las manos: lo suelta al suelo para jugar con el pie
+      if (a === 'through' && rel < 0.3) {
+        m.gkDropBall(p);
+        return;
+      }
       if (a === 'pass' || a === 'through') {
         const q = this.pickReceiver(m, team, p, dir, false, hasStick);
         const target = q ? q.pos.clone() : p.pos.clone().addScaledVector(dir, 15 + power * 15);

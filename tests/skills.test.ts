@@ -186,7 +186,7 @@ describe('Controles de tiros y regates (teclado estilo FIFA)', () => {
     void m;
   });
 
-  it('Q + Shift + D = tiro potente; Ctrl + D también', () => {
+  it('Q + Shift + D = tiro potente (LB + RB + B); Ctrl + D = amago de tiro (LT + B)', () => {
     const a = setup();
     a.input.setKey('KeyQ', true);
     a.input.setKey('ShiftLeft', true);
@@ -195,9 +195,9 @@ describe('Controles de tiros y regates (teclado estilo FIFA)', () => {
     expect(a.p.action.kick?.style?.power).toBe(true);
     const b = setup();
     b.input.setKey('ControlLeft', true);
-    b.tap('KeyD', 20);
+    b.tap('KeyD', 2);
     b.step(2);
-    expect(b.p.action.kick?.style?.power).toBe(true);
+    expect(b.p.action.kind).toBe('skill');
   });
 
   it('doble toque de D = tiro raso', () => {

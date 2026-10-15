@@ -899,6 +899,47 @@ function skillMove(c: Ctx, p: Pose) {
   arms(e * 0.8);
 }
 
+
+// ------------------------------------------------------------------ árbitro
+/** Gestos del árbitro sobre la base de caminar/estar parado. */
+function referee(c: Ctx, p: Pose) {
+  base(c, p);
+  const n = c.n;
+  const t = c.t;
+  if (c.state === 'ref_card') {
+    // saca la tarjeta del bolsillo y la levanta bien alta con el brazo derecho
+    const up = sstep(0.05, 0.3, n) * (1 - sstep(0.88, 1, n));
+    p.rot(BONE.uarmR, -40 - 130 * up, 0, -12 - 6 * up);
+    p.rot(BONE.farmR, -60 * (1 - up) - 6);
+    p.rot(BONE.handR, 0, 0, 0);
+    // el otro brazo, extendido hacia el infractor
+    p.rot(BONE.uarmL, -55 * up, 0, 18);
+    p.rot(BONE.farmL, -10);
+    p.addRot(BONE.chest, -4 * up, 0, 0);
+    p.addRot(BONE.head, -8 * up, 0, 0);
+  } else if (c.state === 'ref_warn') {
+    // aviso verbal: brazo hacia delante y el índice que se mueve de lado a lado
+    const e = sstep(0, 0.2, n) * (1 - sstep(0.85, 1, n));
+    const wag = Math.sin(t * 11) * 9 * e;
+    p.rot(BONE.uarmR, -70 * e, wag, -10);
+    p.rot(BONE.farmR, -35 * e);
+    p.rot(BONE.uarmL, 0, 0, 20 * e);
+    p.rot(BONE.farmL, -60 * e);
+    p.addRot(BONE.chest, 6 * e, 0, 0);
+    p.addRot(BONE.head, 6 * e + Math.sin(t * 5) * 2 * e, 0, 0);
+  } else if (c.state === 'ref_point') {
+    // señala con el brazo extendido hacia donde va el tiro libre
+    const e = sstep(0, 0.18, n) * (1 - sstep(0.85, 1, n));
+    p.rot(BONE.uarmR, -88 * e, 0, -6);
+    p.rot(BONE.farmR, -4 * e);
+  } else if (c.state === 'ref_whistle') {
+    // mano a la boca para silbar
+    const e = sstep(0, 0.15, n) * (1 - sstep(0.8, 1, n));
+    p.rot(BONE.uarmR, -40 * e, 25 * e, -30 * e);
+    p.rot(BONE.farmR, -125 * e);
+  }
+}
+
 // ------------------------------------------------------------------ despacho
 const DEFAULT_DUR: Partial<Record<AnimState, number>> = {
   pass: 0.45, lob: 0.55, shoot: 0.55, header: 0.75, tackle: 0.6, slide: 1.0, getup: 1.2, throwin: 1.0, trap: 0.4, skill: 0.6,
@@ -979,6 +1020,11 @@ function evalState(c: Ctx, p: Pose) {
       return celebrate(c, p);
     case 'dejected':
       return dejected(c, p);
+    case 'ref_card':
+    case 'ref_warn':
+    case 'ref_point':
+    case 'ref_whistle':
+      return referee(c, p);
     default:
       return idle(c, p);
   }

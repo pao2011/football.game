@@ -856,6 +856,16 @@ export class App {
           <div class="row"><label>Centro tenso · bajo · raso</label><span>RB + X · X X · X X X</span></div>
           <div class="row"><label>Pedir desmarque (con balón)</label><span class="keycap">LB / L1</span></div>
           <div class="row"><label>Mentalidad del equipo</label><span>Cruceta ← / →</span></div>
+          <div class="row"><label>Cambiar jugador (sin balón)</label><span>Stick derecho</span></div>
+          <div class="row"><label>Pared · pared avanzada</label><span>LB + A · RB + A y stick der.</span></div>
+          <div class="row"><label>Pase con rosca · vaselina corta</label><span>LT + A · LT + RB + A</span></div>
+          <div class="row"><label>Centro raso potente · alto · 2.º palo · anticipado</label><span>RB + X · LB + X · LB + RB + X · LT + X</span></div>
+          <div class="row"><label>Finalización perfecta · amago</label><span>B y B al impactar · LT + B</span></div>
+          <div class="row"><label>Proteger · precisión · dejar pasar</label><span>LT · RB · LB (mantener)</span></div>
+          <div class="row"><label>Autopase · primer toque orientado</label><span>RT + 2× stick der. · RB + stick der.</span></div>
+          <div class="row"><label>Cancelar pase/tiro</label><span>LB + RB</span></div>
+          <div class="row"><label>Presión de equipo · arquero en la línea</label><span>RB RB (mantener) · Y Y</span></div>
+          <div class="row"><label>Colocar al arquero · soltar el balón</label><span>R3 + stick der. · Y (tocar)</span></div>
           <div class="row"><label>Regates</label><span>Stick derecho · R3 ruleta</span></div>
           <div class="row"><label>Pausa</label><span class="keycap">Start / Options</span></div>
           <p class="muted">Mantén pulsado el botón de pase o tiro para cargar la barra de potencia y suéltalo para golpear. Pulsar antes de recibir el balón realiza un golpeo de primera.</p>

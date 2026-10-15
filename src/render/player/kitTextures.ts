@@ -175,7 +175,8 @@ export function shirtTexture(kit: KitData, number: number, name: string, size: n
   const numColor = kit.number;
   const busy = kit.pattern === 'stripes' || kit.pattern === 'hoops';
   const outline = busy ? (luminance(numColor) > 0.5 ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,0.9)') : contrastOutline(numColor, kit.shirt);
-  const num = String(number);
+  // número 0 = sin dorsal (árbitro)
+  const num = number > 0 ? String(number) : '';
   // dorsal en la espalda
   const yTop = yToShirtCanvas(1.33, H);
   const yBot = yToShirtCanvas(1.1, H);
@@ -243,7 +244,7 @@ export function shortsTexture(kit: KitData, number: number, size: number): THREE
   const yBot = (1 - legV(0.785)) * H;
   const pxPerMx = (W * 0.5) / SHORTS_LEG_PERIM;
   const pxPerMy = (H * 0.5) / (SHORTS_LEG_Y1 - SHORTS_LEG_Y0);
-  drawText(ctx, String(number), W * 0.125, (yTop + yBot) / 2, yBot - yTop, pxPerMx / pxPerMy, kit.number === kit.shorts ? accent : kit.number, contrastOutline(kit.number, kit.shorts), W * 0.14);
+  drawText(ctx, number > 0 ? String(number) : '', W * 0.125, (yTop + yBot) / 2, yBot - yTop, pxPerMx / pxPerMy, kit.number === kit.shorts ? accent : kit.number, contrastOutline(kit.number, kit.shorts), W * 0.14);
   const tex = finish(canvas);
   cache.set(key, tex);
   return tex;

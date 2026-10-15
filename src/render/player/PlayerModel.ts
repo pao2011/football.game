@@ -139,6 +139,11 @@ export class PlayerModel {
     this.update({ state: 'idle', time: 0, duration: 0, speed: 0, variant: 0, foot: 1 }, 0);
   }
 
+  /** Engancha un objeto a un hueso (p. ej. la tarjeta en la mano del árbitro). */
+  attachToBone(bone: number, obj: THREE.Object3D) {
+    this.bones[bone].add(obj);
+  }
+
   update(anim: AnimInfo, dt: number): void {
     const pose = this.animator.update(anim, dt, this.heightScale);
     for (let i = 0; i < this.bones.length; i++) this.bones[i].quaternion.copy(pose.q[i]);

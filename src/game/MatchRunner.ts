@@ -44,6 +44,7 @@ export class MatchRunner {
   onFinished: (r: MatchResultInfo) => void = () => {};
   private disposed = false;
   private audioEngine: AudioEngine;
+  private lastPowerShot = -10;
   /** Presentación inicial en curso (la simulación espera mientras dura). */
   inIntro = false;
   private introFrames = 0;
@@ -198,6 +199,11 @@ export class MatchRunner {
     const charging = !!(this.controller && team && this.controller.charge && m.owner === team.controlled);
     const showAim = charging ? this.controller!.aimDir : null;
     const aimTarget = charging && this.controller!.charge?.action === 'shoot' ? this.controller!.aimTarget : null;
+    // tiro potente (LB + RB + B): la cámara hace un pequeño zoom
+    if (this.controller && this.controller.powerShotAt > this.lastPowerShot) {
+      this.lastPowerShot = this.controller.powerShotAt;
+      this.view.director.zoomPunch(1);
+    }
     // tiro libre directo: trayectoria prevista, mira y cámara del lanzador
     const fk = this.controller?.freeKick ?? null;
     this.view.freeKick = fk ?? this.controller?.penaltyAim ?? null;

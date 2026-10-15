@@ -118,6 +118,29 @@ await check('Partido: A pasa y R2 esprinta (botones del mando llegan al juego)',
   await page.screenshot({ path: join(OUT, 'g-match.png') });
 });
 
+await check('Sin balón, el stick derecho cambia al compañero en esa dirección (como en FIFA)', async () => {
+  await page.evaluate(() => {
+    const m = window.__runner.match; if (m.phase === 'replay') m.skipReplay();
+    m.restart = null; m.phase = 'play';
+    const t = m.teams[0]; const o = m.teams[1];
+    for (const q of m.active) q.pos.set(-40, 0, 36);
+    const c = o.players[9]; c.pos.set(30, 0, 30); c.clearAction(); m.ball.reset(30.5, 30); m.owner = c;
+    const me = t.players[5]; me.pos.set(0, 0, 0); t.controlled = me;
+    t.players[8].pos.set(20, 0, 0); t.players[7].pos.set(-20, 0, 0);
+    window.__right = t.players[8].id; window.__left = t.players[7].id;
+  });
+  // flanco del stick derecho hacia un lado y vuelta al centro
+  const flick = async (x) => { await page.evaluate((x) => { window.__pad.axes[2] = x; }, x); await page.waitForTimeout(500); await page.evaluate(() => { window.__pad.axes[2] = 0; }); await page.waitForTimeout(400); };
+  const dirSign = await page.evaluate(() => Math.sign(window.__runner.controller.view.right.x) || 1);
+  await flick(dirSign);
+  const id1 = await page.evaluate(() => window.__runner.match.teams[0].controlled.id);
+  assert(id1 === await page.evaluate(() => window.__right), 'no cambió al de la derecha: ' + id1);
+  await flick(-dirSign);
+  await flick(-dirSign);
+  const id2 = await page.evaluate(() => window.__runner.match.teams[0].controlled.id);
+  assert(id2 === await page.evaluate(() => window.__left), 'no cambió al de la izquierda: ' + id2);
+});
+
 await check('Desconexión: aviso "Mando desconectado" y el juego sigue sin entrada', async () => {
   await page.evaluate(() => { window.__padOn = false; window.dispatchEvent(new Event('gamepaddisconnected')); });
   await page.waitForSelector('.pad-toast');

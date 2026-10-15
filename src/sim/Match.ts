@@ -16,6 +16,7 @@ import { Team } from './Team';
 import { SKILL_KINDS, SKILL_NAMES, type MatchEvent, type SkillKind } from './types';
 import { evaluateOffsidePositions, isInPenaltyArea } from './Rules';
 import { placeForRestart, type RestartType } from './SetPieces';
+import { Referee } from './Referee';
 
 export type MatchPhase = 'kickoff' | 'play' | 'stoppage' | 'goal' | 'replay' | 'halftime' | 'fulltime' | 'shootout';
 
@@ -131,6 +132,10 @@ export class Match {
   private goalTime = 0;
   /** Fotogramas de la repetición del último gol (desde antes del disparo hasta el balón en la red). */
   replayClip: ReplayFrame[] = [];
+  /** Árbitro (sigue el juego, avisa y muestra tarjetas). */
+  readonly referee = new Referee();
+  /** La reanudación espera a que el árbitro termine de amonestar. */
+  private restartHoldUntil = 0;
   /** Duración (s) de la fase de repetición: el clip completo a cámara lenta. */
   replayLength = 6.5;
   finished = false;
@@ -228,6 +233,7 @@ export class Match {
   step(dt = SIM_DT) {
     this.time += dt;
     this.phaseTimer += dt;
+    if (this.phase !== 'replay') this.referee.update(dt, this.time, this.ball.pos);
     switch (this.phase) {
       case 'kickoff':
       case 'stoppage':
@@ -412,6 +418,12 @@ export class Match {
     let ahead = 0.42 + sp * 0.06;
     let tx = o.pos.x + f.x * ahead + o.vel.x * 0.05;
     let tz = o.pos.z + f.z * ahead + o.vel.z * 0.05;
+    if (o.shielding || o.precision) {
+      // protegiendo el balón o conduciendo con precisión: pegado al pie
+      ahead = o.shielding ? 0.38 : 0.45;
+      tx = o.pos.x + f.x * ahead;
+      tz = o.pos.z + f.z * ahead;
+    }
     if (o.action.kind === 'kick') {
       // armando el golpeo en carrera: el balón se acomoda al pie
       ahead = 0.5;
@@ -528,6 +540,11 @@ export class Match {
     const err = relSpeed * (1 - ctrl) * 0.22;
     const ang = this.rng.next() * Math.PI * 2;
     b.vel.set(p.vel.x * 0.85 + Math.cos(ang) * err, Math.min(b.vel.y, 0) * 0.2, p.vel.z * 0.85 + Math.sin(ang) * err);
+    // primer toque orientado (RB + stick derecho antes de recibir): el control sale hacia ese lado
+    if (p.firstTouchUntil > this.time) {
+      b.vel.set(p.firstTouchDir.x * 5.5 + p.vel.x * 0.4, 0, p.firstTouchDir.z * 5.5 + p.vel.z * 0.4);
+      p.firstTouchUntil = 0;
+    }
     this.owner = p;
     this.debug.controls++;
     this.setLastTouch(p, false, 'control');
@@ -923,19 +940,57 @@ export class Match {
   // Entradas y faltas
   // ------------------------------------------------------------------
 
-  requestTackle(p: Player, slide: boolean): boolean {
+  requestTackle(p: Player, slide: boolean, reach = 1): boolean {
     if (p.busy || p.sentOff || p.stunnedUntil > this.time) return false;
     const f = p.forward(_v);
     if (slide) {
       p.startAction('slide', 'slide', 1.15, 0.08, { done: false });
       p.action.dir.copy(f);
-      const s = Math.max(Math.hypot(p.vel.x, p.vel.z) + 2.5, 6.5);
-      p.vel.set(f.x * Math.min(s, 9), 0, f.z * Math.min(s, 9));
+      // mantener el botón antes de soltar da una barrida más larga (más alcance)
+      const s = Math.max(Math.hypot(p.vel.x, p.vel.z) + 2.5, 6.5) * reach;
+      p.vel.set(f.x * Math.min(s, 9 * reach), 0, f.z * Math.min(s, 9 * reach));
     } else {
       p.startAction('tackle', 'tackle', 0.5, 0.17, { done: false });
       p.action.dir.copy(f);
     }
     this.emit({ type: 'tackle', playerId: p.id });
+    return true;
+  }
+
+  /**
+   * Carga con el hombro (pulsar presionar repetidamente corriendo al lado del rival): si el defensor
+   * gana el forcejeo (velocidad y defensa contra control), el balón queda suelto; si no, se desequilibra.
+   */
+  shoulderChallenge(p: Player, carrier: Player): boolean {
+    if (p.busy || this.owner !== carrier || dist2D(p.pos, carrier.pos) > 1.6) return false;
+    if (p.stunnedUntil > this.time) return false;
+    const att = p.data.attrs.defending / 100 + Math.hypot(p.vel.x, p.vel.z) / 20;
+    const def = carrier.data.attrs.control / 100 + (carrier.shielding ? 0.35 : 0) + Math.hypot(carrier.vel.x, carrier.vel.z) / 25;
+    const win = this.rng.next() < clamp(0.35 + (att - def) * 0.8, 0.1, 0.75);
+    this.emit({ type: 'tackle', playerId: p.id, kind: 'shoulder' });
+    if (win) {
+      this.owner = null;
+      carrier.stunnedUntil = this.time + 0.6;
+      carrier.noTouchUntil = this.time + 0.5;
+      const b = this.ball;
+      b.vel.set(p.vel.x * 0.6 + (carrier.pos.x - p.pos.x) * 1.5, 0, p.vel.z * 0.6 + (carrier.pos.z - p.pos.z) * 1.5);
+      this.setLastTouch(p, false, 'tackle');
+    } else {
+      p.stunnedUntil = this.time + 0.45;
+    }
+    return win;
+  }
+
+  /** El arquero suelta el balón al suelo para jugarlo con el pie (Y / W con el balón en las manos). */
+  gkDropBall(gk: Player): boolean {
+    if (this.gkHolding !== gk) return false;
+    const f = gk.forward(_v);
+    this.gkHolding = null;
+    this.ball.held = false;
+    this.ball.pos.set(gk.pos.x + f.x * 0.6, BALL_RADIUS, gk.pos.z + f.z * 0.6);
+    this.ball.vel.set(f.x * 0.8, 0, f.z * 0.8);
+    this.owner = gk;
+    gk.clearAction();
     return true;
   }
 
@@ -953,6 +1008,8 @@ export class Match {
     const defending = p.data.attrs.defending / 100;
     const carrier = this.owner;
     let ballReach = (slide ? 0.8 : 0.65) + defending * 0.3 - (carrier && carrier.team !== p.team ? (carrier.data.attrs.control / 100) * 0.15 : 0);
+    // proteger el balón con el cuerpo (LT / L2): más difícil de robar
+    if (carrier && carrier.shielding) ballReach *= 0.55;
     // la ruleta protege el balón con el cuerpo durante el giro
     if (carrier && carrier.action.kind === 'skill' && SKILL_KINDS[carrier.action.variant] === 'roulette' && carrier.action.time < carrier.action.duration * 0.8) ballReach = 0;
     const team = this.teams[p.team];
@@ -1025,9 +1082,30 @@ export class Match {
     if (lastMan && centralChance && !inBox && goalDist < 22) card = 'red';
     else if (severity >= 1.05) card = 'red';
     else if (severity >= 0.7 || (lastMan && centralChance)) card = 'yellow';
+    // Aviso verbal: falta algo dura sin tarjeta; si ya tenía un aviso, la reiteración se castiga con amarilla
+    let warn = false;
+    if (!card && severity >= 0.4) {
+      if (offender.warnings >= 1) card = 'yellow';
+      else warn = true;
+    }
     this.emit({ type: 'foul', team: offender.team, playerId: offender.id, x: victim.pos.x, z: victim.pos.z });
+    this.emit({ type: 'whistle', kind: 'short' });
     this.addedSeconds += 20;
-    if (card) this.giveCard(offender, card);
+    const refAt = offender.pos.clone();
+    if (card) {
+      this.referee.signal('card', this.time, refAt, victim.pos, 3.4, card === 'yellow' && offender.yellowCards >= 1 ? 'red' : card);
+      this.restartHoldUntil = this.time + 3.6;
+      this.giveCard(offender, card);
+    } else if (warn) {
+      offender.warnings++;
+      this.emit({ type: 'warning', team: offender.team, playerId: offender.id, text: offender.data.name });
+      this.referee.signal('warn', this.time, refAt, victim.pos, 2.4);
+      this.restartHoldUntil = this.time + 2.2;
+    } else {
+      // señala la dirección del tiro libre (hacia el arco que ataca el equipo que la recibe)
+      const g = vTeam.attackGoal;
+      this.referee.signal('point', this.time, refAt, new Vector3(this.referee.pos.x + Math.sign(g.x - this.referee.pos.x) * 10, 0, this.referee.pos.z), 1.4);
+    }
     void severity;
     severity = 0;
     if (inBox) {
@@ -1248,7 +1326,7 @@ export class Match {
       this.movePlayers(dt);
       if (!this.ball.held) this.ball.step(dt);
       this.advanceClock(dt);
-      if (r.timer > 1.1) {
+      if (r.timer > 1.1 && this.time >= this.restartHoldUntil) {
         if (this.halfShouldEnd() && r.type !== 'penalty') { this.endHalf(); return; }
         this.doSetup();
       }
@@ -1547,6 +1625,8 @@ export class Match {
       ball: [this.ball.pos.x, this.ball.pos.y, this.ball.pos.z],
       players: this.active.map((p) => ({ id: p.id, x: p.pos.x, z: p.pos.z, f: p.facing, s: p.anim.state, t: p.anim.time, sp: p.anim.speed, d: p.anim.duration, v: p.anim.variant, ft: p.anim.foot })),
     };
+    const r = this.referee;
+    frame.players.push({ id: 'referee', x: r.pos.x, z: r.pos.z, f: r.facing, s: r.anim.state, t: r.anim.time, sp: r.anim.speed, d: r.anim.duration, v: 0, ft: 1 });
     this.replay.push(frame);
     if (this.replay.length > 30 * 8) this.replay.shift();
   }

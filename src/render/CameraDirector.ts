@@ -24,6 +24,8 @@ export class CameraDirector {
    * ni el jugador controlado. En móvil es más alto porque los botones táctiles tapan esa zona.
    */
   bottomSafe = -0.7;
+  /** Amonestación en curso: árbitro (a) e infractor (b) en primer plano. */
+  cardFocus: { a: THREE.Vector3; b: THREE.Vector3 } | null = null;
   /** Tiro libre directo del jugador: balón y punto de mira (cámara detrás del lanzador). */
   freeKickAim: { target: THREE.Vector3 } | null = null;
   private readonly probe = new THREE.PerspectiveCamera();
@@ -47,6 +49,12 @@ export class CameraDirector {
     const camDir = new THREE.Vector3();
     this.camera.getWorldDirection(camDir);
     if (forward.x * camDir.x + forward.z * camDir.z < 0) forward.multiplyScalar(-1);
+  }
+
+  private punch = 0;
+  /** Pequeño zoom de la cámara (tiro potente). */
+  zoomPunch(v = 1) {
+    this.punch = Math.max(this.punch, v);
   }
 
   addShake(v: number) {
@@ -98,7 +106,23 @@ export class CameraDirector {
 
     const focus = focusOverride ?? ball;
     const fk = this.freeKickAim;
-    if (fk && m.phase === 'stoppage') {
+    const cf = this.cardFocus;
+    if (cf && m.phase === 'stoppage') {
+      // plano medio lateral del árbitro mostrando la tarjeta (o haciendo el aviso) al jugador
+      const mx = (cf.a.x + cf.b.x) / 2;
+      const mz = (cf.a.z + cf.b.z) / 2;
+      let px = -(cf.b.z - cf.a.z);
+      let pz = cf.b.x - cf.a.x;
+      const pl = Math.hypot(px, pz) || 1;
+      px /= pl;
+      pz /= pl;
+      // del lado de la cámara de transmisión
+      if (pz < 0) { px = -px; pz = -pz; }
+      targetPos.set(mx + px * 8, 3, mz + pz * 8);
+      targetLook.set(mx, 1.5, mz);
+      fov = 36;
+      damp = 4;
+    } else if (fk && m.phase === 'stoppage') {
       // Tiro libre: punto de vista del lanzador, algo por detrás y por encima del balón
       const dx = fk.target.x - ball.x;
       const dz = fk.target.z - ball.z;
@@ -145,6 +169,10 @@ export class CameraDirector {
       this.camera.position.x += (Math.random() - 0.5) * this.shake;
       this.camera.position.y += (Math.random() - 0.5) * this.shake;
       this.shake *= Math.exp(-6 * dt);
+    }
+    if (this.punch > 0.001) {
+      fov /= 1 + 0.22 * this.punch;
+      this.punch *= Math.exp(-2.2 * dt);
     }
     this.camera.fov = lerp(this.camera.fov, fov, k);
     this.camera.updateProjectionMatrix();

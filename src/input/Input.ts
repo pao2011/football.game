@@ -231,6 +231,9 @@ export class Input {
     // Mando
     this.padActive = false;
     this.padTactic = 0;
+    this.rsFlick = null;
+    this.rs.x = 0;
+    this.rs.y = 0;
     this.padAxes.x = 0;
     this.padAxes.y = 0;
     const gp = activePad();
@@ -247,6 +250,12 @@ export class Input {
       for (const [a, i] of Object.entries(PAD_BUTTONS)) if (i !== undefined && padButton(gp, i)) this.cur.add(a as Action);
       // Stick derecho: cada "golpe" de stick en una dirección es un regate
       const r = rightStick(gp);
+      this.rs.x = r.x;
+      this.rs.y = -r.y;
+      const rm = Math.hypot(r.x, r.y);
+      // "golpe" de stick derecho (flanco): para cambiar de jugador, autopase, pared avanzada…
+      if (rm > 0.65 && !this.rsWasOut) this.rsFlick = { x: r.x / rm, y: -r.y / rm };
+      this.rsWasOut = rm > 0.45;
       if (Math.hypot(r.x, r.y) > 0.65) {
         if (Math.abs(r.x) > Math.abs(r.y)) this.cur.add(r.x > 0 ? 'skillRight' : 'skillLeft');
         else this.cur.add(r.y > 0 ? 'skillDown' : 'skillUp');
@@ -302,6 +311,12 @@ export class Input {
     const l = Math.hypot(x, y);
     return l > 0 ? { x: x / l, y: y / l } : { x: 0, y: 0 };
   }
+
+  /** Stick derecho del mando (x derecha, y arriba). */
+  readonly rs = { x: 0, y: 0 };
+  /** Golpe de stick derecho en este fotograma (dirección unitaria en pantalla) o null. */
+  rsFlick: { x: number; y: number } | null = null;
+  private rsWasOut = false;
 
   /** Pulsación de la cruceta ← (−1) o → (+1) en este fotograma (mentalidad del equipo). */
   padTactic: -1 | 0 | 1 = 0;
