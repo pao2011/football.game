@@ -1,7 +1,9 @@
 // Genera el juego completo en UN solo archivo HTML (JS y CSS incluidos), listo para
-// abrir sin servidor o publicar como página. Salidas (en release/):
-//   FootballElite3D.html      documento completo (abrir con doble clic, ejecutable offline)
-//   artifact/index.html       fragmento (sin <html>/<head>) para publicarlo como página de claude.ai
+// abrir sin servidor o publicar como página. Salidas:
+//   jugar.html                      en la raíz del repositorio (y en dist/): se abre con doble clic tras
+//                                   descargar el ZIP; index.html redirige aquí cuando se abre como archivo
+//   release/FootballElite3D.html    el mismo documento, para publicarlo como descarga
+//   release/artifact/index.html     fragmento (sin <html>/<head>) para publicarlo como página de claude.ai
 import { readFileSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -47,7 +49,9 @@ ${body}
 `;
 
 mkdirSync('release/artifact', { recursive: true });
+writeFileSync('jugar.html', fullDoc);
+writeFileSync(join(dist, 'jugar.html'), fullDoc);
 writeFileSync('release/FootballElite3D.html', fullDoc);
 writeFileSync('release/artifact/index.html', fragment);
 const mb = (s) => (Buffer.byteLength(s) / 1048576).toFixed(2);
-console.log(`release/FootballElite3D.html ${mb(fullDoc)} MB\nrelease/artifact/index.html ${mb(fragment)} MB`);
+console.log(`jugar.html y release/FootballElite3D.html ${mb(fullDoc)} MB\nrelease/artifact/index.html ${mb(fragment)} MB`);

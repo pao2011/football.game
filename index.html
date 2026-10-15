@@ -17,6 +17,12 @@
   <body>
     <canvas id="game"></canvas>
     <div id="ui"></div>
+    <script>
+      // Abierto con doble clic (file://), p. ej. tras descargar y descomprimir el ZIP: el navegador no puede
+      // cargar el código del proyecto así, de modo que se abre la versión en un solo archivo (jugar.html).
+      if (location.protocol === 'file:' && !/Electron/i.test(navigator.userAgent)) location.replace('./jugar.html' + location.hash);
+    </script>
+    <noscript><p style="color:#fff;font-family:sans-serif;text-align:center;margin-top:40vh">Football Elite 3D necesita JavaScript activado.</p></noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
