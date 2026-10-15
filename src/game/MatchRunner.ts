@@ -10,6 +10,7 @@ import type { MatchEvent } from '../sim/types';
 import { HUD } from '../ui/HUD';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { MatchAudio } from '../audio/MatchAudio';
+import { activePad } from '../input/pads';
 import { TouchControls, isTouchDevice } from '../input/TouchControls';
 import { loadJSON, saveJSON } from '../save/Storage';
 import { RemoteInput, captureFrame, type InputFrame } from '../net/RemoteInput';
@@ -326,10 +327,29 @@ export class MatchRunner {
       // tras el grito de gol, la hinchada canta
       setTimeout(() => { if (!this.disposed) this.audioEngine.chant(0.8); }, 3200);
     }
-    // vibración en el móvil: golpeos propios y goles
+    if (this.settings.vibration !== false) this.vibrate(e);
+  }
+
+  /** Vibración en golpeos propios, entradas, postes y goles: en el móvil y en el mando (si lo admite). */
+  private vibrate(e: MatchEvent) {
+    const own = e.team !== undefined && e.team === this.localTeam;
+    const ownPlayer = e.playerId !== undefined && this.localTeam >= 0 && this.match.teams[this.localTeam as 0 | 1].players.some((p) => p.id === e.playerId);
+    const shot = e.kind === 'shoot' || e.kind === 'finesse' || e.kind === 'chip' || e.kind === 'penalty';
+    // [duración ms, motor fuerte 0..1, motor suave 0..1]
+    let fx: [number, number, number] | null = null;
+    if (e.type === 'kick' && own) fx = shot ? [110, 0.75, 0.5] : [45, 0.2, 0.45];
+    else if (e.type === 'tackle' && ownPlayer) fx = [90, 0.6, 0.3];
+    else if (e.type === 'post') fx = [140, 0.5, 0.8];
+    else if (e.type === 'goal' && e.kind !== 'shootout') fx = e.team === this.localTeam ? [450, 1, 1] : [200, 0.4, 0.2];
+    if (!fx) return;
     if (this.touch && navigator.vibrate) {
-      if (e.type === 'kick' && e.team !== undefined && e.team === this.localTeam) navigator.vibrate(e.kind === 'shoot' || e.kind === 'finesse' || e.kind === 'chip' ? 28 : 12);
-      if (e.type === 'goal') navigator.vibrate([60, 50, 90]);
+      navigator.vibrate(e.type === 'goal' && e.team === this.localTeam ? [60, 50, 90] : Math.round(fx[0] / 4));
+      return;
+    }
+    const pad = activePad() as (Gamepad & { vibrationActuator?: { playEffect?: (t: string, p: object) => Promise<unknown> } }) | null;
+    const act = pad?.vibrationActuator;
+    if (act?.playEffect) {
+      act.playEffect('dual-rumble', { startDelay: 0, duration: fx[0], strongMagnitude: fx[1], weakMagnitude: fx[2] }).catch(() => undefined);
     }
   }
 

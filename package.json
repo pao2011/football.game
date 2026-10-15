@@ -8,7 +8,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/single-file.mjs",
     "start": "node scripts/serve.mjs",
     "test": "vitest run",
     "test:e2e": "node scripts/e2e.mjs",
@@ -18,10 +18,11 @@
     "test:e2e:gamepad": "node scripts/e2e-gamepad.mjs",
     "android:sync": "npm run build && npx cap sync android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
-    "build:single": "npm run build && node scripts/single-file.mjs",
+    "build:single": "npm run build",
     "art": "npm run build && node scripts/make-art.mjs all",
     "server": "node server/index.mjs",
-    "test:e2e:online": "node scripts/e2e-online.mjs"
+    "test:e2e:online": "node scripts/e2e-online.mjs",
+    "test:e2e:file": "node scripts/e2e-file.mjs index.html"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",

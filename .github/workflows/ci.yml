@@ -21,8 +21,14 @@ jobs:
         run: npx tsc --noEmit
       - name: Pruebas unitarias y de simulación
         run: npm test
-      - name: Compilación
+      - name: Compilación (incluye jugar.html, el juego en un solo archivo)
         run: npm run build
+      - name: Chromium para la prueba sin servidor
+        run: npx playwright-core install chromium
+      - name: Jugar sin servidor (doble clic en index.html tras descargar el ZIP)
+        run: node scripts/e2e-file.mjs index.html
+      - name: Aviso si jugar.html está desactualizado
+        run: git diff --quiet -- jugar.html || echo "::warning file=jugar.html::jugar.html no coincide con el código. Ejecuta 'npm run build' y súbelo para que el ZIP del repositorio funcione con doble clic."
       - name: Servidor online (arranca y responde)
         run: |
           PORT=18555 DATA_DIR=$(mktemp -d) node server/index.mjs &
@@ -33,6 +39,42 @@ jobs:
         with:
           name: football-elite-3d-web
           path: dist/
+
+  windows:
+    name: Ejecutable de Windows (ZIP)
+    runs-on: windows-latest
+    # después del APK: así el Release "latest" ya existe cuando se sube el ZIP
+    needs: [test-web, android]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Compilar y empaquetar con Electron
+        run: npm run package
+        env:
+          PLATFORMS: win32
+      - name: Comprimir
+        shell: pwsh
+        run: Compress-Archive -Path release/FootballElite3D-win32-x64 -DestinationPath FootballElite3D-Windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FootballElite3D-Windows
+          path: FootballElite3D-Windows.zip
+      - name: Publicar ZIP de Windows y juego en un solo archivo (Release "latest")
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp dist/jugar.html FootballElite3D.html
+          gh release edit latest --title "Football Elite 3D — descargas más recientes" --latest \
+            --notes "Compilado automáticamente desde la rama main. Android: instala FootballElite3D.apk (permite \"orígenes desconocidos\"). Windows: descarga FootballElite3D-Windows.zip, extráelo y abre FootballElite3D.exe. Cualquier PC: abre FootballElite3D.html con doble clic en Chrome, Edge o Firefox."
+          gh release upload latest FootballElite3D-Windows.zip FootballElite3D.html --clobber
 
   android:
     name: APK de Android
@@ -73,9 +115,9 @@ jobs:
           git tag -f latest
           git push -f origin latest
           if gh release view latest >/dev/null 2>&1; then
-            gh release edit latest --title "Football Elite 3D — APK más reciente" --latest
+            gh release edit latest --title "Football Elite 3D — descargas más recientes" --latest
           else
-            gh release create latest --title "Football Elite 3D — APK más reciente" --latest \
+            gh release create latest --title "Football Elite 3D — descargas más recientes" --latest \
               --notes "APK de Android compilado automáticamente desde la rama main. Descárgalo e instálalo (permite \"orígenes desconocidos\")."
           fi
           gh release upload latest FootballElite3D.apk --clobber

@@ -162,6 +162,7 @@ export class AudioEngine {
   private voices: Record<BusKind, Voice[]> = { sfx: [], crowd: [] };
 
   private amb: Ambience | null = null;
+  private roll: { src: AudioBufferSourceNode; bp: BiquadFilterNode; gain: GainNode } | null = null;
   private excitement = 0;
 
   private mus: MusicNodes | null = null;
@@ -240,6 +241,8 @@ export class AudioEngine {
     this.safe(() => {
       this.stopTimers();
       if (this.amb) for (const s of this.amb.sources) this.tryStop(s);
+      if (this.roll) this.tryStop(this.roll.src);
+      this.roll = null;
       this.amb = null;
       this.musicOn = false;
       if (this.g) {
@@ -487,6 +490,197 @@ export class AudioEngine {
       sg.gain.linearRampToValueAtTime(0.1, t + 0.05);
       sg.gain.exponentialRampToValueAtTime(FLOOR, t + 0.45);
       s.connect(bp).connect(sg).connect(v);
+    });
+  }
+
+  /** Cabezazo: golpe sordo y corto (frente contra cuero), sin el chasquido del empeine. */
+  header(power: number): void {
+    this.run((ctx) => {
+      const p = clamp01(power) * rand(0.9, 1.1);
+      const t = ctx.currentTime;
+      const v = this.claim('sfx', t, 0.3);
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime((150 + 60 * p) * rand(0.95, 1.05), t);
+      o.frequency.exponentialRampToValueAtTime(70, t + 0.06);
+      const og = ctx.createGain();
+      this.perc(og.gain, t, 0.002, 0.3 + 0.3 * p, 0.08);
+      o.connect(og).connect(v);
+      o.start(t);
+      o.stop(t + 0.2);
+      const n = this.noise('pink', t, 0.06);
+      const bp = this.filter('bandpass', 900 + 500 * p, 1.2);
+      const ng = ctx.createGain();
+      this.perc(ng.gain, t, 0.001, 0.12 + 0.18 * p, 0.03);
+      n.connect(bp).connect(ng).connect(v);
+    });
+  }
+
+  /** Toque suave: control, primer toque o conducción. power 0..1. */
+  touch(power: number): void {
+    this.run((ctx) => {
+      const p = clamp01(power) * rand(0.85, 1.15);
+      const t = ctx.currentTime;
+      const v = this.claim('sfx', t, 0.12);
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(rand(230, 290) + 90 * p, t);
+      o.frequency.exponentialRampToValueAtTime(110, t + 0.04);
+      const og = ctx.createGain();
+      this.perc(og.gain, t, 0.001, 0.05 + 0.13 * p, 0.04);
+      o.connect(og).connect(v);
+      o.start(t);
+      o.stop(t + 0.1);
+      const n = this.noise('white', t, 0.03);
+      const bp = this.filter('bandpass', rand(1200, 1700), 1);
+      const ng = ctx.createGain();
+      this.perc(ng.gain, t, 0.0008, 0.03 + 0.08 * p, 0.012);
+      n.connect(bp).connect(ng).connect(v);
+    });
+  }
+
+  /** Arquero que bloca el balón: palmada de guantes + balón que se aprieta contra el pecho. */
+  gloveCatch(): void {
+    this.run((ctx) => {
+      const t = ctx.currentTime;
+      const v = this.claim('sfx', t, 0.35);
+      const n = this.noise('white', t, 0.08);
+      const bp = this.filter('bandpass', 2400, 0.8);
+      const ng = ctx.createGain();
+      this.perc(ng.gain, t, 0.0006, 0.32, 0.03);
+      n.connect(bp).connect(ng).connect(v);
+      // segundo contacto (la otra mano) un instante después
+      const n2 = this.noise('white', t + 0.018, 0.06);
+      const bp2 = this.filter('bandpass', 1900, 0.8);
+      const ng2 = ctx.createGain();
+      this.perc(ng2.gain, t + 0.018, 0.0006, 0.2, 0.025);
+      n2.connect(bp2).connect(ng2).connect(v);
+      const o = ctx.createOscillator();
+      o.frequency.setValueAtTime(120, t);
+      o.frequency.exponentialRampToValueAtTime(55, t + 0.1);
+      const og = ctx.createGain();
+      this.perc(og.gain, t, 0.003, 0.4, 0.13);
+      o.connect(og).connect(v);
+      o.start(t);
+      o.stop(t + 0.25);
+    });
+  }
+
+  /** Despeje con los puños / desvío del arquero: golpe seco y brillante. */
+  glovePunch(): void {
+    this.run((ctx, g) => {
+      const t = ctx.currentTime;
+      const v = this.claim('sfx', t, 0.4);
+      v.connect(this.wetSend(g.sfxWet, 0.2));
+      const n = this.noise('white', t, 0.06);
+      const bp = this.filter('bandpass', 3000, 0.9);
+      const ng = ctx.createGain();
+      this.perc(ng.gain, t, 0.0005, 0.42, 0.028);
+      n.connect(bp).connect(ng).connect(v);
+      const o = ctx.createOscillator();
+      o.frequency.setValueAtTime(190, t);
+      o.frequency.exponentialRampToValueAtTime(60, t + 0.07);
+      const og = ctx.createGain();
+      this.perc(og.gain, t, 0.002, 0.45, 0.1);
+      o.connect(og).connect(v);
+      o.start(t);
+      o.stop(t + 0.2);
+    });
+  }
+
+  /** Balonazo contra las vallas publicitarias (panel hueco de plástico). strength 0..1. */
+  boards(strength: number): void {
+    this.run((ctx, g) => {
+      const s = clamp01(strength);
+      if (s < 0.05) return;
+      const t = ctx.currentTime;
+      const v = this.claim('sfx', t, 0.7);
+      v.connect(this.wetSend(g.sfxWet, 0.3));
+      const o = ctx.createOscillator();
+      o.frequency.setValueAtTime(95, t);
+      o.frequency.exponentialRampToValueAtTime(48, t + 0.15);
+      const og = ctx.createGain();
+      this.perc(og.gain, t, 0.002, 0.35 + 0.35 * s, 0.22);
+      o.connect(og).connect(v);
+      o.start(t);
+      o.stop(t + 0.4);
+      // resonancia del panel
+      for (const [f, a, d] of [[210, 0.12, 0.35], [455, 0.07, 0.22], [780, 0.04, 0.14]] as const) {
+        const r = ctx.createOscillator();
+        r.type = 'triangle';
+        r.frequency.value = f * rand(0.96, 1.04);
+        const rg = ctx.createGain();
+        this.perc(rg.gain, t, 0.002, a * (0.5 + s), d);
+        r.connect(rg).connect(v);
+        r.start(t);
+        r.stop(t + d + 0.05);
+      }
+      const n = this.noise('pink', t, 0.1);
+      const lp = this.filter('lowpass', 1800, 0.7);
+      const ng = ctx.createGain();
+      this.perc(ng.gain, t, 0.001, 0.25 * s, 0.05);
+      n.connect(lp).connect(ng).connect(v);
+    });
+  }
+
+  /** Bocina del estadio tras un gol (dos acordes). */
+  goalHorn(): void {
+    this.run((ctx, g) => {
+      const t = ctx.currentTime + 0.35;
+      const dur = 2.6;
+      const v = this.claim('sfx', t, dur + 0.3);
+      v.connect(this.wetSend(g.sfxWet, 0.7));
+      const lp = this.filter('lowpass', 1600, 0.8);
+      lp.connect(v);
+      const blasts: Array<[number, number]> = [[0, 0.9], [1.1, 1.4]];
+      for (const [off, d] of blasts) {
+        for (const f of [146.8, 185, 220]) {
+          const o = ctx.createOscillator();
+          o.type = 'sawtooth';
+          o.frequency.value = f * rand(0.995, 1.005);
+          const og = ctx.createGain();
+          og.gain.setValueAtTime(FLOOR, t + off);
+          og.gain.linearRampToValueAtTime(0.05, t + off + 0.06);
+          og.gain.setValueAtTime(0.05, t + off + d - 0.15);
+          og.gain.exponentialRampToValueAtTime(FLOOR, t + off + d);
+          o.connect(og).connect(lp);
+          o.start(t + off);
+          o.stop(t + off + d + 0.05);
+        }
+      }
+    });
+  }
+
+  /**
+   * Rodar del balón sobre el césped (sonido continuo). speed en m/s; onGround = el balón toca la hierba.
+   * Llamar cada fotograma durante el partido; stopRoll() lo apaga.
+   */
+  setRoll(speed: number, onGround: boolean): void {
+    this.run((ctx, g) => {
+      if (!this.roll) {
+        const src = this.noise('pink', ctx.currentTime, -1);
+        const bp = this.filter('bandpass', 500, 0.9);
+        const gain = ctx.createGain();
+        gain.gain.value = 0;
+        src.connect(bp).connect(gain).connect(g.sfx);
+        this.roll = { src, bp, gain };
+      }
+      const t = ctx.currentTime;
+      const s = Math.min(1, Math.max(0, speed) / 18);
+      const target = onGround && speed > 1.2 ? 0.035 + 0.11 * s : 0;
+      this.roll.gain.gain.setTargetAtTime(target, t, 0.06);
+      this.roll.bp.frequency.setTargetAtTime(350 + 900 * s, t, 0.08);
+    });
+  }
+
+  stopRoll(): void {
+    const r = this.roll;
+    if (!r) return;
+    this.roll = null;
+    this.safe(() => {
+      const t = this.ctx ? this.ctx.currentTime : 0;
+      r.gain.gain.setTargetAtTime(0, t, 0.05);
+      this.tryStop(r.src, t + 0.3);
     });
   }
 

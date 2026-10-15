@@ -48,6 +48,8 @@ export interface AnimInfo {
 
 export type MatchEventType =
   | 'kick' // golpeo de balón (power 0..1)
+  | 'touch' // control / primer toque (power 0..1, según la velocidad que traía el balón)
+  | 'catch' // el arquero bloca el balón con las manos
   | 'bounce'
   | 'post'
   | 'net'
