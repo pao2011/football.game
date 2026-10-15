@@ -191,7 +191,11 @@ export class GuestSync {
     if (this.buf.length && s.tm <= this.buf[this.buf.length - 1].tm) return; // desordenada
     this.buf.push(s);
     const measured = s.tm - nowMs / 1000;
-    if (Number.isNaN(this.offset) || Math.abs(measured - this.offset) > 0.6) this.offset = measured;
+    if (Number.isNaN(this.offset) || Math.abs(measured - this.offset) > 0.6) {
+      // primer dato o salto (p. ej. tras una pausa): el reloj vuelve al del anfitrión
+      this.offset = measured;
+      this.renderTm = Math.min(this.renderTm, s.tm - this.delay);
+    }
     else this.offset = Math.max(this.offset + (measured - this.offset) * 0.04, Math.min(this.offset, measured));
     if (this.buf.length > 90) this.buf.splice(0, this.buf.length - 90);
   }

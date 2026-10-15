@@ -21,6 +21,15 @@ import { NetClient, cachedProfile, serverCandidates, type FinalMsg, type MatchSt
 import { DIVISIONS } from '../../server/divisions.mjs';
 import type { OnlineLink } from '../game/MatchRunner';
 
+/** Descarga directa de la APK de Android (la publica GitHub Actions en cada actualización de main). */
+export const APK_URL = 'https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk';
+
+/** ¿Se está ejecutando dentro de la app de Android? */
+function isNativeApp() {
+  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+  return !!cap?.isNativePlatform?.() || (location.protocol === 'https:' && location.hostname === 'localhost' && !location.port);
+}
+
 const QUICK_CHAT = ['¡Buen partido!', '¡Qué golazo!', '¡Uy, casi!', '¡Vamos!', 'Perdón', '¡Gracias!'];
 
 const DIFFS: Difficulty[] = ['amateur', 'pro', 'world', 'legend'];
@@ -231,6 +240,7 @@ export class App {
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
           <button class="menu-item" data-act="controls">Controles<small>Teclado y mando · reasignar teclas</small></button>
+          ${!isElectron && !isNativeApp() ? '<button class="menu-item apk-item" data-act="apk">📲 Descargar APK<small>Instala el juego en tu Android</small></button>' : ''}
           ${isElectron ? '<button class="menu-item" data-act="quit">Salir</button>' : ''}
         </div>
         <div class="menu-hero">
@@ -247,6 +257,7 @@ export class App {
       settings: () => this.settingsScreen(() => this.mainMenu()),
       controls: () => this.controlsScreen(() => this.mainMenu()),
       quit: () => window.close(),
+      apk: () => { window.open(APK_URL, '_blank', 'noopener'); },
     }, () => this.start());
   }
 
@@ -368,6 +379,17 @@ export class App {
             this.setMenuMode(false);
             this.audio.stopMenuMusic();
             runner.onPause = () => this.pauseMenu();
+            // online: la pausa tiene un límite de tiempo; al agotarse se cierra el menú y se sigue
+            runner.onForceResume = () => {
+              this.overlay?.dispose();
+              this.overlay = null;
+              if (this.screen) {
+                this.screen.dispose();
+                this.screen = null;
+                this.applyLiveSettings();
+              }
+              runner.resume();
+            };
             runner.onFinished = (r) => this.matchFinished(r, ctx);
             runner.start();
             (window as any).__runner = runner; // acceso para pruebas automáticas
@@ -396,7 +418,7 @@ export class App {
       <h2>Pausa</h2>
       <div class="muted" style="margin-bottom:14px">${esc(m.teams[0].data.name)} ${m.teams[0].stats.goals} - ${m.teams[1].stats.goals} ${esc(m.teams[1].data.name)} · ${m.clockText}</div>
       <div class="menu-list">
-        ${r.online ? '<div class="muted" style="margin:-6px 0 10px">Partido online: el juego no se detiene</div>' : ''}
+        ${r.online ? `<div class="muted online-pause-note" style="margin:-6px 0 10px">${r.pauseSecondsLeft >= 0 ? `Partido pausado para los dos · se reanuda solo en <b class="ps-left">${r.pauseSecondsLeft}</b> s · te quedan ${r.pausesLeft} pausas` : 'Ya no te quedan pausas: el partido sigue en juego'}</div>` : ''}
         <button class="menu-item" data-act="resume">Reanudar</button>
         ${r.online ? '<button class="menu-item" data-act="chat">Mensajes rápidos<small>Para tu rival</small></button>' : '<button class="menu-item" data-act="restart">Reiniciar partido</button>'}
         ${r.localTeam >= 0 && !m.config.training ? `<button class="menu-item" data-act="subs">Cambios<small>${m.teams[r.localTeam as 0 | 1].subsUsed}/${MAX_SUBS} realizados</small></button>` : ''}
@@ -430,6 +452,14 @@ export class App {
       quit: () => { close(); this.leaveMatch(); },
     }, this.audio);
     this.overlay.onBack = resume;
+    if (r.online) {
+      const ov = this.overlay;
+      const tick = window.setInterval(() => {
+        const el = ov.root.querySelector('.ps-left');
+        if (!ov.root.isConnected || !el) { window.clearInterval(tick); return; }
+        el.textContent = String(r.pauseSecondsLeft);
+      }, 500);
+    }
   }
 
   /** Cambios: elige quién sale (en el campo) y quién entra (suplentes). */
@@ -691,6 +721,8 @@ export class App {
       if (this.runner && this.lastMatch?.ctx.mode === 'online' && !this.runner.match.finished) {
         this.runner.dispose();
         this.runner = null;
+        this.overlay?.dispose();
+        this.overlay = null;
         this.onlineNotice('Conexión perdida', 'Se perdió la conexión con el servidor online.');
       } else if (!this.runner) {
         this.onlineMenu('', 'Se perdió la conexión con el servidor.');
@@ -855,6 +887,8 @@ export class App {
         if (runner?.online && !runner.match.finished) {
           runner.dispose();
           this.runner = null;
+          this.overlay?.dispose();
+          this.overlay = null;
           window.clearInterval(this.onlineWatch);
           this.onlineNotice('Tu rival se fue', 'Tu rival abandonó el partido: ganas 3-0.', true);
         }
@@ -899,17 +933,20 @@ export class App {
       difficulty: 'pro', extraTime: false, penalties: false, seed: st.seed,
     };
     const ctx: MatchContext = { mode: 'online', start: st };
-    const link: OnlineLink = { role: st.role, send: (d) => net.relay(d) };
+    const opp = st.role === 'host' ? st.away : st.home;
+    const link: OnlineLink = { role: st.role, send: (d) => net.relay(d), opponentName: opp.name };
     this.playMatch(cfg, this.stadiumForCtx(ctx), ctx, link);
     // el invitado comprueba que siguen llegando datos del anfitrión
     window.clearInterval(this.onlineWatch);
     this.onlineWatch = window.setInterval(() => {
       const r = this.runner;
-      if (!r || !r.guestSync || r.inIntro || r.match.finished) return;
+      if (!r || !r.guestSync || r.inIntro || r.match.finished || r.halted) return;
       if (r.guestSync.received > 0 && performance.now() - r.guestSync.lastRecv > 12000) {
         window.clearInterval(this.onlineWatch);
         r.dispose();
         this.runner = null;
+        this.overlay?.dispose();
+        this.overlay = null;
         net.send({ t: 'leave' });
         this.onlineNotice('Conexión perdida', 'No llegan datos de tu rival desde hace más de 12 segundos.');
       }

@@ -64,15 +64,15 @@ await check('Menús con el mando: A entra, la cruceta navega, A acepta y B vuelv
   await tap(0); // A en el título
   await page.waitForSelector('.main-menu', { timeout: 5000 });
   const first = await page.evaluate(() => document.querySelector('.focus, [data-act].focused')?.getAttribute('data-act') ?? document.activeElement?.getAttribute('data-act'));
-  await tap(13); // cruceta abajo
+  await tap(13, 400); // cruceta abajo (pulsación larga: el menú lee el mando una vez por fotograma)
   const second = await page.evaluate(() => document.querySelector('.focus, [data-act].focused')?.getAttribute('data-act') ?? document.activeElement?.getAttribute('data-act'));
   assert(first !== second || first === null, 'la cruceta no movió el foco: ' + first + ' / ' + second);
-  await tap(12); // arriba: otra vez en el primero (Partido rápido)
-  await tap(0); // A
+  await tap(12, 400); // arriba: otra vez en el primero (Partido rápido)
+  await tap(0, 400); // A
   await page.waitForSelector('[data-act=play]', { timeout: 5000 });
-  await tap(1); // B vuelve
+  await tap(1, 400); // B vuelve
   await page.waitForSelector('.main-menu', { timeout: 5000 });
-  await tap(0);
+  await tap(0, 400);
   await page.waitForSelector('[data-act=play]', { timeout: 5000 });
 });
 

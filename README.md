@@ -7,7 +7,7 @@
   <img alt="Icono" src="docs/art/icon-1024.png" width="96">
 </p>
 
-**📲 [Descargar el APK para Android](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk)** — se publica automáticamente en *Releases* cada vez que se actualiza `main`.
+**📲 [Descargar el APK para Android](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk)** — se publica automáticamente en *Releases* cada vez que se actualiza `main`. También desde el servidor online: **https://football-elite-3d-19vc.onrender.com/apk**, o con el botón *Descargar APK* del menú de la versión web.
 
 Juego de fútbol 3D completo, 11 contra 11 con arquero, con física de balón propia, inteligencia artificial táctica, reglas y arbitraje, cuatro modos de juego y controles con el esquema clásico de los juegos de fútbol de PC (FIFA) para teclado y mando.
 
@@ -202,7 +202,7 @@ El mando sigue el **esquema clásico de FIFA**: mismos botones y mismas combinac
 | **Carrera** | Liga de 8 clubes a doble vuelta (14 jornadas), tabla de posiciones, calendario, resultados, plantilla de 18 jugadores con edad y media, editor de alineación y formación. Al final de la temporada hay historial de campeones, evolución de los jugadores (los jóvenes mejoran y los veteranos declinan; los retirados son reemplazados por juveniles) y una nueva temporada. Se guarda automáticamente. |
 | **Entrenamiento** | Práctica libre (pases, conducción y tiros contra el arquero), **penales** y **tiros libres con barrera** desde posiciones aleatorias. |
 | **Online · Division Rivals** | Partidos **1 contra 1 contra otra persona** que suman puntos: de la **División 10 a Élite** (victoria +30 y +5 por gol de diferencia, empate +10, derrota −12, abandono −20; ganar a alguien de una división más alta da puntos extra). El emparejamiento busca rivales de tu nivel y amplía la búsqueda cuanto más esperas. Incluye **clasificación** de los mejores. |
-| **Online · Amistoso y sala privada** | Amistoso contra un rival al azar, o **sala privada con código** de 5 letras para jugar con un amigo (el anfitrión elige la duración). Mensajes rápidos al rival (*¡Buen partido!*, *¡Qué golazo!*…). |
+| **Online · Amistoso y sala privada** | Amistoso contra un rival al azar, o **sala privada con código** de 5 letras para jugar con un amigo (el anfitrión elige la duración). Mensajes rápidos al rival (*¡Buen partido!*, *¡Qué golazo!*…). **Pausa compartida**: si uno pausa, el partido se detiene para los dos (3 pausas por jugador, de hasta 60 s cada una). Los dos pueden elegir el mismo club: el visitante usa su segunda equipación. |
 
 **En todos los partidos**: **7 suplentes y hasta 5 cambios** (Pausa → *Cambios*: eliges quién sale, con su resistencia a la vista, y quién entra; el cambio se hace en la siguiente interrupción del juego). La IA cambia a sus jugadores cansados desde el minuto 58, y hay una opción de **cambios automáticos** para tu equipo. Al final del partido, **valoración de cada jugador** (3,0–10,0, con goles, asistencias, atajadas, entradas y % de pases) y **Jugador del partido**.
 
@@ -302,11 +302,11 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Prueba | Comando | Resultado |
 |---|---|---|
 | Comprobación de tipos (TypeScript estricto) | `npx tsc --noEmit` | ✅ sin errores |
-| Unitarias y de simulación | `npm test` | ✅ **155/155** |
+| Unitarias y de simulación | `npm test` | ✅ **156/156** |
 | Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **15/15** |
 | Extremo a extremo con mando (mando estándar simulado) | `npm run build && npm run test:e2e:gamepad` | ✅ **7/7** |
 | Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **17/17** |
-| Online: servidor real + dos navegadores jugando entre sí | `npm run build && npm run test:e2e:online` | ✅ **11/11** |
+| Online: servidor real + dos navegadores jugando entre sí | `npm run build && npm run test:e2e:online` | ✅ **12/12** |
 | Ejecutable de Linux bajo Xvfb | — | ✅ sin errores (detalle abajo) |
 
 **Unitarias y de simulación (155 pruebas)**
@@ -344,7 +344,7 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 
 **Móvil (17 pruebas)**: animación de inicio, valores por defecto para móvil, menús con toques, tiro libre (cámara del lanzador, trayectoria, botones de efecto y disparo, sin avisos emergentes), controles táctiles visibles, saque con PASE, movimiento con el joystick, tiro con potencia con TIRO, vaselina deslizando sobre TIRO, botones ROSCA / VASELINA / RASO / POTENTE y combinación POTENTE + RASO (sin botón de sprint), regate deslizando en la zona libre, botones propios de defensa con indicador DEFENSA y CAMBIAR funcionando, pausa táctil, sin aviso de orientación, PWA (manifiesto, service worker y **carga sin conexión**), pase y tiro asistidos con toque rápido, presentación del partido (se salta con un toque), cámara que mantiene visible el juego junto a la banda inferior, y ningún error de JavaScript.
 
-**Online (11 pruebas, servidor real y dos navegadores)**: conexión de los dos, sala privada con código, el invitado ve el partido del anfitrión, los mandos del invitado llegan al anfitrión, cambio pedido por el invitado, mensaje rápido, final del amistoso con el mismo marcador en los dos, Division Rivals (emparejamiento, resultado y puntos), abandono (el rival gana 3-0), clasificación y ningún error de JavaScript.
+**Online (12 pruebas, servidor real y dos navegadores)**: conexión de los dos, sala privada con código (los dos con el mismo club: se ven los 22 jugadores), pausa compartida, el invitado ve el partido del anfitrión, los mandos del invitado llegan al anfitrión, cambio pedido por el invitado, mensaje rápido, final del amistoso con el mismo marcador en los dos, Division Rivals (emparejamiento, resultado y puntos), abandono (el rival gana 3-0), clasificación y ningún error de JavaScript.
 
 **Ejecutable de Linux**: se lanzó bajo Xvfb, se inició un partido desde el menú sin errores y no hizo ninguna conexión de red externa (se desactivaron las conexiones en segundo plano de Chromium y la descarga de diccionarios).
 

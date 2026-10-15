@@ -176,3 +176,18 @@ describe('Sincronización online', () => {
     expect(normalizeServer('')).toBe('');
   });
 });
+
+describe('Mismo club en los dos lados (online)', () => {
+  it('los 22 jugadores tienen identificadores distintos y el partido se juega', async () => {
+    const { TEAMS } = await import('../src/data/teams');
+    const m = makeMatch({ home: TEAMS[0], away: TEAMS[0], seed: 4 });
+    const ids = new Set(m.playersAll.map((p) => p.id));
+    expect(ids.size).toBe(22);
+    expect(m.teams[1].bench.every((p) => !m.teams[0].bench.some((q) => q.id === p.id))).toBe(true);
+    m.simulate(30);
+    expect(m.teams[0].stats.passes + m.teams[1].stats.passes).toBeGreaterThan(3);
+    // el invitado (mismo config) obtiene los mismos ids
+    const g = makeMatch({ home: TEAMS[0], away: TEAMS[0], seed: 4 });
+    expect(g.playersAll.map((p) => p.id)).toEqual(makeMatch({ home: TEAMS[0], away: TEAMS[0], seed: 4 }).playersAll.map((p) => p.id));
+  });
+});
