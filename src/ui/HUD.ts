@@ -8,7 +8,6 @@ import { keyLabel } from '../input/Input';
 import type { StadiumData } from '../data/types';
 import { crestSVG } from './Crest';
 
-const ACTION_NAMES: Record<string, string> = { pass: 'PASE', through: 'PASE AL HUECO', lob: 'PASE ELEVADO', shoot: 'TIRO' };
 
 /** HUD del partido en DOM: marcador, reloj, radar, jugador controlado, potencia y avisos. */
 export class HUD {
@@ -24,7 +23,6 @@ export class HUD {
   private ptag: HTMLElement;
   private power: HTMLElement;
   private powerFill: HTMLElement;
-  private powerLbl: HTMLElement;
   private radar: HTMLCanvasElement;
   private hint: HTMLElement;
   private replayTag: HTMLElement;
@@ -36,6 +34,8 @@ export class HUD {
   private frames = 0;
   private fpsAcc = 0;
   showRadar = true;
+  /** Posición en pantalla (px) de la cabeza del jugador controlado: ahí va la barra de potencia. */
+  powerAnchor: { x: number; y: number } | null = null;
   /** Avisos emergentes y ayuda de controles (desactivados por defecto). */
   popups = false;
   showFps = false;
@@ -58,7 +58,7 @@ export class HUD {
       <div class="banner hidden"></div>
       <div class="toast hidden"></div>
       <div class="player-tag hidden"><div class="nm"></div><div class="meta"></div><div class="stamina"><div></div></div></div>
-      <div class="powerbar hidden"><div class="lbl"></div><div class="track"><div class="fill"></div></div></div>
+      <div class="powerbar hidden"><div class="track"><div class="fill"></div></div></div>
       <canvas class="radar" width="210" height="136"></canvas>
       <div class="hint hidden"></div>
       <div class="replay-tag hidden">REPETICIÓN</div>
@@ -78,7 +78,6 @@ export class HUD {
     this.ptag = q('.player-tag');
     this.power = q('.powerbar');
     this.powerFill = q('.powerbar .fill');
-    this.powerLbl = q('.powerbar .lbl');
     this.radar = r.querySelector('.radar') as HTMLCanvasElement;
     this.hint = q('.hint');
     this.replayTag = q('.replay-tag');
@@ -257,10 +256,14 @@ export class HUD {
     }
     // Barra de potencia
     const ch = this.ctrl?.charge ?? (this.ctrl?.lastCharge && m.time - this.ctrl.lastCharge.at < 0.6 ? this.ctrl.lastCharge : null);
-    this.show(this.power, !!ch && m.phase !== 'replay');
-    if (ch) {
+    // pequeña, encima de la cabeza del jugador (sin rótulo en el centro de la pantalla)
+    const anchor = this.powerAnchor;
+    this.show(this.power, !!ch && !!anchor && m.phase !== 'replay');
+    if (ch && anchor) {
       this.powerFill.style.width = `${Math.round(ch.value * 100)}%`;
-      this.setText(this.powerLbl, ch.label ?? ACTION_NAMES[ch.action] ?? '');
+      this.power.style.left = `${anchor.x}px`;
+      this.power.style.top = `${anchor.y}px`;
+      this.power.classList.toggle('shot', ch.action === 'shoot');
     }
     // Ayuda contextual en balón parado
     this.updateHint();

@@ -18,7 +18,8 @@
     "test:e2e:gamepad": "node scripts/e2e-gamepad.mjs",
     "android:sync": "npm run build && npx cap sync android",
     "android:apk": "npm run android:sync && cd android && ./gradlew assembleDebug",
-    "build:single": "npm run build && node scripts/single-file.mjs"
+    "build:single": "npm run build && node scripts/single-file.mjs",
+    "art": "npm run build && node scripts/make-art.mjs all"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",

@@ -45,6 +45,7 @@ export class MatchRunner {
   private disposed = false;
   private audioEngine: AudioEngine;
   private lastPowerShot = -10;
+  private readonly anchorV = new THREE.Vector3();
   /** Presentación inicial en curso (la simulación espera mientras dura). */
   inIntro = false;
   private introFrames = 0;
@@ -210,6 +211,15 @@ export class MatchRunner {
     this.view.director.freeKickAim = fk;
     this.touch?.setFreeKick(!!fk);
     this.view.update(this.paused ? 0 : dt, preview, showAim, aimTarget);
+    // barra de potencia encima de la cabeza del jugador controlado
+    const cp = team?.controlled;
+    if (cp && !cp.sentOff) {
+      const v = this.anchorV.set(cp.pos.x, cp.data.height + 1.15, cp.pos.z).project(this.view.camera);
+      const el = this.renderer.domElement;
+      this.hud.powerAnchor = v.z < 1 ? { x: (v.x * 0.5 + 0.5) * el.clientWidth, y: (-v.y * 0.5 + 0.5) * el.clientHeight } : null;
+    } else {
+      this.hud.powerAnchor = null;
+    }
     this.audio.update(this.view.excitement);
     this.hud.update(dt);
     if (this.touch && team) {
