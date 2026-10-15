@@ -149,6 +149,8 @@ export class Match {
   readonly playersAll: Player[] = [];
   /** Receptor previsto del último pase (para auto-cambio del humano). */
   intendedReceiver: Player | null = null;
+  /** Último pase completado (para las asistencias). */
+  private lastPass: { from: Player; to: Player; time: number } | null = null;
   /** Cambios pedidos que se harán en la próxima interrupción del juego. */
   readonly pendingSubs: { team: 0 | 1; outId: string; inId: string }[] = [];
   /** Aumenta con cada cambio (el renderizador crea/oculta modelos). */
@@ -525,7 +527,11 @@ export class Match {
 
     // Pase completado (estadística)
     if (this.lastTouch && this.lastTouch.deliberate && ['pass', 'through', 'lob', 'cross', 'throwin', 'gkthrow'].includes(this.lastTouch.kind)) {
-      if (this.lastTouch.team === p.team && this.lastTouch.player !== p) this.teams[p.team].stats.passesCompleted++;
+      if (this.lastTouch.team === p.team && this.lastTouch.player !== p) {
+        this.teams[p.team].stats.passesCompleted++;
+        this.lastTouch.player.ps.passesOk++;
+        this.lastPass = { from: this.lastTouch.player, to: p, time: this.time };
+      }
     }
 
     if (gkHands) {
@@ -610,6 +616,7 @@ export class Match {
   private registerSave(gk: Player) {
     if (this.lastShot && this.lastShot.team !== gk.team && this.time - this.lastShot.time < 3) {
       this.teams[gk.team].stats.saves++;
+      gk.ps.saves++;
       this.debug.saves++;
       this.emit({ type: 'save', team: gk.team, playerId: gk.id, kind: 'shot' });
       this.lastShot = null;
@@ -803,11 +810,18 @@ export class Match {
     const isShot = ['shoot', 'finesse', 'penalty', 'chip'].includes(req.kind) || (req.kind === 'header' && !req.targetId);
     this.setLastTouch(p, true, req.kind);
     const team = this.teams[p.team];
-    if (isPass) team.stats.passes++;
+    if (isPass) {
+      team.stats.passes++;
+      p.ps.passes++;
+    }
     if (isShot) {
       team.stats.shots++;
+      p.ps.shots++;
       const onTarget = this.predictOnTarget(team);
-      if (onTarget) team.stats.shotsOnTarget++;
+      if (onTarget) {
+        team.stats.shotsOnTarget++;
+        p.ps.onTarget++;
+      }
       this.lastShot = { team: p.team as 0 | 1, time: this.time, onTarget };
       this.shotKickTime = this.time;
     }
@@ -1032,6 +1046,7 @@ export class Match {
       // Entrada limpia: toca el balón primero
       a.done = true;
       team.stats.tackles++;
+      p.ps.tackles++;
       this.debug.tackles++;
       if (this.offsideTeam === p.team && this.offsideSet.has(p.id)) { this.callOffside(p); return; }
       if (this.offsideTeam !== p.team) { this.offsideSet.clear(); this.offsideTeam = -1; }
@@ -1081,6 +1096,7 @@ export class Match {
     const vTeam = this.teams[victim.team];
     const oTeam = this.teams[offender.team];
     oTeam.stats.fouls++;
+    offender.ps.fouls++;
     this.debug.fouls++;
     victim.startAction('fallen', 'fallen', 1.4);
     // Gravedad: por detrás, barrida a velocidad, lejos del balón
@@ -1145,6 +1161,7 @@ export class Match {
       if (p.yellowCards < 2) this.emit({ type: 'card', kind: 'red', team: p.team, playerId: p.id, text: p.data.name });
       team.stats.red++;
       p.sentOff = true;
+      p.ps.to = this.minute;
       p.pos.set(p.pos.x, 0, Math.sign(p.pos.z || 1) * (HALF_WIDTH + 3));
       if (team.controlled === p) team.controlled = null;
       if (this.owner === p) this.owner = null;
@@ -1216,6 +1233,8 @@ export class Match {
     inn.vel.set(0, 0, 0);
     inn.facing = out.facing;
     inn.stamina = 1;
+    inn.ps.from = this.minute;
+    out.ps.to = this.minute;
     inn.clearAction();
     inn.frozen = out.frozen;
     t.players[idx] = inn;
@@ -1308,7 +1327,13 @@ export class Match {
     const ownGoal = !!lt && lt.team !== team;
     const scorer = lt ? lt.player : null;
     t.stats.goals++;
-    if (scorer && !ownGoal) scorer.goals++;
+    if (scorer && !ownGoal) {
+      scorer.goals++;
+      // asistencia: el último pase completado al goleador (hace menos de 12 s)
+      const lp = this.lastPass;
+      if (lp && lp.to === scorer && lp.from.team === scorer.team && this.time - lp.time < 12) lp.from.ps.assists++;
+    }
+    this.lastPass = null;
     const minute = Math.min(this.minute, this.half <= 2 ? this.half * 45 + 10 : 125);
     t.scorers.push({ name: (scorer?.data.name ?? '—') + (ownGoal ? ' (p.p.)' : ''), minute });
     this.lastGoal = { team, scorer, minute, ownGoal };

@@ -85,6 +85,8 @@ export class Player {
   /** Último instante en que este jugador tocó el balón. */
   lastTouchAt = -10;
   goals = 0;
+  /** Estadísticas individuales del partido (para las valoraciones). */
+  readonly ps = { passes: 0, passesOk: 0, shots: 0, onTarget: 0, assists: 0, tackles: 0, saves: 0, fouls: 0, from: 0, to: -1 };
   stoodOffside = false;
   readonly id: string;
 

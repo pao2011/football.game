@@ -201,6 +201,22 @@ El mando sigue el **esquema clásico de FIFA**: mismos botones y mismas combinac
 | **Copa Élite** (torneo) | 8 equipos en dos grupos de 4 (todos contra todos) con clasificación, cuadro de semifinales cruzadas y final. Las eliminatorias se deciden con prórroga y penales. Los demás partidos se simulan automáticamente y el progreso se guarda. |
 | **Carrera** | Liga de 8 clubes a doble vuelta (14 jornadas), tabla de posiciones, calendario, resultados, plantilla de 18 jugadores con edad y media, editor de alineación y formación. Al final de la temporada hay historial de campeones, evolución de los jugadores (los jóvenes mejoran y los veteranos declinan; los retirados son reemplazados por juveniles) y una nueva temporada. Se guarda automáticamente. |
 | **Entrenamiento** | Práctica libre (pases, conducción y tiros contra el arquero), **penales** y **tiros libres con barrera** desde posiciones aleatorias. |
+| **Online · Division Rivals** | Partidos **1 contra 1 contra otra persona** que suman puntos: de la **División 10 a Élite** (victoria +30 y +5 por gol de diferencia, empate +10, derrota −12, abandono −20; ganar a alguien de una división más alta da puntos extra). El emparejamiento busca rivales de tu nivel y amplía la búsqueda cuanto más esperas. Incluye **clasificación** de los mejores. |
+| **Online · Amistoso y sala privada** | Amistoso contra un rival al azar, o **sala privada con código** de 5 letras para jugar con un amigo (el anfitrión elige la duración). Mensajes rápidos al rival (*¡Buen partido!*, *¡Qué golazo!*…). |
+
+**En todos los partidos**: **7 suplentes y hasta 5 cambios** (Pausa → *Cambios*: eliges quién sale, con su resistencia a la vista, y quién entra; el cambio se hace en la siguiente interrupción del juego). La IA cambia a sus jugadores cansados desde el minuto 58, y hay una opción de **cambios automáticos** para tu equipo. Al final del partido, **valoración de cada jugador** (3,0–10,0, con goles, asistencias, atajadas, entradas y % de pases) y **Jugador del partido**.
+
+### Jugar online gratis (sin pagar nada)
+
+El partido se simula en el navegador del **anfitrión** y el servidor solo empareja y reenvía mensajes, así que basta un servidor muy pequeño y gratuito (el mismo sistema que FPSgame):
+
+| Opción | Cómo |
+|---|---|
+| **Servidor público gratis (Render)** | En [render.com](https://render.com) (cuenta gratuita, sin tarjeta): *New → Blueprint →* elige este repositorio → *Apply*. `render.yaml` ya lo configura todo (plan **free**): compila el juego y arranca `server/index.mjs`. Queda en `https://football-elite-3d.onrender.com`, que es el servidor que el juego usa por defecto. Si Render te da otro nombre, escríbelo en *ONLINE → Servidor*. Abriendo esa dirección también se juega desde el navegador. |
+| **Red local (misma Wi-Fi), sin Internet** | En un PC: `npm run build && npm run server`. La consola muestra la IP (p. ej. `192.168.1.20:8080`): escríbela en *ONLINE → Servidor* en cada dispositivo (o abre `http://192.168.1.20:8080` en el navegador del móvil). |
+| **Cualquier otro hosting gratuito con Node** | `npm ci && npm run build` y `node server/index.mjs` (variables `PORT` y `DATA_DIR`). |
+
+Se puede jugar entre PC, móvil (APK o navegador) y mando: cada uno usa sus propios controles.
 
 ## 6. Funcionalidades implementadas
 
@@ -286,13 +302,17 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Prueba | Comando | Resultado |
 |---|---|---|
 | Comprobación de tipos (TypeScript estricto) | `npx tsc --noEmit` | ✅ sin errores |
-| Unitarias y de simulación | `npm test` | ✅ **140/140** |
-| Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **14/14** |
+| Unitarias y de simulación | `npm test` | ✅ **155/155** |
+| Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **15/15** |
 | Extremo a extremo con mando (mando estándar simulado) | `npm run build && npm run test:e2e:gamepad` | ✅ **7/7** |
 | Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **17/17** |
+| Online: servidor real + dos navegadores jugando entre sí | `npm run build && npm run test:e2e:online` | ✅ **11/11** |
 | Ejecutable de Linux bajo Xvfb | — | ✅ sin errores (detalle abajo) |
 
-**Unitarias y de simulación (140 pruebas)**
+**Unitarias y de simulación (155 pruebas)**
+- **Cambios (5)**: 7 suplentes, el cambio espera a una interrupción, máximo 5, no vuelve quien salió ni se cambia a un expulsado, el que entra hereda el control y el balón, y la IA cambia a los cansados en partidos completos.
+- **Online (8)**: divisiones y puntos de Rivals; el servidor empareja, reenvía, reparte puntos solo si los dos informan el mismo resultado, castiga el abandono, crea salas con código y no junta divisiones muy distintas enseguida; el invitado reproduce el estado del anfitrión (jugadores, balón, fase y cambios); los mandos remotos no pierden pulsaciones breves; direcciones de servidor.
+- **Valoraciones (2)**: notas de 3 a 10 para todos los que jugaron, pases individuales que suman los del equipo, y goles/asistencias que suben la nota y deciden el jugador del partido.
 - **Tipos de tiro (5)**: la vaselina supera los 3 m y entra bajo el travesaño; el raso no pasa de 0,8 m; el potente es más rápido y menos preciso; la rosca lleva efecto; y las combinaciones funcionan.
 - **Regates (4)**: los 6 regates se ejecutan con su animación y control del balón; la bicicleta cambia de dirección; un regate puede superar al defensor (que entonces no puede entrar) pero no siempre; y la ruleta protege el balón.
 - **Controles de tiros y regates (7)**: Q+D vaselina, Q+Shift+D potente, Ctrl+D amago, doble toque raso, D y luego S amago, I/K/J/L/R regates, gestos táctiles, y Q con balón como modificador (no cambia de jugador).
@@ -310,7 +330,8 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 - **Control humano**: saque inicial con S y cambio al receptor, movimiento y sprint, y carga de la barra de potencia y disparo con D.
 - **Modos**: calendario de todos contra todos, puntos, torneo completo hasta el campeón (también si el usuario queda eliminado) y temporada de carrera de 14 jornadas con su progresión.
 
-**Extremo a extremo (14 pruebas)**
+**Extremo a extremo (15 pruebas)**
+- Cambios desde la pausa (elegir quién sale y quién entra) y jugador del partido en el resultado.
 - La pantalla de título carga y se navega por el menú.
 - Partido rápido: saque con **S**, movimiento con flechas + **E** y tiro con **D** (barra de potencia).
 - Pausa con **Esc**, estadísticas, reanudar y **reiniciar el partido sin reiniciar la aplicación**.
@@ -323,6 +344,8 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 
 **Móvil (17 pruebas)**: animación de inicio, valores por defecto para móvil, menús con toques, tiro libre (cámara del lanzador, trayectoria, botones de efecto y disparo, sin avisos emergentes), controles táctiles visibles, saque con PASE, movimiento con el joystick, tiro con potencia con TIRO, vaselina deslizando sobre TIRO, botones ROSCA / VASELINA / RASO / POTENTE y combinación POTENTE + RASO (sin botón de sprint), regate deslizando en la zona libre, botones propios de defensa con indicador DEFENSA y CAMBIAR funcionando, pausa táctil, sin aviso de orientación, PWA (manifiesto, service worker y **carga sin conexión**), pase y tiro asistidos con toque rápido, presentación del partido (se salta con un toque), cámara que mantiene visible el juego junto a la banda inferior, y ningún error de JavaScript.
 
+**Online (11 pruebas, servidor real y dos navegadores)**: conexión de los dos, sala privada con código, el invitado ve el partido del anfitrión, los mandos del invitado llegan al anfitrión, cambio pedido por el invitado, mensaje rápido, final del amistoso con el mismo marcador en los dos, Division Rivals (emparejamiento, resultado y puntos), abandono (el rival gana 3-0), clasificación y ningún error de JavaScript.
+
 **Ejecutable de Linux**: se lanzó bajo Xvfb, se inició un partido desde el menú sin errores y no hizo ninguna conexión de red externa (se desactivaron las conexiones en segundo plano de Chromium y la descarga de diccionarios).
 
 **Estadísticas medias de la IA** (partidos IA contra IA de 2 × 2 min, dificultad *Clase mundial*): unas 75–110 acciones de pase con un 55–75 % completadas, 3–4 tiros, 0,5–1 goles y algunas faltas, tarjetas y atajadas por partido.
@@ -331,9 +354,10 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 
 - **Rendimiento en GPU real no medido.** El entorno de desarrollo no tiene tarjeta gráfica y todo se probó con renderizado por software (SwiftShader), que da pocos FPS. Por diseño (unas 250 llamadas de dibujo, mallas de entre 1.600 y 5.000 vértices por jugador, público instanciado), una GPU integrada moderna debería mantener 60 FPS en calidad media, pero no está verificado. Si va lento, baja la calidad, desactiva las sombras o reduce la escala de resolución en *Configuración*.
 - **Audio procedural** (sintetizado, sin grabaciones): se verificó por análisis de señal (sin silencios, sin saturación y con espectros correctos), pero no se escuchó.
-- **Reglas no implementadas**: ley de la ventaja, mano, faltas del arquero en sus estiradas a los pies, saque de banda mal ejecutado y cambios durante el partido (la plantilla y la alineación se gestionan en el modo Carrera). En un tiro libre indirecto se acepta un gol directo.
+- **Reglas no implementadas**: ley de la ventaja, mano, faltas del arquero en sus estiradas a los pies y saque de banda mal ejecutado. En un tiro libre indirecto se acepta un gol directo.
+- **Online**: el anfitrión simula el partido, así que **el invitado juega con un pequeño retraso** (su ping + 0,1 s de colchón para que se vea fluido): con buena conexión apenas se nota, con mala se nota en los controles. El anfitrión debe **mantener el juego en primer plano** (si minimiza la ventana el navegador frena el partido para los dos). El servidor gratuito de Render **se duerme** tras 15 min sin uso (la primera conexión tarda hasta 1 minuto) y **puede perder la clasificación de Division Rivals al reiniciarse** (su disco es temporal; cada jugador guarda su última división en su dispositivo). La validación de resultados es básica: en Rivals solo cuenta si los dos jugadores informan el mismo marcador. Se probó con dos navegadores en el mismo ordenador (`npm run test:e2e:online`), no con dos dispositivos por Internet. El servidor público por defecto **no existe hasta que alguien publique el Blueprint** de `render.yaml`.
 - **Partidos no jugados por el usuario** en torneo y carrera: se resuelven con un modelo estadístico (Poisson según la media de cada equipo), no con la simulación completa.
-- **Sin multijugador local** (dos humanos) ni regates especiales con el stick derecho.
+- **Sin multijugador local en el mismo dispositivo** (dos humanos con dos mandos); el multijugador es online.
 - **Equipación del visitante**: se elige automáticamente para que contraste con la del local; no se puede seleccionar a mano.
 - **Animaciones procedurales**: más simples que una captura de movimiento real; las caras son estilizadas.
 - **IA**: tiende a jugar mucho por el centro del campo y a generar pocas ocasiones claras en dificultades bajas. Es funcional y táctica, pero mejorable.

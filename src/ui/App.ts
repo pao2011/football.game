@@ -9,6 +9,7 @@ import type { Difficulty, FormationId, PlayerData, TeamData } from '../data/type
 import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
 import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, type Action } from '../input/Input';
 import { MAX_SUBS, type MatchConfig } from '../sim/Match';
+import { manOfTheMatch, playerRatings } from '../sim/Ratings';
 import { Career } from '../modes/Career';
 import { Tournament } from '../modes/Tournament';
 import type { Fixture, StandingRow } from '../modes/Competition';
@@ -482,6 +483,8 @@ export class App {
       back,
     }, this.audio);
     screen.onBack = back;
+    // al refrescar la lista no se repite la animación de entrada
+    setTimeout(() => screen.root.classList.add('no-anim'), 250);
     this.overlay = screen;
   }
 
@@ -560,6 +563,18 @@ export class App {
     }).join('');
   }
 
+  /** Jugador del partido y valoraciones de los dos equipos. */
+  private ratingsHTML(m: MatchRunner['match']) {
+    const all = playerRatings(m);
+    if (!all.length) return '';
+    const mvp = manOfTheMatch(m, all);
+    const col = (v: number) => (v >= 8 ? '#19e68c' : v >= 7 ? '#9be86a' : v >= 6 ? '#ffcf3f' : '#ff6b76');
+    const list = (ti: 0 | 1) => all.filter((x) => x.team === ti).sort((a, b) => b.rating - a.rating).map((x) => `<div class="rt-row ${mvp && mvp.player === x.player ? 'mvp' : ''}"><span class="rt" style="background:${col(x.rating)}">${x.rating.toFixed(1)}</span><span class="nm">${esc(x.player.data.name)}</span><small>${esc(x.line)}</small></div>`).join('');
+    const mt = mvp ? m.teams[mvp.team] : null;
+    return `${mvp && mt ? `<div class="mvp-card">${crestSVG(mt.data, 40)}<div><div class="crumb">JUGADOR DEL PARTIDO</div><b>${esc(mvp.player.data.name)}</b><small>${esc(mvp.line || mvp.player.slot.role)}</small></div><span class="rt big" style="background:${col(mvp.rating)}">${mvp.rating.toFixed(1)}</span></div>` : ''}
+      <details class="ratings"><summary>Valoraciones de los jugadores</summary><div class="grid2">${[0, 1].map((i) => `<div><div class="crumb">${esc(m.teams[i].data.short)}</div>${list(i as 0 | 1)}</div>`).join('')}</div></details>`;
+  }
+
   private matchFinished(r: MatchResultInfo, ctx: MatchContext) {
     const m = r.match;
     const [h, a] = m.teams;
@@ -588,6 +603,7 @@ export class App {
           <div class="result-score"><div class="t">${crestSVG(h.data, 96)}${esc(h.data.name)}</div><div class="big">${r.home} - ${r.away}</div><div class="t">${crestSVG(a.data, 96)}${esc(a.data.name)}</div></div>
           ${pens}
           <div class="scorers"><div style="text-align:right">${scorers(h)}</div><div>${scorers(a)}</div></div>
+          ${ctx.mode === 'training' ? '' : this.ratingsHTML(m)}
         </div>
         <div class="panel">${ctx.mode === 'online' && ctx.start.mode === 'rivals' ? '<div class="rivals-change"><div class="net-status"><span class="spinner"></span>Calculando puntos de Division Rivals…</div></div>' : ''}${this.statsHTML(m)}</div>
       </div></div>

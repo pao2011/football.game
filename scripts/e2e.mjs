@@ -138,6 +138,25 @@ await check('Pausa con Esc, estadísticas y reanudar', async () => {
   await waitFor(() => !window.__runner.paused, 5000);
 });
 
+await check('Cambios desde la pausa: elegir quién sale y quién entra', async () => {
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.overlay [data-act=subs]', { timeout: 15000 });
+  await click('[data-act=subs]');
+  await page.waitForSelector('.subs-modal');
+  const outId = await ev(() => window.__runner.match.teams[0].players[9].id);
+  await click(`.sub-row[data-act=out][data-id="${outId}"]`);
+  await click('.sub-row[data-act=in]:not([disabled])');
+  await waitFor(() => window.__runner.match.pendingSubs.length === 1, 5000);
+  assert((await page.textContent('.subs-modal')).includes('pendiente'), 'cambio pendiente visible');
+  await page.screenshot({ path: join(OUT, 'subs.png') });
+  // en la próxima interrupción se hace el cambio
+  await ev(() => window.__runner.match.applyPendingSubs());
+  await waitFor((id) => !window.__runner.match.playersAll.some((p) => p.id === id), 5000, outId);
+  await click('[data-act=back]');
+  await click('[data-act=resume]');
+  await waitFor(() => !window.__runner.paused, 5000);
+});
+
 await check('Reiniciar el partido sin reiniciar la aplicación', async () => {
   const oldRunner = await ev(() => { window.__old = window.__runner; return true; });
   void oldRunner;
@@ -165,6 +184,7 @@ await check('Final del partido y pantalla de resultado con estadísticas', async
   const txt = await page.textContent('.screen');
   assert(/RESULTADO FINAL|Resultado final/i.test(txt), 'sin pantalla de resultado');
   await page.screenshot({ path: join(OUT, 'result.png') });
+  assert((await page.textContent('.screen')).includes('JUGADOR DEL PARTIDO'), 'jugador del partido');
 });
 
 await check('Revancha desde la pantalla de resultado', async () => {

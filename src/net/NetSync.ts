@@ -51,6 +51,8 @@ export interface Snapshot {
   rc?: [number, number, number];
   /** Último gol: equipo y goleador. */
   lg?: [number, string];
+  /** Estadísticas individuales al final (valoraciones): id → [goles, pases, ok, tiros, a puerta, asist., entradas, atajadas, faltas, desde, hasta, amarillas, expulsado]. */
+  pr?: Record<string, number[]>;
   /** Tanda de penales. */
   so?: { kicks: [boolean[], boolean[]]; turn: 0 | 1; done: boolean; winner: 0 | 1 | -1 } | null;
 }
@@ -133,6 +135,16 @@ export class HostSync {
     }
     if (m.phase === 'replay' && m.replayClip.length > 1) snap.rc = [m.replayClip[0].tm, m.replayClip[m.replayClip.length - 1].tm, r2(m.replayLength)];
     if (m.lastGoal && (m.phase === 'goal' || m.phase === 'replay')) snap.lg = [m.lastGoal.team, m.lastGoal.scorer?.id ?? ''];
+    if (m.finished) {
+      const pr: Record<string, number[]> = {};
+      for (const t of m.teams) {
+        for (const p of [...t.players, ...t.subbedOff]) {
+          const q = p.ps;
+          pr[p.id] = [p.goals, q.passes, q.passesOk, q.shots, q.onTarget, q.assists, q.tackles, q.saves, q.fouls, q.from, q.to, p.yellowCards, p.sentOff ? 1 : 0];
+        }
+      }
+      snap.pr = pr;
+    }
     if (m.shootout) {
       const s = m.shootout;
       snap.so = { kicks: [s.kicks[0].slice(), s.kicks[1].slice()], turn: s.turn, done: s.done, winner: s.winner };
@@ -298,6 +310,17 @@ export class GuestSync {
       const ti = m.teams.findIndex((t) => t.human) as 0 | 1;
       for (let i = m.pendingSubs.length - 1; i >= 0; i--) if (m.pendingSubs[i].team === ti) m.pendingSubs.splice(i, 1);
       for (const p of s.pend) m.pendingSubs.push({ team: ti, outId: p.outId, inId: p.inId });
+    }
+    if (s.pr) {
+      for (const t of m.teams) {
+        for (const p of [...t.players, ...t.subbedOff, ...t.bench]) {
+          const v = s.pr[p.id];
+          if (!v) continue;
+          const q = p.ps;
+          [p.goals, q.passes, q.passesOk, q.shots, q.onTarget, q.assists, q.tackles, q.saves, q.fouls, q.from, q.to, p.yellowCards] = v;
+          p.sentOff = v[12] === 1;
+        }
+      }
     }
     if (s.lg) {
       const sc = this.byId(s.lg[1]);
