@@ -77,7 +77,8 @@ export class MatchAudio {
         else a.glovePunch(); // desvío con las manos o los puños
         break;
       case 'skill':
-        if (e.kind === 'beat') a.ooh();
+        // regate que supera al rival, o chilena / tijera: el público se levanta
+        if (e.kind === 'beat' || e.kind === 'bicycle' || e.kind === 'scissor') a.ooh();
         break;
       case 'nearMiss':
         a.ooh();

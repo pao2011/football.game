@@ -134,7 +134,7 @@ El mismo juego funciona en móviles con **controles táctiles**, una interfaz ad
 
 ## 4. Controles (idénticos al esquema clásico de FIFA)
 
-Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y suéltalo para golpear. Si lo pulsas antes de que llegue el balón, el jugador lo golpea **de primera** (volea o cabezazo si el balón llega alto).
+Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y suéltalo para golpear. Si lo pulsas antes de que llegue el balón, el jugador lo golpea **de primera**. Con el balón en el aire, **TIRO** elige el remate según la altura a la que llega y hacia dónde miras: **volea** (por debajo de la cintura), **tijera** (de lado, a media altura), **chilena** (de espaldas al arco y alto) o **cabezazo** (a la altura de la cabeza). Si no pulsas nada, el jugador **para el balón con el pecho o el muslo** y lo deja caer a sus pies; si te llega un balón aéreo cerca del arco después de controlarlo con el pecho, pulsa TIRO para rematar de volea antes de que bote.
 
 | Acción | Teclado (clásico) | Mando Xbox / PlayStation |
 |---|---|---|
@@ -204,7 +204,7 @@ R1 = RB = **Shift** · L1 = LB = **Q** · L2 = LT = **Ctrl** · R2 = RT = **E** 
 
 En el móvil también funcionan pulsando dos botones a la vez (p. ej. ELEVADO + AL HUECO = centro filtrado). La **barra de potencia** es pequeña y aparece **encima de la cabeza** del jugador, sin rótulos en el centro de la pantalla.
 
-No se implementaron: el regate en órbita sin tocar el balón (L1 + L2 + stick) y la tijereta/chilena como animación propia (los remates de primera con el balón alto siguen siendo voleas o cabezazos).
+No se implementó el regate en órbita sin tocar el balón (L1 + L2 + stick).
 
 El mando sigue el **esquema clásico de FIFA**: mismos botones y mismas combinaciones (RB + A pase tenso, LB + Y globo al hueco, RB + X centro tenso, X X centro bajo, X X X centro raso, LB para pedir el desmarque, LB + B vaselina, RB + B rosca, B B raso, B y luego A amago) y la **cruceta no mueve al jugador**: ← / → cambian la mentalidad del equipo (de ultradefensiva a ultraofensiva; se ve un indicador bajo el marcador).
 
@@ -253,7 +253,7 @@ Se puede jugar entre PC, móvil (APK o navegador) y mando: cada uno usa sus prop
 **Futbolistas**
 - Modelos humanos 3D con esqueleto de 21 huesos y malla con piel, generados por código.
 - Variedad de tonos de piel, peinados, alturas y botas; equipaciones con 5 patrones (liso, degradado, rayas, aros y banda); nombre y dorsal en la espalda y número en el pantalón; arqueros con guantes y manga larga.
-- Animaciones: caminar, trotar y esprintar sin deslizamiento de pies (IK), conducción, pase, centro, disparo, cabezazo con salto, entrada, barrida, caídas y levantarse, control, saque de banda, estiradas del arquero, blocaje, saques del arquero, celebraciones (4 variantes) y lamentos, con transiciones suaves.
+- Animaciones: caminar, trotar y esprintar sin deslizamiento de pies (IK), conducción, pase, centro, disparo, cabezazo con salto, **volea, tijera y chilena** (con caída al césped y levantarse), **control con el pecho y con el muslo**, entrada, barrida, caídas y levantarse, control, saque de banda, estiradas del arquero, blocaje, saques del arquero, celebraciones (4 variantes) y lamentos, con transiciones suaves.
 
 **Tiros y regates**
 - **Tiros**: normal, raso, con efecto (rosca), vaselina y potente, combinables entre sí. Cada uno tiene su propia física: la vaselina supera al arquero y baja bajo el travesaño; el raso va pegado al césped; el potente es más rápido, menos preciso y tarda más en armarse. La IA también los usa, por ejemplo la vaselina cuando el arquero está adelantado.
@@ -273,6 +273,8 @@ Se puede jugar entre PC, móvil (APK o navegador) y mando: cada uno usa sus prop
 - Tiros libres con barrera a 9,15 m y penales.
 - **Árbitro** en el campo: sigue el juego en diagonal, silba, señala la dirección de los tiros libres y, en las faltas, corre hacia el infractor para hacer un **aviso verbal** (gesto con el dedo; si el jugador reincide, amarilla) o **mostrar la tarjeta amarilla o roja** con el brazo en alto. La cámara hace un plano del árbitro con el jugador, aparece un rótulo con la tarjeta y la reanudación espera a que termine. Segunda amarilla = roja.
 - **Centros**: la trayectoria se calcula con la física real para que el balón llegue a la cabeza del rematador (centro normal, bombeado por encima de la primera línea), a media altura (tenso) o a la cintura (bajo), con efecto alejándose del arquero. Cuando un compañero va a centrar, los delanteros **atacan el área** (primer palo, punto de penal, segundo palo y borde), el que recibe va al **punto de remate** y no a donde bota, y se elige al rematador con espacio y sin defensores en la trayectoria. Los cabezazos se dirigen al palo contrario al arquero y se apuntan en el instante del contacto. En pruebas con 40 centros desde la banda, un atacante toca primero en el 100 % (antes, 90 %) y hay el doble de goles.
+- **Balones aéreos**: los jugadores **paran los centros y pelotazos con el pecho** (por encima de la cintura) **o con el muslo** (más abajo) y los dejan caer a sus pies; si el balón llega demasiado fuerte para su control, rebota en el cuerpo. Dentro de su propia área, los defensores despejan de cabeza los balones altos. Lejos del arco y sin rivales cerca, la IA espera el balón para controlarlo en vez de cabecearlo a ciegas.
+- **Remates acrobáticos**: **volea**, **tijera** (salto de lado) y **chilena** (de espaldas, por encima de la cabeza), cada uno con su animación, su ventana de contacto (el pie golpea cuando el balón pasa por su alcance; si no llega, remata al aire) y su dificultad (la chilena es la menos precisa). La IA los usa en el área rival: volea con los centros bajos o tras controlar con el pecho, y tijera o chilena solo los buenos rematadores y no siempre. El público hace "¡uy!" con las chilenas y las tijeras. En 16 partidos IA contra IA: unos 14 controles de pecho y 9 de muslo por partido, voleas, tijeras y chilenas, y un 40 % más de goles que antes (de 31 a 43).
 - **Recepción de pases**: el jugador al que le pasas va a buscar el balón aunque el stick siga apuntando a otro lado; el stick vuelve a mandar al recibirlo.
 - **Tiros libres directos con trayectoria (estilo FC)**: cerca del arco, la cámara se coloca detrás del lanzador (algo más atrás y por encima) y se ve el recorrido previsto del balón con puntos y una mira en el arco. Con el stick / flechas / joystick se mueve la mira (lado y altura), con **J / L**, el stick derecho o los botones táctiles **EFECTO ↶ ↷** se curva la trayectoria, y manteniendo **TIRO** se elige la potencia (poca potencia = parábola más alta; mucha = más tenso). El recorrido se calcula con la misma física del balón, así que lo que ves es lo que hace (más un pequeño error según el lanzador). PASE y ELEVADO siguen sirviendo para jugarlo en corto o centrar.
 - **Penales**: mira visible en el arco (lado según el stick, altura según la potencia que se carga).
@@ -325,7 +327,7 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Prueba | Comando | Resultado |
 |---|---|---|
 | Comprobación de tipos (TypeScript estricto) | `npx tsc --noEmit` | ✅ sin errores |
-| Unitarias y de simulación | `npm test` | ✅ **159/159** |
+| Unitarias y de simulación | `npm test` | ✅ **167/167** |
 | Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **15/15** |
 | Extremo a extremo con mando (mando estándar simulado) | `npm run build && npm run test:e2e:gamepad` | ✅ **7/7** |
 | Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **17/17** |
@@ -333,7 +335,8 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Jugar sin servidor (doble clic en `index.html` → `jugar.html`, `file://`) | `npm run build && npm run test:e2e:file` | ✅ pantalla de inicio sin errores |
 | Ejecutable de Linux bajo Xvfb | — | ✅ sin errores (detalle abajo) |
 
-**Unitarias y de simulación (159 pruebas)**
+**Unitarias y de simulación (167 pruebas)**
+- **Balones aéreos (8)**: control con el pecho y con el muslo (el balón queda en los pies), pelotazo demasiado fuerte que rebota, elección del remate según altura y orientación, volea de la IA con un centro bajo, y volea, tijera y chilena del jugador controlado con TIRO (el balón va al arco y el jugador se levanta tras caer).
 - **Sonidos (3)**: cada evento suena con el suyo (golpeo, cabezazo, saque con la mano, control, blocaje, despeje, gol con bocina), el balón rueda y el que conduce da toques al ritmo de la carrera, y la simulación avisa de los controles y blocajes.
 - **Cambios (5)**: 7 suplentes, el cambio espera a una interrupción, máximo 5, no vuelve quien salió ni se cambia a un expulsado, el que entra hereda el control y el balón, y la IA cambia a los cansados en partidos completos.
 - **Online (8)**: divisiones y puntos de Rivals; el servidor empareja, reenvía, reparte puntos solo si los dos informan el mismo resultado, castiga el abandono, crea salas con código y no junta divisiones muy distintas enseguida; el invitado reproduce el estado del anfitrión (jugadores, balón, fase y cambios); los mandos remotos no pierden pulsaciones breves; direcciones de servidor.

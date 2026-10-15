@@ -11,6 +11,9 @@ export type AnimState =
   | 'lob' // pase elevado / centro
   | 'shoot' // disparo
   | 'header' // salto y cabezazo
+  | 'volley' // volea (balón a media altura)
+  | 'scissor' // tijera: remate de lado en el aire
+  | 'bicycle' // chilena: de espaldas, por encima de la cabeza
   | 'tackle' // entrada de pie
   | 'slide' // barrida
   | 'fallen' // caído tras una falta / barrida
@@ -25,7 +28,7 @@ export type AnimState =
   | 'gk_kick' // despeje / saque de volea
   | 'celebrate' // celebración
   | 'dejected' // reacción a gol en contra / error
-  | 'trap' // control del balón
+  | 'trap' // control del balón (variant: 0 pie, 1 pecho, 2 muslo)
   | 'skill' // regate (variant: ver SKILL_KINDS)
   | 'ref_card' // árbitro: muestra la tarjeta en alto
   | 'ref_warn' // árbitro: aviso verbal (dedo índice)

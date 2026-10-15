@@ -12,6 +12,7 @@ import type { SkillKind } from '../sim/types';
 import { getBallPrediction, PRED_DT, PRED_STEPS, timeToReach } from './Predict';
 import { offsideLineU } from '../sim/Rules';
 import { groundPassVelocity } from '../sim/Kicks';
+import { AERIAL_TIMING, angleTo, ballApproach, chooseAerial, type AerialKind } from '../sim/Aerial';
 
 const _v = new Vector3();
 const _w = new Vector3();
@@ -63,6 +64,7 @@ export function updateOutfieldAI(m: Match, p: Player, dt: number) {
   }
   const team = m.teams[p.team];
   if (m.owner === p) {
+    if (chestVolley(m, p, team)) return;
     carrierAI(m, p, team, dt);
     return;
   }
@@ -183,28 +185,119 @@ function tryInterceptPass(m: Match, p: Player, team: Team) {
   }
 }
 
-/** Cabezazos y voleas: si el balón aéreo va a pasar a la altura de la cabeza cerca del jugador. */
+/**
+ * Balones aéreos: cabezazos, remates acrobáticos (volea, tijera, chilena) cerca del arco rival, o dejar
+ * caer el balón para controlarlo con el pecho o el muslo cuando no hay ningún rival encima.
+ */
 function tryAerial(m: Match, p: Player, team: Team): boolean {
   const b = m.ball;
-  if (m.owner || b.held || b.pos.y < 0.8 || p.busy) return false;
+  if (m.owner || b.held || b.pos.y < 0.35 || p.busy) return false;
   const pts = getBallPrediction(m);
-  for (let i = 1; i <= 12; i++) {
+  const goal = team.attackGoal;
+  const rivals = m.otherTeam(team.index).active;
+  // primer punto alcanzable de la trayectoria y, si lo hay, uno a la altura del pecho o del muslo sin rivales cerca
+  let first: { pt: Vector3; t: number } | null = null;
+  let head: { pt: Vector3; t: number } | null = null;
+  let soft: Vector3 | null = null;
+  // balón que baja a la altura de la volea justo donde está el jugador
+  let low: { pt: Vector3; t: number } | null = null;
+  for (let i = 1; i <= 14; i++) {
     const pt = pts[i];
     const t = i * PRED_DT;
-    if (pt.y < 1.3 || pt.y > 2.7) continue;
+    if (pt.y < 0.35 || pt.y > 2.7) continue;
     const d = dist2D(p.pos, pt);
-    // llega a tiempo al punto de remate (antes solo si ya estaba encima)
+    // llega a tiempo al punto (antes solo si ya estaba encima)
     if (d > 1.6 + t * 6) continue;
     // ¿Soy el más cercano de mi equipo a ese punto?
-    if (team.active.some((q) => q !== p && !q.isGK && dist2D(q.pos, pt) < d - 0.3)) return false;
-    moveTo(p, pt, 1, 0.1);
-    if (t <= 0.3) {
-      const req = headerDecision(m, p, team);
-      m.requestKick(p, req);
+    if (team.active.some((q) => q !== p && !q.isGK && dist2D(q.pos, pt) < d - 0.3)) {
+      if (!first) return false;
+      continue;
     }
+    if (!first) first = { pt, t };
+    if (!head && pt.y >= 1.3) head = { pt, t };
+    if (!low && pt.y >= 0.4 && pt.y <= 1.15 && d < 2.2 && !rivals.some((o) => dist2D(o.pos, pt) < d + 0.8)) low = { pt, t };
+    const nearGoal = team.u(pt) > 0 && dist2D(pt, goal) < 20;
+    if (!nearGoal && pt.y >= 0.5 && pt.y <= 1.65 && !rivals.some((o) => dist2D(o.pos, pt) < 3.5)) {
+      soft = pt;
+      break;
+    }
+  }
+  if (!first) return false;
+  // sin presión y lejos del arco: se espera el balón y se controla con el pecho o el muslo
+  if (soft) {
+    moveTo(p, soft, 1, 0.1);
     return true;
   }
-  return false;
+  // remate acrobático cerca del arco (si el balón le baja a los pies, de volea)
+  // (solo si el cabezazo tendría que ser muy bajo; a buena altura se va de cabeza)
+  const { pt, t } = low && head && head.pt.y < 1.6 && first.pt.y < 1.6 && team.u(low.pt) > 0 && dist2D(low.pt, goal) < 20 ? low : first;
+  if (team.u(pt) > 0 && dist2D(pt, goal) < 20 && pt.y < 2.35) {
+    const kind = pickAerial(m, p, angleTo(p, goal.x, goal.z) > 1.9, pt.y);
+    if (kind) {
+      moveTo(p, pt, 1, 0.1);
+      if (t <= AERIAL_TIMING[kind].contact + 0.06) m.requestKick(p, aerialShotDecision(m, p, team, kind));
+      return true;
+    }
+  }
+  // cabezazo
+  if (!head) return false;
+  moveTo(p, head.pt, 1, 0.1);
+  if (head.t <= 0.3) m.requestKick(p, headerDecision(m, p, team));
+  return true;
+}
+
+/** Cerca del arco, tras bajarla con el pecho o el muslo: volea antes de que el balón toque el suelo. */
+function chestVolley(m: Match, p: Player, team: Team): boolean {
+  const b = m.ball;
+  if (b.pos.y < 0.35 || p.action.kind === 'kick' || p.action.kind === 'header') return false;
+  const goal = team.attackGoal;
+  if (team.u(p.pos) <= 0 || dist2D(p.pos, goal) > 18 || angleTo(p, goal.x, goal.z) > 1.6) return false;
+  const ap = ballApproach(b, p, 0.7, 0.35, 1.2);
+  if (!ap || ap.miss > 1.3) return false;
+  if (ap.t > AERIAL_TIMING.volley.contact + 0.04) {
+    // esperando a que caiga: de cara al arco
+    p.desiredVel.set(0, 0, 0);
+    p.desiredFacing = Math.atan2(goal.x - p.pos.x, goal.z - p.pos.z);
+    return true;
+  }
+  return m.requestKick(p, aerialShotDecision(m, p, team, 'volley'));
+}
+
+/** Sorteo de remate acrobático, uno por jugador y por balón (para que no se repita cada fotograma). */
+const aerialRoll = new WeakMap<Player, { touch: number; roll: number }>();
+
+function pickAerial(m: Match, p: Player, backToGoal: boolean, y: number): AerialKind | null {
+  const kind = chooseAerial(y, backToGoal);
+  if (!kind || kind === 'volley') return kind;
+  const touch = m.lastTouch?.time ?? 0;
+  let r = aerialRoll.get(p);
+  if (!r || r.touch !== touch) {
+    r = { touch, roll: m.rng.next() };
+    aerialRoll.set(p, r);
+  }
+  // la chilena y la tijera solo las intentan los buenos rematadores, y no siempre
+  const sh = p.data.attrs.shooting;
+  const chance = sh < 68 ? 0 : (kind === 'bicycle' ? 0.35 : 0.3) * (0.6 + (sh - 68) / 40) * (0.5 + 0.5 * m.diff.skillUse);
+  if (r.roll < chance) return kind;
+  // si no se anima: volea si el balón llega bajo; si no, cabezazo
+  return y < 1.3 && !backToGoal ? 'volley' : null;
+}
+
+function aerialShotDecision(m: Match, p: Player, team: Team, kind: AerialKind) {
+  const goal = team.attackGoal;
+  const gk = m.otherTeam(team.index).goalkeeper;
+  const side = gk ? (gk.pos.z > 0.3 ? -1 : gk.pos.z < -0.3 ? 1 : m.rng.next() < 0.5 ? -1 : 1) : 1;
+  const z = side * (GOAL_HALF_WIDTH - 0.8);
+  const req = buildShot(m, p, z, 0.5, 0.75, false, errScale(m, p), 'shoot');
+  const hs = kind === 'volley' ? 23 : kind === 'scissor' ? 21 : 20;
+  const h = Math.hypot(req.velocity.x, req.velocity.z) || 1;
+  req.velocity.set((req.velocity.x / h) * hs, 0, (req.velocity.z / h) * hs);
+  req.spin.set(0, 0, 0);
+  req.style = undefined;
+  req.aerial = kind;
+  req.aimAt = new Vector3(goal.x, kind === 'volley' ? 0.6 : 0.9, z);
+  req.power = 0.8;
+  return req;
 }
 
 function headerDecision(m: Match, p: Player, team: Team) {

@@ -17,6 +17,7 @@ import { SKILL_KINDS, SKILL_NAMES, type MatchEvent, type SkillKind } from './typ
 import { evaluateOffsidePositions, isInPenaltyArea } from './Rules';
 import { placeForRestart, type RestartType } from './SetPieces';
 import { Referee } from './Referee';
+import { AERIAL_ERROR, AERIAL_NAMES, AERIAL_TIMING, aerialInReach, aerialShotVelocity } from './Aerial';
 
 export type MatchPhase = 'kickoff' | 'play' | 'stoppage' | 'goal' | 'replay' | 'halftime' | 'fulltime' | 'shootout';
 
@@ -388,6 +389,14 @@ export class Match {
     const act = this.active;
     for (const p of act) {
       if (p.stunnedUntil > this.time) p.desiredVel.multiplyScalar(0.3); // superado por un regate
+      // terminando un control con el pecho o el muslo: acompaña al balón que cae hasta tenerlo en los pies
+      if (this.owner === p && p.action.kind === 'trap' && p.action.variant > 0) {
+        const bx = this.ball.pos.x - p.pos.x;
+        const bz = this.ball.pos.z - p.pos.z;
+        const d = Math.hypot(bx, bz);
+        const sp = d > 0.45 ? Math.min(3, (d - 0.35) * 5) : 0;
+        p.desiredVel.set(d > 1e-3 ? (bx / d) * sp : 0, 0, d > 1e-3 ? (bz / d) * sp : 0);
+      }
       p.integrate(dt, this.owner === p);
       const holding = this.gkHolding === p;
       p.updateAnim(dt, this.owner === p, holding);
@@ -438,7 +447,8 @@ export class Match {
     const o = this.owner;
     if (!o) return;
     const d = dist2D(o.pos, b.pos);
-    if (d > 1.5 || b.pos.y > 1.6 || o.sentOff || o.action.kind === 'fallen' || o.action.kind === 'slide') {
+    // tras un control aéreo el balón todavía está cayendo: se le da algo más de margen
+    if (d > (o.action.kind === 'trap' && b.pos.y > 0.3 ? 2.2 : 1.5) || b.pos.y > 1.85 || o.sentOff || o.action.kind === 'fallen' || o.action.kind === 'slide') {
       this.owner = null;
       return;
     }
@@ -502,9 +512,11 @@ export class Match {
       if (k === 'fallen' || k === 'getup' || k === 'slide' || k === 'dive' || k === 'celebrate') continue;
       if (k === 'kick' && !p.action.done) continue;
       const d = dist2D(p.pos, b.pos);
-      const gkHands = p.isGK && isInPenaltyArea(p.pos, p.team === 0 ? -this.teams[0].attackDir : -this.teams[1].attackDir);
+      const ownBox = isInPenaltyArea(p.pos, p.team === 0 ? -this.teams[0].attackDir : -this.teams[1].attackDir);
+      const gkHands = p.isGK && ownBox;
       const reach = gkHands ? 0.95 : CONTROL_RADIUS;
-      const maxH = gkHands ? 2.45 : 1.5;
+      // de pecho para abajo se puede controlar; en el área propia los balones altos se despejan de cabeza
+      const maxH = gkHands ? 2.45 : ownBox ? 1.5 : 1.75;
       if (d < reach && b.pos.y < maxH && d < bestD) {
         best = p;
         bestD = d;
@@ -558,8 +570,10 @@ export class Match {
       return;
     }
 
-    const limit = 9 + ctrl * 13 + (height > 0.7 ? -3 : 0);
-    if (relSpeed > limit || (height > 0.9 && relSpeed > 7)) {
+    // Balón aéreo (centros, pelotazos): control con el pecho o el muslo si no viene demasiado fuerte
+    const aerial = height > 0.5;
+    const limit = aerial ? 7 + ctrl * 12 : 9 + ctrl * 13 + (height > 0.35 ? -3 : 0);
+    if (relSpeed > limit) {
       // Rebote en el cuerpo: el balón sale despedido con menos velocidad
       _w.set(b.pos.x - p.pos.x, 0, b.pos.z - p.pos.z).normalize();
       const out = b.vel.length() * 0.32;
@@ -568,6 +582,11 @@ export class Match {
       this.setLastTouch(p, false, 'deflection');
       p.noTouchUntil = this.time + 0.35;
       this.emit({ type: 'kick', power: 0.25, playerId: p.id });
+      return;
+    }
+
+    if (aerial) {
+      this.aerialControl(p, relSpeed, ctrl, height);
       return;
     }
 
@@ -588,6 +607,52 @@ export class Match {
     if (relSpeed > 5 && p.action.kind === 'none') p.startAction('trap', 'trap', 0.35);
     // El humano pasa a controlar a quien recibe
     if (team.human && team.controlled !== p && !p.isGK) team.controlled = p;
+  }
+
+  /**
+   * Control de un balón aéreo con el pecho (por encima de la cintura) o el muslo: el balón se amortigua y cae
+   * delante del jugador. La calidad depende del control y de lo fuerte que llegue.
+   */
+  private aerialControl(p: Player, relSpeed: number, ctrl: number, height: number) {
+    const b = this.ball;
+    const team = this.teams[p.team];
+    const chest = height > 1.05;
+    const f = p.forward(_w);
+    // dirección del amortiguado: hacia delante y en el sentido de la carrera; el error crece con la velocidad
+    const err = relSpeed * (1 - ctrl) * 0.16;
+    const ang = this.rng.next() * Math.PI * 2;
+    const out = 0.45 + Math.min(1, Math.hypot(p.vel.x, p.vel.z) * 0.12);
+    // el pecho lo amortigua hacia abajo; el muslo lo levanta apenas
+    b.vel.set(f.x * out + p.vel.x * 0.7 + Math.cos(ang) * err, chest ? -0.4 : 0.6, f.z * out + p.vel.z * 0.7 + Math.sin(ang) * err);
+    b.spin.set(0, 0, 0);
+    this.owner = p;
+    this.debug.controls++;
+    this.setLastTouch(p, false, 'control');
+    if (this.intendedReceiver && this.intendedReceiver.team !== p.team) this.intendedReceiver = null;
+    this.emit({ type: 'touch', power: Math.min(1, relSpeed / 18), playerId: p.id, team: p.team, kind: chest ? 'chest' : 'thigh' });
+    if (p.action.kind === 'none' || p.action.kind === 'trap') {
+      p.startAction('trap', 'trap', chest ? 0.55 : 0.45);
+      p.action.variant = chest ? 1 : 2;
+    }
+    if (team.human && team.controlled !== p && !p.isGK) team.controlled = p;
+  }
+
+  /** Volea, tijera o chilena: el jugador se prepara y el pie golpea cuando el balón pasa por su alcance. */
+  private requestAerial(p: Player, req: KickRequest): boolean {
+    const kind = req.aerial!;
+    const b = this.ball;
+    if (b.held || (this.owner && this.owner !== p) || this.gkHolding) return false;
+    if (dist2D(p.pos, b.pos) > 6) return false;
+    const tm = AERIAL_TIMING[kind];
+    p.startAction('kick', kind, tm.duration, tm.contact, { kick: req, done: false });
+    // orientación: la volea mira al objetivo; la tijera, de lado; la chilena, de espaldas
+    const ga = Math.atan2(req.velocity.x, req.velocity.z);
+    const fa = kind === 'bicycle' ? ga + Math.PI : kind === 'scissor' ? ga - 1.05 : ga;
+    p.action.dir.set(Math.sin(fa), 0, Math.cos(fa));
+    p.anim.foot = 1;
+    // anticipa el giro para que el pie llegue bien colocado
+    p.facing = approachAngleRad(p.facing, fa, kind === 'volley' ? 0.6 : 1.2);
+    return true;
   }
 
   private isBackPass(gk: Player) {
@@ -694,6 +759,7 @@ export class Match {
   /** Solicita un golpeo con animación previa. Devuelve false si no es posible. */
   requestKick(p: Player, req: KickRequest): boolean {
     if (p.sentOff || (p.busy && !(p.action.kind === 'trap'))) return false;
+    if (req.aerial) return this.requestAerial(p, req);
     const header = req.kind === 'header';
     const handsKick = req.kind === 'throwin' || req.kind === 'gkthrow' || req.kind === 'punt';
     let runup = 0;
@@ -730,7 +796,16 @@ export class Match {
   private processActions(dt: number) {
     for (const p of this.active) {
       const a = p.action;
-      if (a.kind === 'kick' && !a.done && a.time >= a.contactAt) {
+      if (a.kind === 'kick' && !a.done && a.kick?.aerial) {
+        // remate acrobático: el pie golpea cuando el balón pasa por su alcance dentro de la ventana
+        const tm = AERIAL_TIMING[a.kick.aerial];
+        if (a.time >= a.contactAt - tm.window && p.noTouchUntil <= this.time && !this.ball.held && aerialInReach(a.kick.aerial, p, this.ball.pos)) {
+          a.done = true;
+          this.tryKickContact(p, a.kick);
+        } else if (a.time > a.contactAt + tm.window) {
+          a.done = true; // no llegó: remate al aire
+        }
+      } else if (a.kind === 'kick' && !a.done && a.time >= a.contactAt) {
         a.done = true;
         this.tryKickContact(p, a.kick!);
       } else if (a.kind === 'header' && !a.done && a.time >= 0.12 && a.time <= 0.45) {
@@ -763,7 +838,7 @@ export class Match {
       if (req.kind === 'throwin') b.pos.set(p.pos.x + f.x * 0.2, 2.1, p.pos.z + f.z * 0.2);
       else if (req.kind === 'gkthrow') b.pos.set(p.pos.x + f.x * 0.5, 1.7, p.pos.z + f.z * 0.5);
       else b.pos.set(p.pos.x + f.x * 0.6, 0.7, p.pos.z + f.z * 0.6);
-    } else if (req.kind !== 'header') {
+    } else if (req.kind !== 'header' && !req.aerial) {
       const d = Math.hypot(b.pos.x - p.pos.x, b.pos.z - p.pos.z);
       if (d > (this.owner === p ? 2.3 : 1.35) || b.pos.y > 1.25) return; // golpeo al aire
     }
@@ -779,7 +854,10 @@ export class Match {
     const b = this.ball;
     const a = p.data.attrs;
     const v = req.velocity.clone();
-    if (req.aimAt) {
+    if (req.aerial && req.aimAt) {
+      // remate aéreo: se apunta desde donde está el balón al golpearlo, a la altura pedida
+      aerialShotVelocity(b.pos, req.aimAt, Math.hypot(v.x, v.z), v);
+    } else if (req.aimAt) {
       // reapuntar desde donde está ahora el balón, conservando la rapidez horizontal y la vertical
       const h = Math.hypot(v.x, v.z);
       const dx = req.aimAt.x - b.pos.x;
@@ -806,14 +884,14 @@ export class Match {
     const toBall = Math.atan2(b.pos.x - p.pos.x, b.pos.z - p.pos.z);
     const badAngle = Math.abs(Math.atan2(Math.sin(toBall - p.facing), Math.cos(toBall - p.facing))) > 1.4 ? 1.5 : 1;
     void f;
-    const scale = req.errorScale * (1 + pressure * 0.35) * badAngle;
+    const scale = req.errorScale * (1 + pressure * 0.35) * (req.aerial ? AERIAL_ERROR[req.aerial] : badAngle);
     const baseAng = { pass: 0.035, through: 0.045, lob: 0.05, cross: 0.06, shoot: 0.05, finesse: 0.04, clear: 0.12, header: 0.09, throwin: 0.05, gkthrow: 0.04, punt: 0.08, penalty: 0.03, chip: 0.05 }[req.kind];
     const gauss = () => this.rng.gauss();
     const low = !!req.style?.low;
     applyKickError(v, baseAng * q * scale, 0.06 * q * scale, (req.kind === 'shoot' && !low ? 0.045 : 0.02) * q * scale, gauss);
     if (low) v.y = Math.min(v.y, 0.7); // el tiro raso sigue pegado al césped
     // Sobrepotenciar un disparo lo eleva (como en los juegos de fútbol modernos)
-    if (req.kind === 'shoot' && !low && req.power > 0.8) v.y += (req.power - 0.8) * 4 * (1.2 - a.shooting / 100) * 2;
+    if (req.kind === 'shoot' && !low && !req.aerial && req.power > 0.8) v.y += (req.power - 0.8) * 4 * (1.2 - a.shooting / 100) * 2;
     b.held = false;
     b.vel.copy(v);
     b.spin.copy(req.spin);
@@ -843,6 +921,7 @@ export class Match {
     }
     this.intendedReceiver = req.targetId ? this.playersAll.find((x) => x.id === req.targetId) ?? null : null;
     this.emit({ type: 'kick', power: req.power, playerId: p.id, team: p.team, kind: req.kind });
+    if (req.aerial) this.emit({ type: 'skill', kind: req.aerial, text: AERIAL_NAMES[req.aerial], playerId: p.id, team: p.team });
 
     // Fuera de juego: posiciones en el momento del pase (no aplica a saques de banda, de arco ni córners)
     const restartType = this.restart?.type;

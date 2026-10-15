@@ -30,7 +30,7 @@ export const ACTION_LABELS: Record<Action, string> = {
   pass: 'Pase corto / Cabezazo · Presionar (defensa)',
   through: 'Pase al hueco · Salida del arquero (defensa)',
   lob: 'Pase elevado / Centro · Barrida (defensa)',
-  shoot: 'Tiro / Volea · Entrada (defensa)',
+  shoot: 'Tiro · Volea / Tijera / Chilena (balón aéreo) · Entrada (defensa)',
   switch: 'Cambiar de jugador · Con balón + Tiro: vaselina',
   finesse: 'Con balón + Tiro: rosca · Presión de compañero (defensa)',
   jockey: 'Contener (defensa) · Con balón + Tiro: tiro potente',

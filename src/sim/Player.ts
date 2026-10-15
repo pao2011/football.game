@@ -23,6 +23,8 @@ export interface KickRequest {
    * instante del contacto, que puede ser unas décimas después de decidirlo.
    */
   aimAt?: Vector3;
+  /** Remate acrobático con el balón en el aire (volea, tijera o chilena). */
+  aerial?: import('./Aerial').AerialKind;
 }
 
 export type ActionKind = 'none' | 'kick' | 'tackle' | 'slide' | 'header' | 'dive' | 'fallen' | 'getup' | 'celebrate' | 'dejected' | 'hold' | 'throw' | 'trap' | 'skill';
@@ -158,8 +160,10 @@ export class Player {
       act.time += dt;
       if (act.time >= act.duration) {
         const k = act.kind;
+        const acrobatic = act.anim === 'bicycle' || act.anim === 'scissor';
         this.clearAction();
         if (k === 'slide' || k === 'fallen') this.startAction('getup', 'getup', 0.7);
+        else if (acrobatic) this.startAction('getup', 'getup', 0.75); // tras la chilena o la tijera, cae al césped
       }
     }
 
@@ -176,6 +180,10 @@ export class Player {
     } else {
       let maxS = this.maxSpeed(hasBall);
       if (this.action.kind === 'kick' && !this.action.done) maxS = Math.max(maxS * 0.55, 2.6);
+      // en el aire (chilena / tijera) casi no se avanza
+      if (this.action.anim === 'bicycle' || this.action.anim === 'scissor') maxS = 1.2;
+      // terminando un control con el pecho o el muslo: no se aleja del balón que cae
+      else if (this.action.kind === 'trap' && this.action.variant > 0) maxS = Math.min(maxS, 2.2);
       if (this.action.kind === 'tackle' || this.action.kind === 'header') maxS *= 0.6;
       const dv = this.desiredVel;
       const dl = Math.hypot(dv.x, dv.z);

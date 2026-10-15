@@ -2,7 +2,7 @@
 
 Plan de lo que falta o se puede mejorar, ordenado por fases. Cada punto dice **qué** hacer, **por qué** importa y **dónde** está el código que hay que tocar, para poder tomarlo como tarea suelta. Esfuerzo aproximado: **S** (horas), **M** (1–3 días), **L** (una semana o más).
 
-Ya hecho en esta versión: `jugar.html` (el juego en un solo archivo, se abre con doble clic tras descargar el ZIP), sonidos nuevos del balón (cabezazo, control, toques de conducción, rodar por el césped, vallas, guantes del arquero), bocina de gol, vibración del mando prueba automática sin servidor y ZIP de Windows publicado en *Releases*.
+Ya hecho en esta versión: `jugar.html` (el juego en un solo archivo, se abre con doble clic tras descargar el ZIP), sonidos nuevos del balón (cabezazo, control, toques de conducción, rodar por el césped, vallas, guantes del arquero), bocina de gol, vibración del mando, prueba automática sin servidor y ZIP de Windows publicado en *Releases*. Después: **control de balones aéreos con el pecho y el muslo** y **remates de volea, tijera y chilena** (jugador y IA).
 
 ---
 
@@ -31,6 +31,8 @@ Ya hecho en esta versión: `jugar.html` (el juego en un solo archivo, se abre co
 | 2.6 | **Lesiones leves y tarjetas acumuladas** en torneo y carrera (sanción de un partido) | Profundidad en los modos largos | `modes/Career.ts`, `modes/Tournament.ts`, `sim/Match.ts` | M |
 | 2.7 | **Tácticas en vivo**: cambiar formación y mentalidad desde la pausa, instrucciones por jugador | Hoy la mentalidad se cambia con la cruceta pero no la formación | `App.pauseMenu`, `ai/TeamAI.ts` | M |
 | 2.8 | **Más regates y celebraciones** (caño, croqueta, rabona; celebraciones elegibles con el stick derecho tras el gol) | Variedad | `types.ts` (`SKILL_KINDS`), `animations.ts`, `Match.ts` | M |
+| 2.10 | **Control aéreo orientado**: con el stick al recibir de pecho, el balón cae hacia ese lado (como el primer toque orientado a ras de suelo); y *sombrero* al rival con el pecho | Más control para el jugador humano en los balones aéreos | `Match.aerialControl` (usar `firstTouchDir`), `HumanController` | S |
+| 2.11 | **Más remates aéreos**: escorpión, remate en plancha (cabezazo en palomita) y taco de primera | Variedad y jugadas espectaculares | `sim/Aerial.ts` (nuevo `AerialKind`), `animations.ts`, `HumanController.tryAerialShot` | M |
 | 2.9 | **Mejorar la IA de ataque**: juego por bandas, paredes, tiros lejanos cuando el rival se encierra | Limitación conocida: juega demasiado por el centro | `ai/PlayerAI.ts`, `ai/TeamAI.ts` (puntuación de opciones) | M |
 
 ## Fase 3 — Modos y contenido (largo plazo)

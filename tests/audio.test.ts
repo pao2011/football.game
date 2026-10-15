@@ -26,6 +26,7 @@ describe('Sonidos del partido', () => {
     expect(play({ type: 'save', team: 0, kind: 'shot' })).toEqual(['applause']);
     expect(play({ type: 'goal', team: 1, kind: 'normal' })).toEqual(['cheer', 'goalHorn']);
     expect(play({ type: 'goal', team: 1, kind: 'shootout' })).toEqual(['cheer']);
+    expect(play({ type: 'skill', kind: 'bicycle', text: 'Chilena' })).toEqual(['ooh']);
   });
 
   it('el balón rueda y el que conduce da toques mientras corre', () => {
