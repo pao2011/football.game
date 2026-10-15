@@ -33,6 +33,12 @@ export interface GameSettings {
   powerBarTime: number;
   deadzone: number;
   sensitivity: number;
+  /** Cambios automáticos de los jugadores cansados (también en tu equipo). */
+  autoSubs: boolean;
+  /** Nombre visible en el modo online. */
+  onlineName: string;
+  /** Servidor online (vacío = el predeterminado). */
+  onlineServer: string;
   // Partido por defecto
   halfMinutes: number;
   difficulty: Difficulty;
@@ -62,6 +68,9 @@ export const DEFAULT_SETTINGS: GameSettings = {
   powerBarTime: 1,
   deadzone: 0.18,
   sensitivity: 1,
+  autoSubs: false,
+  onlineName: '',
+  onlineServer: '',
   halfMinutes: 4,
   difficulty: 'pro',
 };

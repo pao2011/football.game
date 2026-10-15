@@ -90,6 +90,9 @@ export interface LastTouch {
   kind: KickRequest['kind'] | 'control' | 'deflection' | 'tackle';
 }
 
+/** Cambios permitidos por equipo. */
+export const MAX_SUBS = 5;
+
 const _v = new Vector3();
 const _w = new Vector3();
 
@@ -146,6 +149,14 @@ export class Match {
   readonly playersAll: Player[] = [];
   /** Receptor previsto del último pase (para auto-cambio del humano). */
   intendedReceiver: Player | null = null;
+  /** Cambios pedidos que se harán en la próxima interrupción del juego. */
+  readonly pendingSubs: { team: 0 | 1; outId: string; inId: string }[] = [];
+  /** Aumenta con cada cambio (el renderizador crea/oculta modelos). */
+  rosterVersion = 0;
+  /** Último minuto en que cada equipo de la IA hizo un cambio. */
+  private aiSubMinute: [number, number] = [-99, -99];
+  /** Cambios automáticos también para el equipo humano (opción de configuración). */
+  autoSubs: [boolean, boolean] = [false, false];
 
   constructor(readonly config: MatchConfig) {
     this.rng = new Rng(config.seed ?? Math.floor(Math.random() * 1e9));
@@ -233,6 +244,10 @@ export class Match {
   step(dt = SIM_DT) {
     this.time += dt;
     this.phaseTimer += dt;
+    if (this.phase !== 'play' && this.phase !== 'shootout' && !this.finished && !this.config.training) {
+      if (this.pendingSubs.length) this.applyPendingSubs();
+      this.aiSubstitutions();
+    }
     if (this.phase !== 'replay') this.referee.update(dt, this.time, this.ball.pos);
     switch (this.phase) {
       case 'kickoff':
@@ -1142,6 +1157,97 @@ export class Match {
           p.slot = s;
         }
       }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Cambios (suplentes)
+  // ------------------------------------------------------------------
+
+  /** ¿Se puede hacer este cambio? Devuelve el motivo si no. */
+  subError(team: 0 | 1, outId: string, inId: string): string | null {
+    const t = this.teams[team];
+    if (this.config.training) return 'No hay cambios en el entrenamiento';
+    if (this.finished || this.phase === 'shootout') return 'El partido ya terminó';
+    const pending = this.pendingSubs.filter((s) => s.team === team);
+    if (t.subsUsed + pending.length >= MAX_SUBS && !pending.some((s) => s.outId === outId)) return `Ya hiciste los ${MAX_SUBS} cambios`;
+    const out = t.players.find((p) => p.id === outId);
+    if (!out) return 'Ese jugador no está en el campo';
+    if (out.sentOff) return 'No se puede sustituir a un expulsado';
+    if (!t.bench.some((p) => p.id === inId)) return 'Ese suplente no está disponible';
+    return null;
+  }
+
+  /** Pide un cambio: se hace en la próxima interrupción (o ya, si el juego está parado). */
+  requestSub(team: 0 | 1, outId: string, inId: string): string | null {
+    const err = this.subError(team, outId, inId);
+    if (err) return err;
+    // un mismo jugador no puede estar en dos cambios pendientes
+    for (let i = this.pendingSubs.length - 1; i >= 0; i--) {
+      const s = this.pendingSubs[i];
+      if (s.team === team && (s.outId === outId || s.inId === inId)) this.pendingSubs.splice(i, 1);
+    }
+    this.pendingSubs.push({ team, outId, inId });
+    return null;
+  }
+
+  cancelSub(team: 0 | 1, outId: string) {
+    const i = this.pendingSubs.findIndex((s) => s.team === team && s.outId === outId);
+    if (i >= 0) this.pendingSubs.splice(i, 1);
+  }
+
+  private applyPendingSubs() {
+    const list = this.pendingSubs.splice(0);
+    for (const s of list) {
+      const t = this.teams[s.team];
+      const out = t.players.find((p) => p.id === s.outId);
+      const inn = t.bench.find((p) => p.id === s.inId);
+      if (out && inn && !out.sentOff && t.subsUsed < MAX_SUBS) this.substitute(t, out, inn);
+    }
+  }
+
+  /** Cambio inmediato: el suplente ocupa el puesto (y la posición) del que sale. */
+  substitute(t: Team, out: Player, inn: Player) {
+    const idx = t.players.indexOf(out);
+    if (idx < 0) return;
+    inn.slot = out.slot;
+    inn.slotIndex = out.slotIndex;
+    inn.pos.copy(out.pos);
+    inn.vel.set(0, 0, 0);
+    inn.facing = out.facing;
+    inn.stamina = 1;
+    inn.clearAction();
+    inn.frozen = out.frozen;
+    t.players[idx] = inn;
+    t.bench.splice(t.bench.indexOf(inn), 1);
+    t.subbedOff.push(out);
+    t.subsUsed++;
+    const ai = this.playersAll.indexOf(out);
+    if (ai >= 0) this.playersAll[ai] = inn;
+    if (t.controlled === out) t.controlled = inn;
+    if (this.owner === out) this.owner = inn;
+    if (this.gkHolding === out) this.gkHolding = inn;
+    if (this.restart?.taker === out) this.restart.taker = inn;
+    if (this.intendedReceiver === out) this.intendedReceiver = null;
+    for (const p of this.playersAll) if (p.markTarget === out) p.markTarget = null;
+    this.rosterVersion++;
+    this.emit({ type: 'sub', team: t.index, playerId: inn.id, text: `${out.data.name} ⇄ ${inn.data.name}`, kind: out.id });
+  }
+
+  /** La IA (y el humano con cambios automáticos) cambia a los más cansados desde el minuto 58. */
+  private aiSubstitutions() {
+    if (this.minute < 58) return;
+    for (const t of this.teams) {
+      if (t.human && !this.autoSubs[t.index]) continue;
+      if (t.subsUsed >= MAX_SUBS || !t.bench.length) continue;
+      if (this.minute - this.aiSubMinute[t.index] < 7) continue;
+      if (this.pendingSubs.some((s) => s.team === t.index)) continue;
+      const tired = t.active.filter((p) => !p.isGK && p !== t.controlled && p !== this.restart?.taker && p.stamina < 0.66).sort((a, b) => a.stamina - b.stamina)[0];
+      if (!tired) continue;
+      const inn = t.bench.find((p) => p.data.position === tired.position) ?? t.bench.find((p) => p.data.position !== 'GK');
+      if (!inn) continue;
+      this.aiSubMinute[t.index] = this.minute;
+      this.substitute(t, tired, inn);
     }
   }
 

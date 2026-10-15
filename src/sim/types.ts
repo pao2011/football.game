@@ -62,6 +62,8 @@ export type MatchEventType =
   | 'nearMiss'
   | 'skill' // regate (kind: tipo; text: nombre; power 1 = superó al rival)
   | 'warning' // aviso verbal del árbitro
+  | 'sub' // cambio (text: 'sale ⇄ entra')
+  | 'chat' // mensaje rápido del rival online
   | 'phase';
 
 export interface MatchEvent {

@@ -8,7 +8,7 @@ import { TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
 import type { Difficulty, FormationId, PlayerData, TeamData } from '../data/types';
 import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
 import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, type Action } from '../input/Input';
-import type { MatchConfig } from '../sim/Match';
+import { MAX_SUBS, type MatchConfig } from '../sim/Match';
 import { Career } from '../modes/Career';
 import { Tournament } from '../modes/Tournament';
 import type { Fixture, StandingRow } from '../modes/Competition';
@@ -381,6 +381,7 @@ export class App {
       <div class="menu-list">
         <button class="menu-item" data-act="resume">Reanudar</button>
         <button class="menu-item" data-act="restart">Reiniciar partido</button>
+        ${r.localTeam >= 0 && !m.config.training ? `<button class="menu-item" data-act="subs">Cambios<small>${m.teams[r.localTeam as 0 | 1].subsUsed}/${MAX_SUBS} realizados</small></button>` : ''}
         <button class="menu-item" data-act="stats">Estadísticas</button>
         <button class="menu-item" data-act="settings">Configuración</button>
         <button class="menu-item" data-act="controls">Controles</button>
@@ -390,6 +391,7 @@ export class App {
     this.overlay = new Screen(this.ui, html, {
       resume,
       restart: () => { close(); this.restartMatch(); },
+      subs: () => { close(); this.subsMenu(); },
       stats: () => {
         close();
         this.overlay = new Screen(this.ui, `<div class="overlay"><div class="panel modal"><h2>Estadísticas</h2>${this.statsHTML(m)}<div class="screen-footer"><button class="btn" data-act="back">Volver</button></div></div></div>`, { back: () => { close(); this.pauseMenu(); } }, this.audio);
@@ -402,6 +404,60 @@ export class App {
     this.overlay.onBack = resume;
   }
 
+  /** Cambios: elige quién sale (en el campo) y quién entra (suplentes). */
+  private subsMenu() {
+    const r = this.runner;
+    if (!r || r.localTeam < 0) return;
+    const m = r.match;
+    const ti = r.localTeam as 0 | 1;
+    let selOut: string | null = null;
+    let msg = '';
+    const close = () => { this.overlay?.dispose(); this.overlay = null; };
+    const posLabel = (p: PlayerData) => (p.position === 'GK' ? 'POR' : p.position === 'DEF' ? 'DEF' : p.position === 'MID' ? 'MED' : 'DEL');
+    const html = () => {
+      const t = m.teams[ti];
+      const pending = m.pendingSubs.filter((s) => s.team === ti);
+      const left = MAX_SUBS - t.subsUsed - pending.length;
+      const onPitch = t.players.map((p) => {
+        const pend = pending.find((s) => s.outId === p.id);
+        const inName = pend ? t.bench.find((b) => b.id === pend.inId)?.data.name : '';
+        const st = Math.round(p.stamina * 100);
+        const col = st > 70 ? '#19e68c' : st > 45 ? '#ffcf3f' : '#ff4d5e';
+        return `<button class="sub-row ${selOut === p.id ? 'sel' : ''} ${p.sentOff ? 'off' : ''}" data-act="${p.sentOff ? 'noop' : pend ? 'cancel' : 'out'}" data-id="${p.id}">
+          <span class="pos ${p.data.position}">${posLabel(p.data)}</span><span class="num">${p.data.number}</span><span class="nm">${esc(p.data.name)}${p.yellowCards ? ' <span class="card-icon" style="background:#ffd400"></span>' : ''}${p.sentOff ? ' <span class="card-icon" style="background:#e0201c"></span>' : ''}${p.goals ? ` ⚽${p.goals > 1 ? '×' + p.goals : ''}` : ''}</span>
+          ${pend ? `<span class="pend">⇄ ${esc(inName ?? '')} · cancelar</span>` : `<span class="stam" title="Resistencia"><i style="width:${st}%;background:${col}"></i></span>`}<span class="ovr">${playerOverall(p.data)}</span></button>`;
+      }).join('');
+      const bench = t.bench.map((p) => {
+        const used = pending.some((s) => s.inId === p.id);
+        return `<button class="sub-row ${used ? 'used' : ''}" data-act="in" data-id="${p.id}" ${!selOut || used || left <= 0 ? 'disabled' : ''}>
+          <span class="pos ${p.data.position}">${posLabel(p.data)}</span><span class="num">${p.data.number}</span><span class="nm">${esc(p.data.name)}</span><span class="ovr">${playerOverall(p.data)}</span></button>`;
+      }).join('') || '<div class="muted">Sin suplentes disponibles</div>';
+      const gone = t.subbedOff.map((p) => esc(p.data.name)).join(', ');
+      return `<div class="overlay"><div class="panel modal subs-modal">
+        <h2>Cambios <span class="muted" style="font-size:18px">${t.subsUsed}/${MAX_SUBS}${pending.length ? ` · ${pending.length} pendiente${pending.length > 1 ? 's' : ''}` : ''}</span></h2>
+        <div class="muted" style="margin-bottom:10px">${selOut ? 'Ahora elige al suplente que entra.' : 'Elige al jugador que sale.'} Los cambios se hacen en la próxima interrupción del juego.</div>
+        ${msg ? `<div class="sub-msg">${esc(msg)}</div>` : ''}
+        <div class="subs-grid"><div><h4>En el campo</h4>${onPitch}</div><div><h4>Suplentes</h4>${bench}${gone ? `<div class="muted" style="margin-top:8px;font-size:12px">Ya salieron: ${gone}</div>` : ''}</div></div>
+        <div class="screen-footer"><button class="btn primary" data-act="back">Volver</button></div></div></div>`;
+    };
+    const back = () => { close(); this.pauseMenu(); };
+    const screen = new Screen(this.ui, html(), {
+      out: (el) => { selOut = el.dataset.id!; msg = ''; screen.refresh(html()); },
+      cancel: (el) => { r.cancelSub(el.dataset.id!); msg = ''; screen.refresh(html()); },
+      in: (el) => {
+        if (!selOut) return;
+        const err = r.requestSub(selOut, el.dataset.id!);
+        msg = err ?? '';
+        if (!err) selOut = null;
+        screen.refresh(html());
+      },
+      noop: () => {},
+      back,
+    }, this.audio);
+    screen.onBack = back;
+    this.overlay = screen;
+  }
+
   private applyLiveSettings() {
     const r = this.runner;
     if (!r) return;
@@ -410,6 +466,7 @@ export class App {
     r.view.director.style = this.settings.cameraStyle;
     r.view.director.zoom = this.settings.cameraZoom;
     r.view.opts.showIndicators = this.settings.showIndicators;
+    if (r.localTeam >= 0) r.match.autoSubs[r.localTeam as 0 | 1] = this.settings.autoSubs;
     if (r.controller) {
       r.controller.settings = {
         autoSwitch: this.settings.autoSwitch, passAssist: this.settings.passAssist, powerBarTime: this.settings.powerBarTime, showAimAssist: this.settings.showIndicators,
@@ -476,7 +533,7 @@ export class App {
       this.tournament.recordUserResult(ctx.fixture, r.home, r.away, r.penalties ?? undefined);
     } else if (ctx.mode === 'career' && this.career) {
       const userIdx = ctx.fixture.home === this.career.state.userTeam ? 0 : 1;
-      const scorers = m.teams[userIdx].players.filter((p) => p.goals > 0).flatMap((p) => Array(p.goals).fill(p.id));
+      const scorers = [...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff].filter((p) => p.goals > 0).flatMap((p) => Array(p.goals).fill(p.id));
       this.career.recordUserResult(ctx.fixture, r.home, r.away, scorers);
     }
     this.runner?.dispose();
@@ -779,6 +836,7 @@ export class App {
           ${this.stepper('Dificultad por defecto', DIFFICULTY_LABELS[st.difficulty], 'diff')}
           ${this.stepper('Duración de parte (torneo/carrera)', `${st.halfMinutes} min`, 'half')}
           ${toggle('Cambio automático de jugador', 'autoSwitch')}
+          ${toggle('Cambios automáticos (jugadores cansados)', 'autoSubs')}
           ${this.stepper('Asistencia de pase', st.passAssist >= 0.5 ? 'Asistida' : 'Manual', 'assist')}
           ${this.stepper('Asistencia total (toque rápido, puntería, defensa)', ({ auto: 'Automática (móvil)', on: 'Siempre', off: 'No' } as const)[st.assist], 'assistAll')}
           ${this.stepper('Velocidad barra de potencia', `${st.powerBarTime.toFixed(1)} s`, 'pbar')}

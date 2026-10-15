@@ -54,6 +54,8 @@ export class MatchRunner {
   private pendingTip: string | null = null;
   /** Velocidad de simulación (para pruebas automáticas). */
   timeScale = 1;
+  /** Equipo del jugador local (0 local, 1 visitante, -1 ninguno). */
+  readonly localTeam: 0 | 1 | -1;
 
   constructor(
     readonly renderer: THREE.WebGLRenderer,
@@ -65,6 +67,8 @@ export class MatchRunner {
     uiRoot: HTMLElement,
   ) {
     this.match = new Match(config);
+    this.localTeam = config.humanTeam;
+    if (config.humanTeam >= 0) this.match.autoSubs[config.humanTeam as 0 | 1] = settings.autoSubs;
     this.view = new MatchView(renderer, this.match, stadium, {
       quality: settings.quality,
       shadows: settings.shadows,
@@ -238,6 +242,16 @@ export class MatchRunner {
         this.onFinished({ match: m, home: r.home, away: r.away, winner: r.winner, penalties: r.penalties });
       }
     }
+  }
+
+  /** Pide un cambio para el equipo local (devuelve el motivo si no se puede). */
+  requestSub(outId: string, inId: string): string | null {
+    if (this.localTeam < 0) return 'No controlas ningún equipo';
+    return this.match.requestSub(this.localTeam as 0 | 1, outId, inId);
+  }
+
+  cancelSub(outId: string) {
+    if (this.localTeam >= 0) this.match.cancelSub(this.localTeam as 0 | 1, outId);
   }
 
   pause() {
