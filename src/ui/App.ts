@@ -16,6 +16,11 @@ import { crestSVG, kitSVG } from './Crest';
 import { Screen, el, esc, type Handlers } from './dom';
 import { isTouchDevice } from '../input/TouchControls';
 import { gamepadBlocked } from '../input/pads';
+import { NetClient, cachedProfile, serverCandidates, type FinalMsg, type MatchStart, type OnlineProfile, type ServerMsg } from '../net/NetClient';
+import { DIVISIONS } from '../../server/divisions.mjs';
+import type { OnlineLink } from '../game/MatchRunner';
+
+const QUICK_CHAT = ['¡Buen partido!', '¡Qué golazo!', '¡Uy, casi!', '¡Vamos!', 'Perdón', '¡Gracias!'];
 
 const DIFFS: Difficulty[] = ['amateur', 'pro', 'world', 'legend'];
 const HALF_OPTIONS = [2, 3, 4, 5, 6, 8, 10];
@@ -46,6 +51,7 @@ interface QuickSetup {
 
 type MatchContext =
   | { mode: 'quick' }
+  | { mode: 'online'; start: MatchStart }
   | { mode: 'tournament'; fixture: Fixture }
   | { mode: 'career'; fixture: Fixture }
   | { mode: 'training' };
@@ -66,6 +72,14 @@ export class App {
   career: Career | null = null;
 
   private splashShown = false;
+  /** Conexión online (se crea al entrar en ONLINE). */
+  private net: NetClient | null = null;
+  private netOff: (() => void) | null = null;
+  /** Equipo elegido para jugar online (índice en TEAMS). */
+  private onlineTeam = 0;
+  /** Resultado online pendiente de los puntos de Rivals. */
+  private onlineFinal: FinalMsg | null = null;
+  private onlineWatch = 0;
 
   constructor(private canvas: HTMLCanvasElement, ui: HTMLElement) {
     this.ui = ui;
@@ -210,6 +224,7 @@ export class App {
       <div class="main-menu">
         <div class="menu-list">
           <button class="menu-item" data-act="quick">Partido rápido<small>Elige equipos, estadio y dificultad</small></button>
+          <button class="menu-item" data-act="online">Online<small>Division Rivals, amistosos y salas con amigos</small></button>
           <button class="menu-item" data-act="tournament">Copa Élite<small>Torneo: fase de grupos y eliminatorias</small></button>
           <button class="menu-item" data-act="career">Carrera<small>Temporadas de liga con tu club</small></button>
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
@@ -224,6 +239,7 @@ export class App {
       </div>
       <div class="version-tag">v${VERSION} · ${isTouchDevice() ? 'Toca una opción para elegir' : '↑↓ para navegar · Enter/S para elegir · Esc para volver'}</div>`, {
       quick: () => this.quickMatchScreen(),
+      online: () => this.onlineMenu(),
       tournament: () => this.tournamentHub(),
       career: () => this.careerHub(),
       training: () => this.trainingScreen(),
@@ -321,7 +337,7 @@ export class App {
   // Partido
   // ==================================================================
 
-  playMatch(config: MatchConfig, stadiumId: string, ctx: MatchContext) {
+  playMatch(config: MatchConfig, stadiumId: string, ctx: MatchContext, online: OnlineLink | null = null) {
     this.lastMatch = { config, ctx };
     const home = config.home;
     const away = config.away;
@@ -339,7 +355,7 @@ export class App {
       requestAnimationFrame(() => {
         try {
           this.runner?.dispose();
-          const runner = new MatchRunner(this.renderer, config, getStadium(stadiumId), this.settings, this.input, this.audio, this.ui);
+          const runner = new MatchRunner(this.renderer, config, getStadium(stadiumId), this.settings, this.input, this.audio, this.ui, online);
           this.runner = runner;
           runner.resize(window.innerWidth, window.innerHeight);
           // precompilar shaders
@@ -379,19 +395,30 @@ export class App {
       <h2>Pausa</h2>
       <div class="muted" style="margin-bottom:14px">${esc(m.teams[0].data.name)} ${m.teams[0].stats.goals} - ${m.teams[1].stats.goals} ${esc(m.teams[1].data.name)} · ${m.clockText}</div>
       <div class="menu-list">
+        ${r.online ? '<div class="muted" style="margin:-6px 0 10px">Partido online: el juego no se detiene</div>' : ''}
         <button class="menu-item" data-act="resume">Reanudar</button>
-        <button class="menu-item" data-act="restart">Reiniciar partido</button>
+        ${r.online ? '<button class="menu-item" data-act="chat">Mensajes rápidos<small>Para tu rival</small></button>' : '<button class="menu-item" data-act="restart">Reiniciar partido</button>'}
         ${r.localTeam >= 0 && !m.config.training ? `<button class="menu-item" data-act="subs">Cambios<small>${m.teams[r.localTeam as 0 | 1].subsUsed}/${MAX_SUBS} realizados</small></button>` : ''}
         <button class="menu-item" data-act="stats">Estadísticas</button>
         <button class="menu-item" data-act="settings">Configuración</button>
         <button class="menu-item" data-act="controls">Controles</button>
-        <button class="menu-item" data-act="quit">Abandonar partido</button>
+        <button class="menu-item" data-act="quit">Abandonar partido${r.online && this.lastMatch?.ctx.mode === 'online' && this.lastMatch.ctx.start.mode === 'rivals' ? '<small>Cuenta como derrota en Division Rivals</small>' : ''}</button>
       </div></div></div>`;
     this.overlay?.dispose();
     this.overlay = new Screen(this.ui, html, {
       resume,
       restart: () => { close(); this.restartMatch(); },
       subs: () => { close(); this.subsMenu(); },
+      chat: () => {
+        close();
+        const items = QUICK_CHAT.map((t, i) => `<button class="menu-item" data-act="say" data-i="${i}">${esc(t)}</button>`).join('');
+        const back = () => { close(); this.pauseMenu(); };
+        this.overlay = new Screen(this.ui, `<div class="overlay"><div class="panel modal"><h2>Mensajes</h2><div class="menu-list">${items}<button class="menu-item" data-act="back">Volver</button></div></div></div>`, {
+          say: (el) => { r.sendChat(QUICK_CHAT[Number(el.dataset.i)]); close(); r.resume(); },
+          back,
+        }, this.audio);
+        this.overlay.onBack = back;
+      },
       stats: () => {
         close();
         this.overlay = new Screen(this.ui, `<div class="overlay"><div class="panel modal"><h2>Estadísticas</h2>${this.statsHTML(m)}<div class="screen-footer"><button class="btn" data-act="back">Volver</button></div></div></div>`, { back: () => { close(); this.pauseMenu(); } }, this.audio);
@@ -488,14 +515,22 @@ export class App {
   private stadiumForCtx(ctx: MatchContext): string {
     if (ctx.mode === 'quick') return STADIUMS[this.quick.stadium].id;
     if (ctx.mode === 'training') return STADIUMS[2].id;
+    if (ctx.mode === 'online') return STADIUMS[ctx.start.seed % STADIUMS.length].id;
     const home = ctx.fixture.home;
     return STADIUMS[TEAMS.findIndex((t) => t.id === home) % STADIUMS.length].id;
   }
 
   private leaveMatch() {
     const ctx = this.lastMatch?.ctx;
+    const wasRunning = !!this.runner && !this.runner.match.finished;
     this.runner?.dispose();
     this.runner = null;
+    if (ctx?.mode === 'online') {
+      window.clearInterval(this.onlineWatch);
+      if (wasRunning) this.net?.send({ t: 'leave' });
+      this.onlineHub();
+      return;
+    }
     if (ctx?.mode === 'tournament') this.tournamentHub();
     else if (ctx?.mode === 'career') this.careerHub();
     else if (ctx?.mode === 'training') this.trainingScreen();
@@ -536,12 +571,16 @@ export class App {
       const scorers = [...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff].filter((p) => p.goals > 0).flatMap((p) => Array(p.goals).fill(p.id));
       this.career.recordUserResult(ctx.fixture, r.home, r.away, scorers);
     }
+    if (ctx.mode === 'online') {
+      window.clearInterval(this.onlineWatch);
+      this.net?.send({ t: 'result', home: r.home, away: r.away, pens: r.penalties ? r.winner : -1 });
+    }
     this.runner?.dispose();
     this.runner = null;
     this.setMenuMode(true);
     const scorers = (t: typeof h) => t.scorers.map((s) => `⚽ ${esc(s.name)} ${s.minute}'`).join('<br>') || '<span class="muted">—</span>';
     const pens = r.penalties ? `<div class="muted" style="text-align:center">Penales: ${r.penalties[0]} - ${r.penalties[1]}</div>` : '';
-    const cont = ctx.mode === 'tournament' ? 'Volver al torneo' : ctx.mode === 'career' ? 'Volver a la carrera' : ctx.mode === 'training' ? 'Entrenamiento' : 'Menú principal';
+    const cont = ctx.mode === 'online' ? 'Menú online' : ctx.mode === 'tournament' ? 'Volver al torneo' : ctx.mode === 'career' ? 'Volver a la carrera' : ctx.mode === 'training' ? 'Entrenamiento' : 'Menú principal';
     this.show(`
       <div class="screen-header"><div><div class="crumb">RESULTADO FINAL</div><h2>${r.winner === -1 ? 'Empate' : `Gana ${esc(m.teams[r.winner].data.name)}`}</h2></div></div>
       <div class="screen-body"><div class="grid2">
@@ -550,7 +589,7 @@ export class App {
           ${pens}
           <div class="scorers"><div style="text-align:right">${scorers(h)}</div><div>${scorers(a)}</div></div>
         </div>
-        <div class="panel">${this.statsHTML(m)}</div>
+        <div class="panel">${ctx.mode === 'online' && ctx.start.mode === 'rivals' ? '<div class="rivals-change"><div class="net-status"><span class="spinner"></span>Calculando puntos de Division Rivals…</div></div>' : ''}${this.statsHTML(m)}</div>
       </div></div>
       <div class="screen-footer">
         ${ctx.mode === 'quick' ? '<button class="btn" data-act="rematch">Revancha</button>' : ''}
@@ -559,6 +598,306 @@ export class App {
       rematch: () => this.restartMatch(),
       cont: () => this.leaveMatch(),
     }, () => this.leaveMatch());
+    if (ctx.mode === 'online') this.showOnlineFinal();
+  }
+
+
+  // ==================================================================
+  // Online (gratis: servidor propio en la red local o en un plan gratuito)
+  // ==================================================================
+
+  private divisionBadge(p: OnlineProfile | null) {
+    if (!p) return '';
+    const d = p.division;
+    const tier = d.index >= 10 ? 'elite' : d.index >= 7 ? 'gold' : d.index >= 4 ? 'silver' : 'bronze';
+    return `<div class="div-card ${tier}">
+      <div class="div-badge"><span>${d.index >= 10 ? '★' : 10 - d.index}</span></div>
+      <div class="div-info"><b>${esc(d.name)}</b><small>${p.points} puntos de Rivals · ${p.wins}V ${p.draws}E ${p.losses}D</small>
+      <div class="div-bar"><i style="width:${Math.round(d.progress * 100)}%"></i></div>
+      <small>${d.next ? `${d.toNext} puntos para ${esc(d.next)}` : 'Máxima división'}</small></div></div>`;
+  }
+
+  /** Conexión: nombre, servidor y conectar. */
+  onlineMenu(status = '', error = '') {
+    this.setMenuMode(true);
+    if (this.net?.connected) {
+      this.onlineHub();
+      return;
+    }
+    if (!this.settings.onlineName) this.settings.onlineName = `Jugador${Math.floor(1000 + Math.random() * 9000)}`;
+    const cached = cachedProfile();
+    const html = () => `
+      <div class="screen-header"><div><div class="crumb">ONLINE</div><h2>Jugar contra otras personas</h2></div></div>
+      <div class="screen-body"><div class="grid2">
+        <div class="panel">
+          <div class="row"><label>Tu nombre</label><input class="text-in" id="on-name" maxlength="16" value="${esc(this.settings.onlineName)}" data-enter="connect"></div>
+          <div class="row"><label>Servidor</label><input class="text-in" id="on-server" placeholder="predeterminado (gratis)" value="${esc(this.settings.onlineServer)}" data-enter="connect"></div>
+          <div class="muted" style="font-size:12px;margin:8px 0">Vacío = servidor público gratuito. Para jugar en tu Wi-Fi sin Internet abre el servidor en un PC (<code>npm run server</code>) y escribe aquí su IP, por ejemplo <code>192.168.1.20:8080</code>.</div>
+          ${status ? `<div class="net-status"><span class="spinner"></span>${esc(status)}</div>` : ''}
+          ${error ? `<div class="sub-msg">${esc(error)}</div>` : ''}
+        </div>
+        <div class="panel">
+          <h3 style="margin-top:0">Modos online</h3>
+          <div class="muted">🏆 <b>Division Rivals</b>: partidos clasificatorios contra rivales de tu nivel. Gana puntos y sube de la División 10 a Élite.<br><br>🤝 <b>Amistoso</b>: rival al azar.<br><br>🔑 <b>Sala privada</b>: comparte un código con un amigo.</div>
+          ${cached ? `<div style="margin-top:12px">${this.divisionBadge(cached)}</div>` : ''}
+        </div>
+      </div></div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn primary" data-act="connect" ${status ? 'disabled' : ''}>Conectar</button></div>`;
+    const sc = this.show(html(), {
+      back: () => this.mainMenu(),
+      connect: () => {
+        const name = ((sc.root.querySelector('#on-name') as HTMLInputElement)?.value ?? '').trim().slice(0, 16) || this.settings.onlineName;
+        const server = ((sc.root.querySelector('#on-server') as HTMLInputElement)?.value ?? '').trim();
+        this.settings.onlineName = name;
+        this.settings.onlineServer = server;
+        saveSettings(this.settings);
+        this.connectOnline();
+      },
+    }, () => this.mainMenu());
+  }
+
+  private async connectOnline() {
+    const net = this.net ?? new NetClient();
+    this.net = net;
+    this.onlineMenu('Conectando…');
+    try {
+      await net.connect(serverCandidates(this.settings.onlineServer), this.settings.onlineName, (t) => {
+        const st = this.screen?.root.querySelector('.net-status');
+        if (st) st.innerHTML = `<span class="spinner"></span>${esc(t)}`;
+      });
+    } catch (err) {
+      this.onlineMenu('', `${(err as Error).message}. Revisa la dirección del servidor o tu conexión. Si usas el servidor público gratuito, puede estar apagado: cualquiera puede abrir uno gratis (ver README → Online).`);
+      return;
+    }
+    this.netOff?.();
+    this.netOff = net.on((m) => this.onNetMessage(m));
+    net.onClose = () => {
+      if (this.runner && this.lastMatch?.ctx.mode === 'online' && !this.runner.match.finished) {
+        this.runner.dispose();
+        this.runner = null;
+        this.onlineNotice('Conexión perdida', 'Se perdió la conexión con el servidor online.');
+      } else if (!this.runner) {
+        this.onlineMenu('', 'Se perdió la conexión con el servidor.');
+      }
+    };
+    this.onlineHub();
+  }
+
+  private onlineTeamStepper() {
+    const t = TEAMS[this.onlineTeam];
+    return `<div class="row"><label>Tu equipo</label><div class="stepper"><button data-act="teamPrev" data-nofocus="1">‹</button><span class="val" data-act="teamNext" data-left="teamPrev" data-right="teamNext">${crestSVG(t, 22)} ${esc(t.name)} · ${t.rating}</span><button data-act="teamNext" data-nofocus="1">›</button></div></div>`;
+  }
+
+  /** Menú online (conectado). */
+  onlineHub() {
+    const net = this.net;
+    if (!net?.connected) {
+      this.onlineMenu();
+      return;
+    }
+    this.setMenuMode(true);
+    net.send({ t: 'profile' });
+    const html = () => `
+      <div class="screen-header"><div><div class="crumb">ONLINE · ${net.online} conectados · ${Math.round(net.rtt) || '—'} ms</div><h2>Hola, ${esc(net.profile?.name ?? '')}</h2></div></div>
+      <div class="screen-body"><div class="grid2">
+        <div class="panel">
+          <div class="menu-list">
+            <button class="menu-item" data-act="rivals">Division Rivals<small>Partido clasificatorio · gana puntos y sube de división</small></button>
+            <button class="menu-item" data-act="friendly">Amistoso rápido<small>Rival al azar, sin puntos</small></button>
+            <button class="menu-item" data-act="create">Crear sala privada<small>Juega con un amigo: comparte el código</small></button>
+            <button class="menu-item" data-act="join">Unirse con código</button>
+            <button class="menu-item" data-act="board">Clasificación<small>Los mejores de Division Rivals</small></button>
+          </div>
+          ${this.onlineTeamStepper()}
+        </div>
+        <div class="panel">${this.divisionBadge(net.profile)}
+          <div class="div-ladder">${DIVISIONS.map((d, i) => `<span class="${net.profile && net.profile.division.index === i ? 'cur' : ''} ${net.profile && net.profile.division.index > i ? 'done' : ''}">${i >= 10 ? 'É' : 10 - i}</span>`).join('')}</div>
+          <div class="muted" style="font-size:12px;margin-top:10px">Victoria +30 (+5 por gol de diferencia) · Empate +10 · Derrota −12 · Abandonar −20. Ganar a un rival de división más alta da puntos extra.</div>
+        </div>
+      </div></div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn danger" data-act="disconnect">Desconectar</button></div>`;
+    const sc = this.show(html(), {
+      rivals: () => this.onlineQueue('rivals'),
+      friendly: () => this.onlineQueue('friendly'),
+      create: () => this.onlineRoom(),
+      join: () => this.onlineJoin(),
+      board: () => this.onlineBoard(),
+      teamPrev: () => { this.onlineTeam = (this.onlineTeam + TEAMS.length - 1) % TEAMS.length; sc.refresh(html()); },
+      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % TEAMS.length; sc.refresh(html()); },
+      back: () => this.mainMenu(),
+      disconnect: () => { this.netOff?.(); this.netOff = null; net.close(); this.net = null; this.mainMenu(); },
+    }, () => this.mainMenu());
+    this.onlineRefresh = () => { if (this.screen === sc) sc.refresh(html()); };
+  }
+
+  private onlineRefresh: (() => void) | null = null;
+
+  /** Búsqueda de rival. */
+  private onlineQueue(mode: 'rivals' | 'friendly') {
+    const net = this.net!;
+    const t0 = performance.now();
+    net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id });
+    const label = mode === 'rivals' ? 'DIVISION RIVALS' : 'AMISTOSO';
+    const html = () => {
+      const sec = Math.floor((performance.now() - t0) / 1000);
+      return `<div class="panel modal" style="margin:auto;text-align:center">
+        <div class="crumb">${label}</div><h2>Buscando rival</h2>
+        <div class="net-status" style="justify-content:center"><span class="spinner"></span>${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</div>
+        <div class="muted" style="margin:10px 0">${mode === 'rivals' ? 'Se busca a alguien de tu división; cuanto más esperas, más se amplía la búsqueda.' : 'Se empareja con el primero que esté buscando.'} Invita a un amigo a buscar a la vez, o crea una sala privada.</div>
+        ${this.onlineTeamStepper()}
+        <button class="btn" data-act="cancel">Cancelar</button></div>`;
+    };
+    const cancel = () => { window.clearInterval(timer); net.send({ t: 'cancel' }); this.onlineHub(); };
+    const sc = this.show(html(), {
+      cancel,
+      teamPrev: () => { this.onlineTeam = (this.onlineTeam + TEAMS.length - 1) % TEAMS.length; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
+      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % TEAMS.length; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
+    }, cancel);
+    const timer = window.setInterval(() => {
+      if (this.screen !== sc) { window.clearInterval(timer); return; }
+      const st = sc.root.querySelector('.net-status');
+      const sec = Math.floor((performance.now() - t0) / 1000);
+      if (st) st.innerHTML = `<span class="spinner"></span>${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    }, 500);
+  }
+
+  private onlineRoom() {
+    const net = this.net!;
+    net.send({ t: 'create', team: TEAMS[this.onlineTeam].id, half: this.settings.halfMinutes });
+    const cancel = () => { net.send({ t: 'cancel' }); this.onlineHub(); };
+    this.show(`<div class="panel modal" style="margin:auto;text-align:center">
+      <div class="crumb">SALA PRIVADA</div><h2>Comparte este código</h2>
+      <div class="room-code">·····</div>
+      <div class="net-status" style="justify-content:center"><span class="spinner"></span>Esperando a tu amigo…</div>
+      <div class="muted" style="margin:10px 0">Tu amigo entra en ONLINE → Unirse con código. Partes de ${this.settings.halfMinutes} min.</div>
+      <button class="btn" data-act="cancel">Cancelar</button></div>`, { cancel }, cancel);
+  }
+
+  private onlineJoin(error = '') {
+    const net = this.net!;
+    const sc = this.show(`<div class="panel modal" style="margin:auto;text-align:center">
+      <div class="crumb">SALA PRIVADA</div><h2>Código de la sala</h2>
+      <input class="text-in code-in" id="on-code" maxlength="5" autocomplete="off" autocapitalize="characters" placeholder="ABCDE" data-enter="go">
+      ${error ? `<div class="sub-msg" style="margin-top:10px">${esc(error)}</div>` : ''}
+      <div style="margin-top:12px">${this.onlineTeamStepper()}</div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn primary" data-act="go">Unirse</button></div></div>`, {
+      go: () => {
+        const code = ((sc.root.querySelector('#on-code') as HTMLInputElement)?.value ?? '').trim().toUpperCase();
+        if (code.length < 4) return;
+        net.send({ t: 'join', code, team: TEAMS[this.onlineTeam].id });
+      },
+      back: () => this.onlineHub(),
+      teamPrev: () => { this.onlineTeam = (this.onlineTeam + TEAMS.length - 1) % TEAMS.length; this.onlineJoin(error); },
+      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % TEAMS.length; this.onlineJoin(error); },
+    }, () => this.onlineHub());
+    setTimeout(() => (sc.root.querySelector('#on-code') as HTMLInputElement | null)?.focus(), 50);
+  }
+
+  private onlineBoard(rows: { name: string; points: number; wins: number; division: string }[] | null = null) {
+    if (!rows) this.net?.send({ t: 'leaderboard' });
+    const body = rows === null ? '<div class="net-status"><span class="spinner"></span>Cargando…</div>'
+      : rows.length ? `<table class="table board"><tr><th>#</th><th>Jugador</th><th>División</th><th>Puntos</th><th>V</th></tr>${rows.map((r, i) => `<tr class="${r.name === this.net?.profile?.name ? 'me' : ''}"><td>${i + 1}</td><td>${esc(r.name)}</td><td>${esc(r.division)}</td><td>${r.points}</td><td>${r.wins}</td></tr>`).join('')}</table>`
+        : '<div class="muted">Todavía no hay partidos de Division Rivals en este servidor.</div>';
+    this.show(`<div class="screen-header"><div><div class="crumb">DIVISION RIVALS</div><h2>Clasificación</h2></div></div>
+      <div class="screen-body"><div class="panel">${body}</div></div>
+      <div class="screen-footer"><button class="btn primary" data-act="back">Volver</button></div>`, { back: () => this.onlineHub() }, () => this.onlineHub(), 'online-board');
+  }
+
+  private onlineNotice(title: string, text: string, rivalsBox = false) {
+    this.setMenuMode(true);
+    this.show(`<div class="panel modal" style="margin:auto;text-align:center"><h2>${esc(title)}</h2><p>${esc(text)}</p>
+      ${rivalsBox ? '<div class="rivals-change"></div>' : ''}
+      <button class="btn primary" data-act="ok">Continuar</button></div>`, { ok: () => this.onlineHub() }, () => this.onlineHub());
+    if (rivalsBox) this.showOnlineFinal();
+  }
+
+  private onNetMessage(m: ServerMsg) {
+    const runner = this.runner;
+    switch (m.t) {
+      case 'relay':
+        if (runner?.online && m.d) runner.receive(m.d);
+        break;
+      case 'room': {
+        const code = this.screen?.root.querySelector('.room-code');
+        if (code) code.textContent = m.code;
+        break;
+      }
+      case 'error':
+        if (this.screen?.root.querySelector('#on-code')) this.onlineJoin(m.text);
+        else this.onlineNotice('Online', m.text);
+        break;
+      case 'match':
+        this.startOnlineMatch(m as unknown as MatchStart);
+        break;
+      case 'leaderboard':
+        if (this.screen?.root.classList.contains('online-board')) this.onlineBoard(m.rows ?? []);
+        break;
+      case 'profile':
+        if (!this.runner) this.onlineRefresh?.();
+        break;
+      case 'opponentLeft':
+        if (runner?.online && !runner.match.finished) {
+          runner.dispose();
+          this.runner = null;
+          window.clearInterval(this.onlineWatch);
+          this.onlineNotice('Tu rival se fue', 'Tu rival abandonó el partido: ganas 3-0.', true);
+        }
+        break;
+      case 'final':
+        this.onlineFinal = m as unknown as FinalMsg;
+        this.showOnlineFinal();
+        break;
+    }
+  }
+
+  /** Muestra los puntos de Rivals ganados/perdidos en la pantalla actual (resultado o aviso). */
+  private showOnlineFinal() {
+    const f = this.onlineFinal;
+    const box = this.screen?.root.querySelector('.rivals-change') as HTMLElement | null;
+    if (!f || !box) return;
+    if (f.mode !== 'rivals') {
+      box.innerHTML = '';
+      return;
+    }
+    if (f.disputed || !f.change) {
+      box.innerHTML = '<div class="muted">Los dos jugadores informaron resultados distintos: el partido no cuenta.</div>';
+      return;
+    }
+    const d = f.change.delta;
+    box.innerHTML = `<div class="rv-delta ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : ''}${d} puntos de Rivals</div>${this.divisionBadge(f.profile)}`;
+  }
+
+  private startOnlineMatch(st: MatchStart) {
+    const net = this.net;
+    if (!net) return;
+    this.overlay?.dispose();
+    this.overlay = null;
+    this.onlineFinal = null;
+    const teamOf = (p: OnlineProfile) => TEAMS.find((t) => t.id === p.team) ?? TEAMS[0];
+    const home = teamOf(st.home);
+    const away = teamOf(st.away);
+    const cfg: MatchConfig = {
+      home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away),
+      humanTeam: st.role === 'host' ? 0 : 1,
+      halfLengthSec: Math.max(2, Math.min(10, st.half)) * 60,
+      difficulty: 'pro', extraTime: false, penalties: false, seed: st.seed,
+    };
+    const ctx: MatchContext = { mode: 'online', start: st };
+    const link: OnlineLink = { role: st.role, send: (d) => net.relay(d) };
+    this.playMatch(cfg, this.stadiumForCtx(ctx), ctx, link);
+    // el invitado comprueba que siguen llegando datos del anfitrión
+    window.clearInterval(this.onlineWatch);
+    this.onlineWatch = window.setInterval(() => {
+      const r = this.runner;
+      if (!r || !r.guestSync || r.inIntro || r.match.finished) return;
+      if (r.guestSync.received > 0 && performance.now() - r.guestSync.lastRecv > 12000) {
+        window.clearInterval(this.onlineWatch);
+        r.dispose();
+        this.runner = null;
+        net.send({ t: 'leave' });
+        this.onlineNotice('Conexión perdida', 'No llegan datos de tu rival desde hace más de 12 segundos.');
+      }
+    }, 1000);
   }
 
   // ==================================================================

@@ -438,3 +438,34 @@ body.touch .lower-third { bottom: 230px; }
 .sub-row .ovr { font-size: 15px; width: 26px; text-align: right; }
 .sub-msg { background: rgba(255,77,94,0.18); border-left: 3px solid #ff4d5e; padding: 6px 10px; margin-bottom: 8px; border-radius: 4px; }
 @media (max-width: 640px) { .subs-grid { grid-template-columns: 1fr; } }
+
+/* ---- Online ---- */
+.text-in { background: rgba(0,0,0,0.35); border: 1px solid var(--line); border-radius: 8px; color: #fff; font: inherit; font-size: 15px; padding: 8px 10px; min-width: 0; width: min(260px, 52vw); }
+.text-in:focus { outline: none; border-color: #19e68c; box-shadow: 0 0 0 2px rgba(25,230,140,0.25); }
+.code-in { width: 220px; text-align: center; font-family: var(--display); font-size: 34px; letter-spacing: .3em; text-transform: uppercase; }
+.room-code { font-family: var(--display); font-size: 64px; letter-spacing: .25em; color: #19e68c; text-shadow: 0 0 24px rgba(25,230,140,0.5); margin: 8px 0; user-select: all; }
+.net-status { display: flex; align-items: center; gap: 10px; margin: 10px 0; color: #cfd8ee; }
+.spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); border-top-color: #19e68c; animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.div-card { display: flex; gap: 14px; align-items: center; padding: 12px; border-radius: 12px; background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)); border: 1px solid var(--line); }
+.div-badge { flex: none; width: 64px; height: 72px; display: grid; place-items: center; clip-path: polygon(50% 0, 100% 18%, 100% 70%, 50% 100%, 0 70%, 0 18%); font-family: var(--display); font-size: 30px; font-weight: 800; color: #111; }
+.div-card.bronze .div-badge { background: linear-gradient(160deg, #f0b27a, #9a5b2c); }
+.div-card.silver .div-badge { background: linear-gradient(160deg, #f4f7fb, #8d99ae); }
+.div-card.gold .div-badge { background: linear-gradient(160deg, #ffe58a, #c99a14); }
+.div-card.elite .div-badge { background: linear-gradient(160deg, #b8f7ff, #7b2ff7); color: #fff; }
+.div-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.div-info b { font-family: var(--display); font-size: 22px; letter-spacing: .04em; }
+.div-info small { color: #9fb0d6; font-size: 12px; }
+.div-bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.12); overflow: hidden; }
+.div-bar i { display: block; height: 100%; background: linear-gradient(90deg, #19e68c, #3fd2ff); }
+.div-ladder { display: flex; gap: 4px; margin-top: 12px; flex-wrap: wrap; }
+.div-ladder span { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 6px; background: rgba(255,255,255,0.06); font-size: 12px; font-weight: 700; color: #9fb0d6; }
+.div-ladder span.done { background: rgba(25,230,140,0.25); color: #bfffe0; }
+.div-ladder span.cur { background: #19e68c; color: #062; box-shadow: 0 0 12px rgba(25,230,140,0.6); }
+.rivals-change { margin-bottom: 12px; }
+.rv-delta { font-family: var(--display); font-size: 30px; margin-bottom: 8px; text-align: center; }
+.rv-delta.up { color: #19e68c; } .rv-delta.down { color: #ff6b76; }
+.board td, .board th { padding: 6px 8px; text-align: left; }
+.board tr.me td { color: #19e68c; font-weight: 700; }
+.board { width: 100%; border-collapse: collapse; }
+.board tr:nth-child(even) td { background: rgba(255,255,255,0.03); }

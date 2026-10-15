@@ -1207,7 +1207,7 @@ export class Match {
   }
 
   /** Cambio inmediato: el suplente ocupa el puesto (y la posición) del que sale. */
-  substitute(t: Team, out: Player, inn: Player) {
+  substitute(t: Team, out: Player, inn: Player, emit = true) {
     const idx = t.players.indexOf(out);
     if (idx < 0) return;
     inn.slot = out.slot;
@@ -1231,7 +1231,7 @@ export class Match {
     if (this.intendedReceiver === out) this.intendedReceiver = null;
     for (const p of this.playersAll) if (p.markTarget === out) p.markTarget = null;
     this.rosterVersion++;
-    this.emit({ type: 'sub', team: t.index, playerId: inn.id, text: `${out.data.name} ⇄ ${inn.data.name}`, kind: out.id });
+    if (emit) this.emit({ type: 'sub', team: t.index, playerId: inn.id, text: `${out.data.name} ⇄ ${inn.data.name}`, kind: out.id });
   }
 
   /** La IA (y el humano con cambios automáticos) cambia a los más cansados desde el minuto 58. */
@@ -1726,6 +1726,12 @@ export class Match {
     this.replayAcc += dt;
     if (this.replayAcc < 1 / 30) return;
     this.replayAcc = 0;
+    this.recordFrameNow();
+  }
+
+  /** Graba un fotograma de repetición con el estado actual (también lo usa el invitado online). */
+  recordFrameNow() {
+    if (this.phase === 'replay') return;
     const frame: ReplayFrame = {
       tm: this.time,
       ball: [this.ball.pos.x, this.ball.pos.y, this.ball.pos.z],
