@@ -521,3 +521,9 @@ body.touch .commentary { bottom: auto; top: 84px; font-size: 14px; padding: 6px 
 .squad-edit { max-height: 46vh; overflow-y: auto; margin-top: 8px; }
 .squad-edit .row { display: flex; align-items: center; gap: 8px; }
 .squad-edit input { flex: 1; min-width: 0; }
+.market-list { max-height: 52vh; overflow-y: auto; margin-top: 8px; }
+.market-row { display: flex; align-items: center; gap: 10px; }
+.market-row > span:first-child { flex: 1; min-width: 0; }
+.market-row .price { width: 64px; text-align: right; font-weight: 700; color: #ffd23f; }
+.market-row.expensive .price { color: #ff6b76; }
+.market-row .btn { padding: 4px 10px; font-size: 12px; }

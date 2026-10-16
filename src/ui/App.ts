@@ -14,7 +14,7 @@ import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
 import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, versusDevicesLabel, type Action } from '../input/Input';
 import { MAX_SUBS, type MatchConfig } from '../sim/Match';
 import { manOfTheMatch, playerRatings } from '../sim/Ratings';
-import { Career } from '../modes/Career';
+import { Career, SQUAD_MAX, SQUAD_MIN, buyPlayer, marketOffers, playerPrice, sellPlayer } from '../modes/Career';
 import { Tournament } from '../modes/Tournament';
 import type { Fixture, StandingRow } from '../modes/Competition';
 import { crestSVG, kitSVG } from './Crest';
@@ -1294,11 +1294,14 @@ export class App {
     const roundFx = next ? st.fixtures.filter((f) => f.round === next.round) : [];
     const history = st.history.map((h) => `<div class="row"><span>Temporada ${h.season}</span><span>Campeón: ${esc(lookup(h.champion).name)} · Tu posición: ${h.userPosition}.º</span></div>`).join('');
     this.show(`
-      <div class="screen-header"><div><div class="crumb">CARRERA · TEMPORADA ${st.season} · ${esc(c.user.name)}</div><h2>Liga Élite</h2></div></div>
+      <div class="screen-header"><div><div class="crumb">CARRERA · TEMPORADA ${st.season} · ${esc(c.user.name)} · PRESUPUESTO ${(st.budget ?? 0).toFixed(1)} M</div><h2>${c.division === 1 ? 'Primera División' : 'Segunda División'}</h2></div></div>
       <div class="screen-body">
         ${st.seasonOver ? `<div class="panel" style="margin-bottom:16px"><b>¡Temporada terminada!</b> Campeón: ${esc(lookup(table[0].team).name)}. Tu equipo terminó ${myPos}.º.</div>` : ''}
         <div class="grid2">
-          <div class="panel"><h3>Clasificación</h3>${this.tableHTML(table, st.userTeam, lookup)}</div>
+          <div><div class="panel"><h3>Clasificación</h3>${this.tableHTML(table, st.userTeam, lookup)}<div class="muted" style="font-size:12px;margin-top:6px">${c.division === 1 ? 'Los 2 últimos descienden a Segunda.' : 'Los 2 primeros ascienden a Primera.'}</div></div>
+            ${st.divisions ? `<details class="panel" style="margin-top:16px"><summary>${c.division === 1 ? 'Segunda División' : 'Primera División'}${st.otherTable ? ' · temporada anterior' : ''}</summary>${st.otherTable ? this.tableHTML(st.otherTable, st.userTeam, lookup) : c.divisionTeams(c.division === 1 ? 2 : 1).map((id) => `<div class="row"><span>${esc(lookup(id).name)}</span><span class="muted">${lookup(id).rating}</span></div>`).join('')}</details>` : ''}
+            ${st.news?.length ? `<div class="panel" style="margin-top:16px"><h3>Noticias</h3>${st.news.slice(0, 6).map((n) => `<div class="muted" style="font-size:13px;margin-bottom:4px">${esc(n)}</div>`).join('')}</div>` : ''}
+          </div>
           <div>
             ${next ? `<div class="panel" style="margin-bottom:16px"><div class="crumb">${esc(next.stage)} DE ${c.totalRounds}</div>${this.fixtureHTML(next, st.userTeam, lookup)}<div class="muted" style="margin-top:8px">Resto de la jornada:</div>${roundFx.filter((f) => f !== next).map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('')}</div>` : ''}
             <div class="panel"><h3>Últimos resultados</h3>${recent.map((f) => `<div class="muted" style="font-size:11px">${esc(f.stage)}</div>${this.fixtureHTML(f, st.userTeam, lookup)}`).join('') || '<span class="muted">Aún no se jugó ningún partido.</span>'}</div>
@@ -1310,16 +1313,19 @@ export class App {
         <button class="btn" data-act="back">Menú</button>
         <button class="btn danger" data-act="abandon">Abandonar carrera</button>
         <button class="btn" data-act="squad">Plantilla y alineación</button>
+        <button class="btn" data-act="market">Mercado</button>
         ${st.seasonOver ? '<button class="btn primary" data-act="nextSeason">Nueva temporada</button>' : next ? '<button class="btn primary" data-act="play">Jugar partido</button>' : ''}
       </div>`, {
       back: () => this.mainMenu(),
       abandon: () => { Career.clear(); this.career = null; this.careerHub(); },
       squad: () => this.squadScreen(),
+      market: () => this.marketScreen(),
       nextSeason: () => {
         const res = c.startNextSeason();
+        const moveMsg = res.userMove === 'up' ? '<p style="color:var(--accent)"><b>¡Ascenso! El año que viene juegas en Primera.</b></p>' : res.userMove === 'down' ? '<p style="color:var(--danger)"><b>Descenso: el año que viene juegas en Segunda.</b></p>' : '';
         const ch = res.changes.slice(0, 12).map((x) => `<div class="row"><span>${esc(x.name)}</span><span style="color:${x.delta > 0 ? 'var(--accent)' : 'var(--danger)'}">${x.delta > 0 ? '+' : ''}${x.delta}</span></div>`).join('');
         this.show(`<div class="screen-header"><div><div class="crumb">FIN DE TEMPORADA</div><h2>Temporada ${st.season}</h2></div></div>
-          <div class="screen-body"><div class="grid2"><div class="panel"><p>Campeón: <b>${esc(lookup(res.champion).name)}</b></p><p>Tu posición final: <b>${res.position}.º</b></p></div>
+          <div class="screen-body"><div class="grid2"><div class="panel"><p>Campeón: <b>${esc(lookup(res.champion).name)}</b></p><p>Tu posición final: <b>${res.position}.º</b></p>${moveMsg}<p>Suben a Primera: ${res.promoted.map((id) => esc(lookup(id).name)).join(', ')}</p><p>Bajan a Segunda: ${res.relegated.map((id) => esc(lookup(id).name)).join(', ')}</p><p>Ingresos de la temporada: <b>+${res.income} M</b> (presupuesto: ${(st.budget ?? 0).toFixed(1)} M)</p></div>
           <div class="panel"><h3>Evolución de tu plantilla</h3>${ch || '<span class="muted">Sin cambios</span>'}</div></div></div>
           <div class="screen-footer"><button class="btn primary" data-act="ok">Continuar</button></div>`, { ok: () => this.careerHub() }, () => this.careerHub());
       },
@@ -1337,6 +1343,43 @@ export class App {
         }, this.stadiumForCtx({ mode: 'career', fixture: next }), { mode: 'career', fixture: next });
       },
     }, () => this.mainMenu());
+  }
+
+  /** Mercado de fichajes del modo carrera: comprar a otros clubes y vender jugadores propios. */
+  private marketScreen(msg = '', tab: 'buy' | 'sell' = 'buy', pos: 'ALL' | 'GK' | 'DEF' | 'MID' | 'FWD' = 'ALL') {
+    const c = this.career;
+    if (!c) return;
+    const st = c.state;
+    const POS = ['ALL', 'GK', 'DEF', 'MID', 'FWD'] as const;
+    const POSN = { ALL: 'Todos', GK: 'Arqueros', DEF: 'Defensas', MID: 'Medios', FWD: 'Delanteros' } as const;
+    const posLabel = (p: PlayerData) => (p.position === 'GK' ? 'POR' : p.position === 'DEF' ? 'DEF' : p.position === 'MID' ? 'MED' : 'DEL');
+    const budget = st.budget ?? 0;
+    let rows = '';
+    if (tab === 'buy') {
+      rows = marketOffers(c).filter((o) => pos === 'ALL' || o.player.position === pos).slice(0, 40).map((o) => `<div class="row market-row ${o.price > budget ? 'expensive' : ''}"><span><span class="pos ${o.player.position}">${posLabel(o.player)}</span> ${esc(o.player.name)} <span class="muted">${o.age} años · ${esc(o.team.short)}</span></span><span class="ovr">${playerOverall(o.player)}</span><span class="price">${o.price.toFixed(1)} M</span><button class="btn" data-act="buy" data-id="${o.player.id}">Fichar</button></div>`).join('');
+    } else {
+      rows = c.user.players.filter((p) => pos === 'ALL' || p.position === pos).map((p) => {
+        const age = st.ages[p.id] ?? 25;
+        return `<div class="row market-row"><span><span class="pos ${p.position}">${posLabel(p)}</span> ${esc(p.name)} <span class="muted">${age} años${st.lineup.includes(p.id) ? ' · titular' : ''}</span></span><span class="ovr">${playerOverall(p)}</span><span class="price">${(playerPrice(p, age) * 0.9).toFixed(1)} M</span><button class="btn danger" data-act="sell" data-id="${p.id}">Vender</button></div>`;
+      }).join('');
+    }
+    this.show(`
+      <div class="screen-header"><div><div class="crumb">MERCADO · ${esc(c.user.name)} · ${c.user.players.length}/${SQUAD_MAX} jugadores</div><h2>Presupuesto: ${budget.toFixed(1)} M</h2></div></div>
+      <div class="screen-body"><div class="panel">
+        ${msg ? `<div class="editor-msg">${esc(msg)}</div>` : ''}
+        ${this.stepper('Ver', tab === 'buy' ? 'Comprar (otros clubes)' : 'Vender (tu plantilla)', 'tab')}
+        ${this.stepper('Puesto', POSN[pos], 'pos')}
+        <div class="market-list">${rows || '<span class="muted">No hay jugadores.</span>'}</div>
+        <p class="muted" style="font-size:12px;margin-top:8px">Los precios dependen de la media y la edad. Al vender recibes el 90 %. La plantilla debe tener entre ${SQUAD_MIN} y ${SQUAD_MAX} jugadores. Cada temporada ingresas dinero según tu posición (más en Primera).</p>
+      </div></div>
+      <div class="screen-footer"><button class="btn primary" data-act="back">Volver</button></div>`, {
+      tabPrev: () => this.marketScreen('', tab === 'buy' ? 'sell' : 'buy', pos), tabNext: () => this.marketScreen('', tab === 'buy' ? 'sell' : 'buy', pos),
+      posPrev: () => this.marketScreen('', tab, POS[(POS.indexOf(pos) + POS.length - 1) % POS.length]),
+      posNext: () => this.marketScreen('', tab, POS[(POS.indexOf(pos) + 1) % POS.length]),
+      buy: (el) => { const err = buyPlayer(c, el.dataset.id!); this.marketScreen(err ?? 'Fichaje cerrado', tab, pos); },
+      sell: (el) => { const err = sellPlayer(c, el.dataset.id!); this.marketScreen(err ?? 'Venta cerrada', tab, pos); },
+      back: () => this.careerHub(),
+    }, () => this.careerHub());
   }
 
   private squadScreen() {
