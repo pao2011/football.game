@@ -607,6 +607,7 @@ export class App {
     // pasa lo escrito en los campos al modelo
     const sync = () => {
       const autoShort = t.short === shortOf(t.name);
+      const oldShort = t.short;
       for (const el of Array.from(sc.root.querySelectorAll<HTMLInputElement>('[data-field]'))) {
         const f = el.dataset.field!;
         const v = el.value;
@@ -619,7 +620,7 @@ export class App {
       }
       // la abreviatura sigue al nombre mientras no se cambie a mano
       const shortField = sc.root.querySelector<HTMLInputElement>('[data-field="short"]');
-      if (autoShort && shortField && shortField.value.toUpperCase() === shortOf(shortField.dataset.prev ?? t.name)) t.short = shortOf(t.name);
+      if (autoShort && shortField && shortField.value.trim().toUpperCase() === oldShort) t.short = shortOf(t.name);
     };
     const refresh = () => { sync(); sc.refresh(html()); };
     const sc = this.show(html(), {
