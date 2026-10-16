@@ -18,7 +18,7 @@ const LAST = [
 ];
 const HAIR = ['#1b1209', '#2b1b0e', '#3d2614', '#5a3a1e', '#8a5a2b', '#c69a5b', '#e0c27a', '#121212', '#6b2f12'];
 
-interface TeamSeed {
+export interface TeamSeed {
   id: string;
   name: string;
   short: string;
@@ -142,7 +142,7 @@ function makePlayer(rng: Rng, teamId: string, idx: number, pos: Position, number
   };
 }
 
-function buildTeam(s: TeamSeed): TeamData {
+export function buildTeam(s: TeamSeed): TeamData {
   const rng = new Rng(s.seed * 7919);
   const used = new Set<string>();
   const players: PlayerData[] = [];
@@ -160,6 +160,8 @@ function buildTeam(s: TeamSeed): TeamData {
 }
 
 export const TEAMS: TeamData[] = SEEDS.map(buildTeam);
+/** Equipos del juego (sin los creados en el editor): los únicos que se usan en el modo online. */
+export const BUILTIN_TEAM_COUNT = SEEDS.length;
 
 export function getTeam(id: string): TeamData {
   const t = TEAMS.find((t) => t.id === id);

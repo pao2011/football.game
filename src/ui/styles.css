@@ -508,3 +508,16 @@ body.touch .commentary { bottom: auto; top: 84px; font-size: 14px; padding: 6px 
 .ach .ic { font-size: 26px; width: 34px; text-align: center; }
 .ach small { display: block; color: var(--muted); }
 .ach-msgs { margin-top: 12px; padding: 10px 12px; background: rgba(255,210,63,0.08); border-left: 3px solid #ffd23f; border-radius: 6px; font-size: 14px; line-height: 1.7; }
+.editor-row { display: flex; align-items: center; gap: 12px; }
+.editor-row > span:nth-child(2) { flex: 1; }
+.editor-row .btn { padding: 4px 10px; font-size: 12px; margin-left: 6px; }
+.editor-msg { margin-bottom: 10px; color: #19e68c; }
+.crest-preview { display: flex; justify-content: center; margin: 4px 0 10px; }
+.text-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.text-field input, .squad-edit input { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 6px; padding: 6px 8px; font-size: 14px; }
+.color-field { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; margin: 3px 10px 3px 0; }
+.color-field input { width: 30px; height: 24px; border: none; background: none; padding: 0; cursor: pointer; }
+.kit-edit { margin-bottom: 12px; }
+.squad-edit { max-height: 46vh; overflow-y: auto; margin-top: 8px; }
+.squad-edit .row { display: flex; align-items: center; gap: 8px; }
+.squad-edit input { flex: 1; min-width: 0; }

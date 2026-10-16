@@ -27,7 +27,9 @@ export class Tournament {
 
   static create(userTeam: string, seed = Date.now() % 100000): Tournament {
     const rng = new Rng(seed);
-    const ids = TEAMS.map((t) => t.id).sort(() => rng.next() - 0.5);
+    // 8 equipos: el del usuario y otros 7 (con equipos propios del editor puede haber más de 8 en total)
+    const others = TEAMS.map((t) => t.id).filter((id) => id !== userTeam).sort(() => rng.next() - 0.5).slice(0, 7);
+    const ids = [userTeam, ...others].sort(() => rng.next() - 0.5);
     const A = ids.slice(0, 4);
     const B = ids.slice(4, 8);
     // el usuario siempre está en el grupo A para simplificar la lectura

@@ -4,10 +4,11 @@ import { DIFFICULTY_LABELS } from '../ai/Difficulty';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
 import { STADIUMS, getStadium } from '../data/stadiums';
-import { TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
+import { BUILTIN_TEAM_COUNT, TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
 import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
 import { disciplineOf, isAvailable } from '../modes/Availability';
 import { ACHIEVEMENTS, unlock, unlockedSet, type AchievementDef } from '../modes/Achievements';
+import { deleteCustomTeam, exportTeam, importTeam, isCustom, loadCustomTeams, newCustomTeam, registerCustomTeams, saveCustomTeam, setTeamLevel, shortOf, teamLevel } from '../data/customTeams';
 import type { Difficulty, FormationId, PlayerData, TeamData } from '../data/types';
 import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
 import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, versusDevicesLabel, type Action } from '../input/Input';
@@ -111,6 +112,7 @@ export class App {
     this.renderer = this.createRenderer();
     this.bg = el('div', 'menu-bg', '<div class="pitch-lines"></div>');
     document.body.insertBefore(this.bg, ui);
+    registerCustomTeams(); // equipos creados en el editor
     this.applyAudio();
     this.quick = { home: 0, away: 1, stadium: 0, half: HALF_OPTIONS.indexOf(this.settings.halfMinutes), difficulty: DIFFS.indexOf(this.settings.difficulty), side: 0, formation: null };
     if (this.quick.half < 0) this.quick.half = 2;
@@ -269,6 +271,7 @@ export class App {
           <button class="menu-item" data-act="career">Carrera<small>Temporadas de liga con tu club</small></button>
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
+          <button class="menu-item" data-act="editor">✏️ Editor de equipos<small>Crea tu equipo · exportar e importar</small></button>
           <button class="menu-item" data-act="achievements">🏆 Logros<small>${Object.keys(unlockedSet()).length}/${ACHIEVEMENTS.length} desbloqueados</small></button>
           <button class="menu-item" data-act="controls">Controles<small>Teclado y mando · reasignar teclas</small></button>
           ${!isElectron && !isNativeApp() ? '<button class="menu-item apk-item" data-act="apk">📲 Descargar APK<small>Instala el juego en tu Android</small></button>' : ''}
@@ -288,6 +291,7 @@ export class App {
       settings: () => this.settingsScreen(() => this.mainMenu()),
       controls: () => this.controlsScreen(() => this.mainMenu()),
       achievements: () => this.achievementsScreen(),
+      editor: () => this.teamEditorList(),
       quit: () => window.close(),
       apk: () => { window.open(APK_URL, '_blank', 'noopener'); },
     }, () => this.start());
@@ -513,6 +517,131 @@ export class App {
   }
 
   /** Cambios: elige quién sale (en el campo) y quién entra (suplentes). */
+  // ==================================================================
+  // Editor de equipos
+  // ==================================================================
+
+  /** Lista de equipos propios: crear, editar, exportar, importar y borrar. */
+  teamEditorList(msg = '') {
+    const list = loadCustomTeams();
+    const rows = list.length
+      ? list.map((t) => `<div class="row editor-row"><span class="crest-mini">${crestSVG(t, 40)}</span><span><b>${esc(t.name)}</b> <span class="muted">${esc(t.short)} · ${t.formation} · nivel ${teamLevel(t)}</span></span>
+          <span><button class="btn" data-act="edit" data-id="${t.id}">Editar</button><button class="btn" data-act="export" data-id="${t.id}">Exportar</button><button class="btn danger" data-act="del" data-id="${t.id}">Borrar</button></span></div>`).join('')
+      : '<p class="muted">Todavía no has creado ningún equipo. Crea uno o importa un archivo .json exportado desde el juego.</p>';
+    const s = this.show(`
+      <div class="screen-header"><div><div class="crumb">EDITOR</div><h2>Mis equipos</h2></div></div>
+      <div class="screen-body"><div class="panel">${msg ? `<div class="editor-msg">${esc(msg)}</div>` : ''}${rows}
+        <p class="muted" style="margin-top:12px;font-size:13px">Tus equipos aparecen en el partido rápido, el torneo y la carrera (no en el online, porque tu rival no los tiene).</p></div></div>
+      <div class="screen-footer">
+        <button class="btn" data-act="back">Volver</button>
+        <button class="btn" data-act="import">Importar…</button>
+        <button class="btn primary" data-act="create">Crear equipo</button>
+      </div>`, {
+      back: () => this.mainMenu(),
+      create: () => this.teamEditor(newCustomTeam(), true),
+      edit: (el) => { const t = list.find((x) => x.id === el.dataset.id); if (t) this.teamEditor(structuredClone(t), false); },
+      del: (el) => {
+        const t = list.find((x) => x.id === el.dataset.id);
+        if (t && window.confirm(`¿Borrar ${t.name}?`)) { deleteCustomTeam(t.id); this.teamEditorList(`${t.name} borrado`); }
+      },
+      export: (el) => {
+        const t = list.find((x) => x.id === el.dataset.id);
+        if (!t) return;
+        const blob = new Blob([exportTeam(t)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${t.name.replace(/[^\w\- ]+/g, '').trim() || 'equipo'}.json`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      },
+      import: () => {
+        const inp = document.createElement('input');
+        inp.type = 'file';
+        inp.accept = '.json,application/json';
+        inp.onchange = () => {
+          const f = inp.files?.[0];
+          if (!f) return;
+          f.text().then((txt) => {
+            try { const t = importTeam(txt); this.teamEditorList(`Importado: ${t.name}`); } catch (e) { this.teamEditorList(String((e as Error).message)); }
+          });
+        };
+        inp.click();
+      },
+    }, () => this.mainMenu());
+    void s;
+  }
+
+  /** Edición de un equipo propio: nombre, escudo, equipaciones, formación, nivel y nombres de los jugadores. */
+  private teamEditor(t: import('../data/types').TeamData, isNew: boolean) {
+    const SHAPES = ['shield', 'circle', 'diamond'] as const;
+    const SYMBOLS = ['star', 'ball', 'lion', 'wave', 'bolt', 'crown', 'tower', 'eagle'] as const;
+    const SYMBOL_NAMES: Record<string, string> = { star: 'Estrella', ball: 'Balón', lion: 'León', wave: 'Ola', bolt: 'Rayo', crown: 'Corona', tower: 'Torre', eagle: 'Águila' };
+    const PATTERNS = ['solid', 'gradient', 'stripes', 'hoops', 'sash'] as const;
+    const PATTERN_NAMES: Record<string, string> = { solid: 'Lisa', gradient: 'Degradado', stripes: 'Rayas', hoops: 'Aros', sash: 'Banda' };
+    const POS = { GK: 'POR', DEF: 'DEF', MID: 'MED', FWD: 'DEL' } as const;
+    const cyc = <T,>(arr: readonly T[], cur: T, d: number) => arr[(arr.indexOf(cur) + d + arr.length) % arr.length];
+    const color = (label: string, field: string, value: string) => `<label class="color-field"><input type="color" data-field="${field}" value="${value}"> ${label}</label>`;
+    const kitPanel = (title: string, k: 'home' | 'away') => `<div class="kit-edit"><div class="crumb">${title}</div><div class="kits">${kitSVG(t[k], 64)}</div>
+      ${color('Camiseta', `${k}.shirt`, t[k].shirt)}${color('Detalle', `${k}.shirt2`, t[k].shirt2)}${color('Pantalón', `${k}.shorts`, t[k].shorts)}${color('Medias', `${k}.socks`, t[k].socks)}${color('Dorsal', `${k}.number`, t[k].number)}
+      ${this.stepper('Diseño', PATTERN_NAMES[t[k].pattern], `${k}Pat`)}</div>`;
+    const html = () => `
+      <div class="screen-header"><div><div class="crumb">EDITOR</div><h2>${isNew ? 'Nuevo equipo' : esc(t.name)}</h2></div></div>
+      <div class="screen-body"><div class="grid3">
+        <div class="panel"><h3>Club</h3>
+          <div class="crest-preview">${crestSVG(t, 110)}</div>
+          <label class="text-field">Nombre <input type="text" maxlength="24" data-field="name" value="${esc(t.name)}"></label>
+          <label class="text-field">Abreviatura <input type="text" maxlength="3" data-field="short" value="${esc(t.short)}"></label>
+          <label class="text-field">Ciudad <input type="text" maxlength="24" data-field="city" value="${esc(t.city)}"></label>
+          ${this.stepper('Escudo', ({ shield: 'Escudo', circle: 'Círculo', diamond: 'Rombo' } as const)[t.crest.shape], 'shape')}
+          ${this.stepper('Símbolo', SYMBOL_NAMES[t.crest.symbol], 'sym')}
+          ${color('Color principal', 'crest.primary', t.crest.primary)}${color('Color secundario', 'crest.secondary', t.crest.secondary)}
+        </div>
+        <div class="panel"><h3>Equipaciones</h3>${kitPanel('TITULAR', 'home')}${kitPanel('SUPLENTE', 'away')}</div>
+        <div class="panel"><h3>Plantilla</h3>
+          ${this.stepper('Formación', t.formation, 'form')}
+          ${this.stepper('Nivel del equipo', String(teamLevel(t)), 'lvl')}
+          <div class="squad-edit">${t.players.map((p, i) => `<div class="row"><span class="pos ${p.position}">${POS[p.position]}</span><input type="text" maxlength="22" data-field="player.${i}" value="${esc(p.name)}"><span class="ovr">${playerOverall(p)}</span>${i === 10 ? '' : ''}</div>${i === 10 ? '<div class="crumb" style="margin:6px 0">SUPLENTES</div>' : ''}`).join('')}</div>
+        </div>
+      </div></div>
+      <div class="screen-footer"><button class="btn" data-act="cancel">Cancelar</button><button class="btn primary" data-act="save">Guardar</button></div>`;
+    // pasa lo escrito en los campos al modelo
+    const sync = () => {
+      const autoShort = t.short === shortOf(t.name);
+      for (const el of Array.from(sc.root.querySelectorAll<HTMLInputElement>('[data-field]'))) {
+        const f = el.dataset.field!;
+        const v = el.value;
+        if (f === 'name') t.name = v.trim() || t.name;
+        else if (f === 'short') t.short = (v.trim() || shortOf(t.name)).toUpperCase().slice(0, 3);
+        else if (f === 'city') t.city = v.trim();
+        else if (f.startsWith('player.')) { const p = t.players[+f.slice(7)]; if (p && v.trim()) p.name = v.trim(); }
+        else if (f.startsWith('crest.')) (t.crest as any)[f.slice(6)] = v;
+        else if (f.startsWith('home.') || f.startsWith('away.')) (t[f.slice(0, 4) as 'home' | 'away'] as any)[f.slice(5)] = v;
+      }
+      // la abreviatura sigue al nombre mientras no se cambie a mano
+      const shortField = sc.root.querySelector<HTMLInputElement>('[data-field="short"]');
+      if (autoShort && shortField && shortField.value.toUpperCase() === shortOf(shortField.dataset.prev ?? t.name)) t.short = shortOf(t.name);
+    };
+    const refresh = () => { sync(); sc.refresh(html()); };
+    const sc = this.show(html(), {
+      shapePrev: () => { sync(); t.crest.shape = cyc(SHAPES, t.crest.shape, -1); sc.refresh(html()); },
+      shapeNext: () => { sync(); t.crest.shape = cyc(SHAPES, t.crest.shape, 1); sc.refresh(html()); },
+      symPrev: () => { sync(); t.crest.symbol = cyc(SYMBOLS, t.crest.symbol, -1); sc.refresh(html()); },
+      symNext: () => { sync(); t.crest.symbol = cyc(SYMBOLS, t.crest.symbol, 1); sc.refresh(html()); },
+      homePatPrev: () => { sync(); t.home.pattern = cyc(PATTERNS, t.home.pattern, -1); sc.refresh(html()); },
+      homePatNext: () => { sync(); t.home.pattern = cyc(PATTERNS, t.home.pattern, 1); sc.refresh(html()); },
+      awayPatPrev: () => { sync(); t.away.pattern = cyc(PATTERNS, t.away.pattern, -1); sc.refresh(html()); },
+      awayPatNext: () => { sync(); t.away.pattern = cyc(PATTERNS, t.away.pattern, 1); sc.refresh(html()); },
+      formPrev: () => { sync(); t.formation = cyc(FORMATION_IDS, t.formation, -1); sc.refresh(html()); },
+      formNext: () => { sync(); t.formation = cyc(FORMATION_IDS, t.formation, 1); sc.refresh(html()); },
+      lvlPrev: () => { sync(); setTeamLevel(t, Math.max(50, teamLevel(t) - 2)); sc.refresh(html()); },
+      lvlNext: () => { sync(); setTeamLevel(t, Math.min(95, teamLevel(t) + 2)); sc.refresh(html()); },
+      cancel: () => this.teamEditorList(),
+      save: () => { sync(); saveCustomTeam(t); this.teamEditorList(`${t.name} guardado`); },
+    }, () => this.teamEditorList());
+    // los colores actualizan la vista previa al soltarlos
+    sc.root.addEventListener('change', (e) => { if ((e.target as HTMLInputElement).type === 'color') refresh(); });
+  }
+
   /** Pantalla de logros: desbloqueados y pendientes. */
   achievementsScreen() {
     const u = unlockedSet();
@@ -873,8 +1002,8 @@ export class App {
       create: () => this.onlineRoom(),
       join: () => this.onlineJoin(),
       board: () => this.onlineBoard(),
-      teamPrev: () => { this.onlineTeam = (this.onlineTeam + TEAMS.length - 1) % TEAMS.length; sc.refresh(html()); },
-      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % TEAMS.length; sc.refresh(html()); },
+      teamPrev: () => { this.onlineTeam = (this.onlineTeam + BUILTIN_TEAM_COUNT - 1) % BUILTIN_TEAM_COUNT; sc.refresh(html()); },
+      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % BUILTIN_TEAM_COUNT; sc.refresh(html()); },
       back: () => this.mainMenu(),
       disconnect: () => { this.netOff?.(); this.netOff = null; net.close(); this.net = null; this.mainMenu(); },
     }, () => this.mainMenu());
@@ -901,8 +1030,8 @@ export class App {
     const cancel = () => { window.clearInterval(timer); net.send({ t: 'cancel' }); this.onlineHub(); };
     const sc = this.show(html(), {
       cancel,
-      teamPrev: () => { this.onlineTeam = (this.onlineTeam + TEAMS.length - 1) % TEAMS.length; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
-      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % TEAMS.length; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
+      teamPrev: () => { this.onlineTeam = (this.onlineTeam + BUILTIN_TEAM_COUNT - 1) % BUILTIN_TEAM_COUNT; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
+      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % BUILTIN_TEAM_COUNT; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
     }, cancel);
     const timer = window.setInterval(() => {
       if (this.screen !== sc) { window.clearInterval(timer); return; }
@@ -938,8 +1067,8 @@ export class App {
         net.send({ t: 'join', code, team: TEAMS[this.onlineTeam].id });
       },
       back: () => this.onlineHub(),
-      teamPrev: () => { this.onlineTeam = (this.onlineTeam + TEAMS.length - 1) % TEAMS.length; this.onlineJoin(error); },
-      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % TEAMS.length; this.onlineJoin(error); },
+      teamPrev: () => { this.onlineTeam = (this.onlineTeam + BUILTIN_TEAM_COUNT - 1) % BUILTIN_TEAM_COUNT; this.onlineJoin(error); },
+      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % BUILTIN_TEAM_COUNT; this.onlineJoin(error); },
     }, () => this.onlineHub());
     setTimeout(() => (sc.root.querySelector('#on-code') as HTMLInputElement | null)?.focus(), 50);
   }
