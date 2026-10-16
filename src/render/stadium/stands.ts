@@ -92,6 +92,8 @@ export interface StandOptions {
   awayColor: string;
   roof: boolean;
   night: boolean;
+  /** Grada alta en los laterales (no en los estadios pequeños). */
+  upper?: boolean;
 }
 
 export function buildStands(o: StandOptions): StandBuild {
@@ -157,7 +159,8 @@ export function buildStands(o: StandOptions): StandBuild {
   // ---- upper tiers on both long sides (separate stands with end caps)
   const upBack = tierBackD(UPPER);
   const upTop = tierTopY(UPPER);
-  {
+  const upper = o.upper !== false;
+  if (upper) {
     const pts: ProfPt[] = [
       { d: midBack, y: midTop },
       { d: midBack, y: UPPER.y0 - 1.1 },
@@ -181,7 +184,7 @@ export function buildStands(o: StandOptions): StandBuild {
     loftInto(glowB, ring, true, [
       { a: { d: lowBack - 0.04, y: gy1 - 0.25 }, b: { d: lowBack - 0.04, y: gy1 }, color: line },
     ]);
-    for (const side of [longP, longN]) {
+    for (const side of upper ? [longP, longN] : []) {
             const uy1 = UPPER.y0 - 1.4;
       loftInto(glowB, side, false, [
         { a: { d: midBack - 0.04, y: uy1 - 0.25 }, b: { d: midBack - 0.04, y: uy1 }, color: line },
@@ -429,8 +432,10 @@ export function buildStands(o: StandOptions): StandBuild {
   };
   addRows(LOWER, ring, true, 0);
   addRows(MIDDLE, ring, true, 1);
-  addRows(UPPER, longP, false, 2);
-  addRows(UPPER, longN, false, 2);
+  if (upper) {
+    addRows(UPPER, longP, false, 2);
+    addRows(UPPER, longN, false, 2);
+  }
 
   return {
     opaque: [opaque.geometry()],

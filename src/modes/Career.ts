@@ -4,6 +4,7 @@ import type { FormationId, PlayerData, TeamData } from '../data/types';
 import { loadJSON, removeKey, saveJSON } from '../save/Storage';
 import { Rng, clamp } from '../util/math';
 import { computeStandings, quickSim, roundRobin, type Fixture, type StandingRow } from './Competition';
+import { applyAfterMatch, emptyAvailability, fixLineup, type AvailabilityState, type Discipline } from './Availability';
 
 /**
  * Modo carrera: liga de 8 equipos a doble vuelta (14 jornadas). El usuario gestiona alineación
@@ -24,6 +25,8 @@ export interface CareerState {
   history: { season: number; champion: string; userPosition: number }[];
   seed: number;
   seasonOver: boolean;
+  /** Lesionados, sancionados y amarillas acumuladas del equipo del usuario. */
+  availability?: AvailabilityState;
 }
 
 const KEY = 'career';
@@ -110,7 +113,13 @@ export class Career {
     return FORMATIONS[this.state.formation];
   }
 
-  recordUserResult(fx: Fixture, homeGoals: number, awayGoals: number, scorers: string[]) {
+  /** Alineación para el próximo partido: los lesionados y sancionados se cambian por suplentes. */
+  matchLineup(): string[] {
+    return fixLineup(this.user, this.state.formation, this.state.lineup, this.state.availability);
+  }
+
+  recordUserResult(fx: Fixture, homeGoals: number, awayGoals: number, scorers: string[], discipline?: Discipline): string[] {
+    const msgs = discipline ? applyAfterMatch((this.state.availability ??= emptyAvailability()), this.user, discipline) : [];
     const f = this.state.fixtures.find((x) => x.id === fx.id)!;
     f.played = true;
     f.homeGoals = homeGoals;
@@ -130,6 +139,7 @@ export class Career {
     }
     if (this.state.fixtures.every((x) => x.played)) this.state.seasonOver = true;
     this.save();
+    return msgs;
   }
 
   /** Cierra la temporada: historial, evolución de jugadores y nuevo calendario. */
@@ -165,6 +175,12 @@ export class Career {
     this.state.appearances = {};
     this.state.goals = {};
     this.state.seasonOver = false;
+    // nueva temporada: se borran las sanciones y las amarillas (las lesiones siguen)
+    const av = this.state.availability;
+    if (av) {
+      av.yellows = {};
+      for (const [id, o] of Object.entries(av.out)) if (o.reason === 'suspension') delete av.out[id];
+    }
     this.newSeasonFixtures();
     this.save();
     return { champion, position, changes };

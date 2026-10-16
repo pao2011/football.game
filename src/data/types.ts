@@ -58,4 +58,8 @@ export interface StadiumData {
   standColor: string;
   roofColor: string;
   grassHue: number;
+  /** Estadio pequeño (sin grada alta ni techo, con torres de luz). */
+  small?: boolean;
+  /** Niebla densa (puerto de noche). */
+  fog?: boolean;
 }

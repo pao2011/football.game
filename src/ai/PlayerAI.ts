@@ -10,8 +10,9 @@ import { angleDiff, clamp, dist2D } from '../util/math';
 import { buildClearance, buildCross, buildGroundPass, buildLob, buildShot, chooseCrossTarget, NORMAL_SHOT } from './Actions';
 import type { SkillKind } from '../sim/types';
 import { getBallPrediction, PRED_DT, PRED_STEPS, timeToReach } from './Predict';
-import { offsideLineU } from '../sim/Rules';
+import { isInPenaltyArea, offsideLineU } from '../sim/Rules';
 import { groundPassVelocity } from '../sim/Kicks';
+import { AERIAL_TIMING, angleTo, ballApproach, chooseAerial, type AerialKind } from '../sim/Aerial';
 
 const _v = new Vector3();
 const _w = new Vector3();
@@ -63,6 +64,7 @@ export function updateOutfieldAI(m: Match, p: Player, dt: number) {
   }
   const team = m.teams[p.team];
   if (m.owner === p) {
+    if (chestVolley(m, p, team)) return;
     carrierAI(m, p, team, dt);
     return;
   }
@@ -77,10 +79,11 @@ export function updateOutfieldAI(m: Match, p: Player, dt: number) {
       p.sprinting = true;
       const d = moveTo(p, p.tacticalTarget, 1, 0.25);
       if (d < 0.6) {
-        // esperar el balón de cara
+        // ya en el punto: sale al encuentro del balón (no lo espera quieto); más despacio si viene muy fuerte
         faceBall(m, p);
         _v.set(ball.x - p.pos.x, 0, ball.z - p.pos.z);
-        if (_v.length() < 4) p.desiredVel.copy(_v.normalize().multiplyScalar(2));
+        const bl = _v.length();
+        if (bl < 15 && !m.owner) p.desiredVel.copy(_v.normalize().multiplyScalar(receiveApproach(m, p, bl)));
       }
       break;
     }
@@ -183,28 +186,155 @@ function tryInterceptPass(m: Match, p: Player, team: Team) {
   }
 }
 
-/** Cabezazos y voleas: si el balón aéreo va a pasar a la altura de la cabeza cerca del jugador. */
+/**
+ * Balones aéreos: cabezazos, remates acrobáticos (volea, tijera, chilena) cerca del arco rival, o dejar
+ * caer el balón para controlarlo con el pecho o el muslo cuando no hay ningún rival encima.
+ */
 function tryAerial(m: Match, p: Player, team: Team): boolean {
   const b = m.ball;
-  if (m.owner || b.held || b.pos.y < 0.8 || p.busy) return false;
+  if (m.owner || b.held || b.pos.y < 0.35 || p.busy) return false;
   const pts = getBallPrediction(m);
-  for (let i = 1; i <= 12; i++) {
+  const goal = team.attackGoal;
+  const rivals = m.otherTeam(team.index).active;
+  // primer punto alcanzable de la trayectoria y, si lo hay, uno a la altura del pecho o del muslo sin rivales cerca
+  let first: { pt: Vector3; t: number } | null = null;
+  let head: { pt: Vector3; t: number } | null = null;
+  let soft: Vector3 | null = null;
+  // balón que baja a la altura de la volea justo donde está el jugador
+  let low: { pt: Vector3; t: number } | null = null;
+  for (let i = 1; i <= 14; i++) {
     const pt = pts[i];
     const t = i * PRED_DT;
-    if (pt.y < 1.3 || pt.y > 2.7) continue;
+    if (pt.y < 0.35 || pt.y > 2.7) continue;
     const d = dist2D(p.pos, pt);
-    // llega a tiempo al punto de remate (antes solo si ya estaba encima)
+    // llega a tiempo al punto (antes solo si ya estaba encima)
     if (d > 1.6 + t * 6) continue;
     // ¿Soy el más cercano de mi equipo a ese punto?
-    if (team.active.some((q) => q !== p && !q.isGK && dist2D(q.pos, pt) < d - 0.3)) return false;
-    moveTo(p, pt, 1, 0.1);
-    if (t <= 0.3) {
-      const req = headerDecision(m, p, team);
-      m.requestKick(p, req);
+    if (team.active.some((q) => q !== p && !q.isGK && dist2D(q.pos, pt) < d - 0.3)) {
+      if (!first) return false;
+      continue;
     }
+    if (!first) first = { pt, t };
+    if (!head && pt.y >= 1.3) head = { pt, t };
+    if (!low && pt.y >= 0.4 && pt.y <= 1.15 && d < 2.2 && !rivals.some((o) => dist2D(o.pos, pt) < d + 0.8)) low = { pt, t };
+    const nearGoal = team.u(pt) > 0 && dist2D(pt, goal) < 20;
+    if (!nearGoal && pt.y >= 0.5 && pt.y <= 1.65 && !rivals.some((o) => dist2D(o.pos, pt) < 3.5)) {
+      soft = pt;
+      break;
+    }
+  }
+  if (!first) return false;
+  // sin presión y lejos del arco: se espera el balón y se controla con el pecho o el muslo
+  if (soft) {
+    moveTo(p, soft, 1, 0.1);
     return true;
   }
-  return false;
+  // remate acrobático cerca del arco (si el balón le baja a los pies, de volea)
+  // (solo si el cabezazo tendría que ser muy bajo; a buena altura se va de cabeza)
+  const { pt, t } = low && head && head.pt.y < 1.6 && first.pt.y < 1.6 && team.u(low.pt) > 0 && dist2D(low.pt, goal) < 20 ? low : first;
+  if (team.u(pt) > 0 && dist2D(pt, goal) < 20 && pt.y < 2.35) {
+    const kind = pickAerial(m, p, angleTo(p, goal.x, goal.z) > 1.9, pt.y);
+    if (kind) {
+      moveTo(p, pt, 1, 0.1);
+      if (t <= AERIAL_TIMING[kind].contact + 0.06) m.requestKick(p, aerialShotDecision(m, p, team, kind));
+      return true;
+    }
+  }
+  // cabezazo
+  if (!head) return false;
+  moveTo(p, head.pt, 1, 0.1);
+  if (head.t <= 0.3) m.requestKick(p, headerDecision(m, p, team));
+  return true;
+}
+
+/** Cerca del arco, tras bajarla con el pecho o el muslo: volea antes de que el balón toque el suelo. */
+function chestVolley(m: Match, p: Player, team: Team): boolean {
+  const b = m.ball;
+  if (b.pos.y < 0.35 || p.action.kind === 'kick' || p.action.kind === 'header') return false;
+  const goal = team.attackGoal;
+  if (team.u(p.pos) <= 0 || dist2D(p.pos, goal) > 18 || angleTo(p, goal.x, goal.z) > 1.6) return false;
+  const ap = ballApproach(b, p, 0.7, 0.35, 1.2);
+  if (!ap || ap.miss > 1.3) return false;
+  if (ap.t > AERIAL_TIMING.volley.contact + 0.04) {
+    // esperando a que caiga: de cara al arco
+    p.desiredVel.set(0, 0, 0);
+    p.desiredFacing = Math.atan2(goal.x - p.pos.x, goal.z - p.pos.z);
+    return true;
+  }
+  return m.requestKick(p, aerialShotDecision(m, p, team, 'volley'));
+}
+
+/** Velocidad (m/s) con la que el receptor va hacia el balón que le llega: lo bastante para ganar la posición sin
+ * pasarse del límite de control (un balón muy fuerte se amortigua mejor sin correr contra él). */
+export function receiveApproach(m: Match, p: Player, dist: number): number {
+  const ctrl = p.data.attrs.control / 100;
+  const limit = 9 + ctrl * 13 - 1.5; // margen respecto al límite de control de touchBall
+  const room = limit - m.ball.groundSpeed;
+  return clamp(Math.min(room, 1 + dist * 0.5), 0.8, 4.5);
+}
+
+/** Pared en curso: jugador que corre tras pasar → compañero al que le pasó (quien debe devolvérsela). */
+const wallFrom = new WeakMap<Player, Player>();
+
+/** Rivales (sin el arquero) que tapan la línea de tiro hacia el centro del arco. */
+function shotLaneBlockers(from: Vector3, goal: Vector3, opponents: Player[]): number {
+  let n = 0;
+  const dx = goal.x - from.x;
+  const dz = goal.z - from.z;
+  const len = Math.hypot(dx, dz);
+  for (const o of opponents) {
+    if (o.isGK) continue;
+    const t = ((o.pos.x - from.x) * dx + (o.pos.z - from.z) * dz) / (len * len);
+    if (t <= 0.05 || t >= 1) continue;
+    const off = Math.abs((o.pos.x - from.x) * dz - (o.pos.z - from.z) * dx) / len;
+    if (off < 1.2 + t * 2.5) n++;
+  }
+  return n;
+}
+
+/** Sorteo de remate acrobático, uno por jugador y por balón (para que no se repita cada fotograma). */
+const aerialRoll = new WeakMap<Player, { touch: number; roll: number }>();
+
+function pickAerial(m: Match, p: Player, backToGoal: boolean, y: number): AerialKind | null {
+  const kind = chooseAerial(y, backToGoal);
+  // centro bajo: a veces en plancha en vez de volea
+  if (kind === 'volley' && y < 0.95) {
+    const touch0 = m.lastTouch?.time ?? 0;
+    let r0 = aerialRoll.get(p);
+    if (!r0 || r0.touch !== touch0) { r0 = { touch: touch0, roll: m.rng.next() }; aerialRoll.set(p, r0); }
+    if (r0.roll > 0.72) return 'diving';
+  }
+  if (!kind || kind === 'volley') return kind;
+  const touch = m.lastTouch?.time ?? 0;
+  let r = aerialRoll.get(p);
+  if (!r || r.touch !== touch) {
+    r = { touch, roll: m.rng.next() };
+    aerialRoll.set(p, r);
+  }
+  // la chilena y la tijera solo las intentan los buenos rematadores, y no siempre
+  const sh = p.data.attrs.shooting;
+  const chance = sh < 68 ? 0 : (kind === 'bicycle' ? 0.35 : kind === 'scorpion' ? 0.12 : kind === 'backheel' ? 0.25 : 0.3) * (0.6 + (sh - 68) / 40) * (0.5 + 0.5 * m.diff.skillUse);
+  if (r.roll < chance) return kind;
+  // si no se anima: volea si el balón llega bajo; si no, cabezazo
+  return y < 1.3 && !backToGoal ? 'volley' : null;
+}
+
+function aerialShotDecision(m: Match, p: Player, team: Team, kind: AerialKind) {
+  const goal = team.attackGoal;
+  const gk = m.otherTeam(team.index).goalkeeper;
+  const side = gk ? (gk.pos.z > 0.3 ? -1 : gk.pos.z < -0.3 ? 1 : m.rng.next() < 0.5 ? -1 : 1) : 1;
+  const z = side * (GOAL_HALF_WIDTH - 0.8);
+  const req = buildShot(m, p, z, 0.5, 0.75, false, errScale(m, p), 'shoot');
+  const hs = kind === 'volley' ? 23 : kind === 'scissor' ? 21 : kind === 'diving' ? 17 : kind === 'backheel' ? 15 : 20;
+  const h = Math.hypot(req.velocity.x, req.velocity.z) || 1;
+  req.velocity.set((req.velocity.x / h) * hs, 0, (req.velocity.z / h) * hs);
+  req.spin.set(0, 0, 0);
+  req.style = undefined;
+  req.aerial = kind;
+  if (kind === 'diving') req.kind = 'header';
+  req.aimAt = new Vector3(goal.x, kind === 'volley' || kind === 'backheel' ? 0.6 : kind === 'diving' ? 0.5 : 0.9, z);
+  req.power = 0.8;
+  return req;
 }
 
 function headerDecision(m: Match, p: Player, team: Team) {
@@ -360,11 +490,28 @@ function decide(m: Match, p: Player, team: Team, opponents: Player[]) {
   const sq = shotQuality(m, team, p.pos, opponents);
   if (sq > 0.05) {
     options.push({
-      score: sq * 3.2 * (0.6 + p.data.attrs.shooting / 250) + (pu > HALF_LENGTH - 16 ? 0.45 : 0) + 0.15,
+      score: sq * 3.7 * (0.6 + p.data.attrs.shooting / 250) + (pu > HALF_LENGTH - 16 ? 0.6 : 0) + 0.15,
       label: 'shoot',
       run: () => aiShoot(m, p, team, err),
     });
   }
+
+  // --- Tiro lejano: buen rematador, de frente al arco y con el rival encerrado en su área ---
+  const goalPt = team.attackGoal;
+  const dGoal = dist2D(p.pos, goalPt);
+  const shooting = p.data.attrs.shooting;
+  if (dGoal > 17 && dGoal < 30 && Math.abs(p.pos.z) < 16 && shooting >= 72 && pressure > 2.2) {
+    const packed = opponents.filter((o) => !o.isGK && isInPenaltyArea(o.pos, goalPt.x > 0 ? 1 : -1)).length;
+    const lane = shotLaneBlockers(p.pos, goalPt, opponents);
+    const lsq = (shooting - 70) / 30 * clamp(1 - (dGoal - 17) / 16, 0.2, 1) * (lane === 0 ? 1 : lane === 1 ? 0.55 : 0.2);
+    options.push({
+      score: 0.5 + lsq * 1.7 + (packed >= 5 ? 0.45 : packed >= 4 ? 0.25 : 0),
+      label: 'longshot',
+      run: () => aiShoot(m, p, team, err),
+    });
+  }
+  // ¿centro del campo tapado? (muchos rivales en el carril central por delante): se buscan las bandas
+  const centralCrowd = opponents.filter((o) => !o.isGK && team.u(o.pos) > pu && Math.abs(o.pos.z) < 12 && team.u(o.pos) - pu < 30).length;
 
   // --- Pases ---
   for (const q of team.active) {
@@ -385,10 +532,30 @@ function decide(m: Match, p: Player, team: Team, opponents: Player[]) {
     const receiverShot = shotQuality(m, team, target, opponents);
     let score = 0.55 + progress * 0.7 + open * 0.45 + danger * 0.45 + receiverShot * 0.8 - (d > 30 ? 0.15 : 0);
     if (progress < 0 && pressure > 3) score -= 0.25; // sin presión no se juega hacia atrás
+    // juego por bandas: con el centro tapado, abrir a un compañero libre en la banda del último tercio
+    if (centralCrowd >= 4 && Math.abs(target.z) > 15 && tu > HALF_LENGTH - 45 && open > 0.5) score += 0.3;
+    // pared: devolver al compañero que acaba de pasar y sigue corriendo al espacio
+    if (q.forcedRunUntil > m.time && wallFrom.get(q) === p && progress > 0) score += 0.35;
     if (safety < 0) score -= 1.2;
     else if (safety < 0.25) score -= 0.4;
     if (d <= 32 || safety >= 0) {
-      options.push({ score, label: 'pass', run: () => m.requestKick(p, buildGroundPass(m, p, target, 0, err, q)) });
+      options.push({
+        score,
+        label: 'pass',
+        run: () => {
+          const ok = m.requestKick(p, buildGroundPass(m, p, target, 0, err, q));
+          // pared: tras un pase corto hacia delante en campo rival, el pasador sigue corriendo al espacio
+          if (ok && d < 20 && progress > 0 && pu > -5 && p.slot.position !== 'DEF' && m.rng.next() < 0.55) {
+            const run = team.toWorld(clamp(pu + 13, -HALF_LENGTH + 8, HALF_LENGTH - 6), clamp(team.l(p.pos) * 0.85, -HALF_WIDTH + 4, HALF_WIDTH - 4));
+            if (nearestOpponentDist(opponents, run) > 3) {
+              p.forcedRunUntil = m.time + 3;
+              p.forcedRunTarget.copy(run);
+              wallFrom.set(p, q);
+            }
+          }
+          return ok;
+        },
+      });
     }
     // Pase elevado si el carril raso está tapado y el receptor está libre
     if (safety < 0.1 && d > 18 && open > 0.5 && progress > 0 && raceMargin(q, target, opponents) > 0.6) {
@@ -527,6 +694,8 @@ function aiSkill(m: Match, p: Player, team: Team, opponents: Player[]): boolean 
   const r = m.rng.next();
   let kind: SkillKind;
   if (nearLine && r < 0.5) kind = 'dragback';
+  else if (td < 2 && Math.abs(lat) < 0.5 && ctrl > 70 && r < 0.62) kind = 'nutmeg'; // rival justo delante: caño
+  else if (ctrl > 78 && r < 0.72 && r > 0.6) kind = 'croqueta';
   else if (td < 1.6 && r < 0.4) kind = 'roulette';
   else if (ctrl > 82 && r < 0.18) kind = 'rainbow';
   else if (ctrl > 75 && r < 0.45) kind = 'elastico';

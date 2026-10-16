@@ -2,6 +2,7 @@ import { Vector3 } from 'three';
 import {
   BALL_RADIUS, GOAL_DEPTH, GOAL_DEPTH_TOP, GOAL_HALF_WIDTH, GOAL_HEIGHT, GRAVITY, HALF_LENGTH, POST_RADIUS,
 } from '../config/constants';
+import { defaultEnv, type BallEnv } from './Weather';
 
 // Parámetros físicos (ajustados mediante pruebas en tests/ball.test.ts).
 export const AIR_DRAG = 0.0135; // a = -AIR_DRAG * |v| * v   (≈ ½ρCdA/m para un balón de 0.43 kg)
@@ -51,6 +52,8 @@ export class Ball {
   rollAngle = 0;
   /** El balón está retenido en las manos (arquero o saque de banda): no simula física. */
   held = false;
+  /** Clima: rodadura, botes y viento. */
+  env: BallEnv = defaultEnv();
 
   reset(x = 0, z = 0) {
     this.pos.set(x, BALL_RADIUS, z);
@@ -104,8 +107,14 @@ export class Ball {
     // --- Aceleraciones ---
     _acc.set(0, 0, 0);
     if (!grounded) _acc.y -= GRAVITY;
-    // Arrastre aerodinámico cuadrático
-    _acc.addScaledVector(v, -AIR_DRAG * speed);
+    // Arrastre aerodinámico cuadrático (en el aire, respecto al viento)
+    const wind = this.env.wind;
+    if (!grounded && (wind.x !== 0 || wind.z !== 0)) {
+      _tmp.set(v.x - wind.x, v.y, v.z - wind.z);
+      _acc.addScaledVector(_tmp, -AIR_DRAG * _tmp.length());
+    } else {
+      _acc.addScaledVector(v, -AIR_DRAG * speed);
+    }
     // Efecto Magnus (solo en el aire tiene efecto apreciable)
     if (!grounded && speed > 1) {
       _tmp.crossVectors(this.spin, v).multiplyScalar(MAGNUS);
@@ -118,7 +127,7 @@ export class Ball {
       v.y = 0;
       const gs = Math.hypot(v.x, v.z);
       if (gs > 0) {
-        const ns = Math.max(0, gs - ROLL_DECEL * dt);
+        const ns = Math.max(0, gs - ROLL_DECEL * this.env.roll * dt);
         const k = ns / gs;
         v.x *= k;
         v.z *= k;
@@ -136,10 +145,10 @@ export class Ball {
       this.pos.y = BALL_RADIUS;
       if (v.y < -0.6) {
         ev.bounce = Math.max(ev.bounce, Math.min(1, -v.y / 12));
-        v.y = -v.y * RESTITUTION;
+        v.y = -v.y * RESTITUTION * this.env.bounce;
         // Rozamiento en el bote + transferencia de efecto (topspin acelera, backspin frena)
-        v.x *= GROUND_TANGENT_LOSS;
-        v.z *= GROUND_TANGENT_LOSS;
+        v.x *= this.env.skid;
+        v.z *= this.env.skid;
         v.x += this.spin.z * BALL_RADIUS * 0.12;
         v.z -= this.spin.x * BALL_RADIUS * 0.12;
         this.spin.multiplyScalar(0.6);

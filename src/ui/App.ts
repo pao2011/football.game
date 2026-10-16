@@ -4,10 +4,14 @@ import { DIFFICULTY_LABELS } from '../ai/Difficulty';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
 import { STADIUMS, getStadium } from '../data/stadiums';
-import { TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
+import { BUILTIN_TEAM_COUNT, TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
+import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
+import { disciplineOf, isAvailable } from '../modes/Availability';
+import { ACHIEVEMENTS, unlock, unlockedSet, type AchievementDef } from '../modes/Achievements';
+import { deleteCustomTeam, exportTeam, importTeam, isCustom, loadCustomTeams, newCustomTeam, registerCustomTeams, saveCustomTeam, setTeamLevel, shortOf, teamLevel } from '../data/customTeams';
 import type { Difficulty, FormationId, PlayerData, TeamData } from '../data/types';
 import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
-import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, type Action } from '../input/Input';
+import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, versusDevicesLabel, type Action } from '../input/Input';
 import { MAX_SUBS, type MatchConfig } from '../sim/Match';
 import { manOfTheMatch, playerRatings } from '../sim/Ratings';
 import { Career } from '../modes/Career';
@@ -49,14 +53,23 @@ const TIPS = [
   'En móvil, un toque rápido en PASE o TIRO golpea con potencia automática y elige al mejor compañero o la mejor esquina del arco.',
 ];
 
+const MENTALITY_NAMES = ['Ultradefensiva', 'Defensiva', 'Equilibrada', 'Ofensiva', 'Ultraofensiva'];
+const SIDES: QuickSetup['side'][] = [0, 1, 2, 3, -1];
+const WEATHER_CYCLE: (Weather | 'random')[] = ['clear', 'rain', 'snow', 'wind', 'random'];
+
 interface QuickSetup {
   home: number;
   away: number;
   stadium: number;
   half: number;
   difficulty: number;
-  side: 0 | 1 | -1;
+  /** 0 local, 1 visitante, -1 espectador, 2 = dos jugadores (local contra visitante), 3 = dos jugadores en el local contra la IA. */
+  side: 0 | 1 | -1 | 2 | 3;
   formation: FormationId | null;
+  /** Equipación del visitante: automática (la que más contrasta), titular o suplente. */
+  awayKit?: 'auto' | 'home' | 'away';
+  /** Clima del partido rápido. */
+  weather?: Weather | 'random';
 }
 
 type MatchContext =
@@ -99,6 +112,7 @@ export class App {
     this.renderer = this.createRenderer();
     this.bg = el('div', 'menu-bg', '<div class="pitch-lines"></div>');
     document.body.insertBefore(this.bg, ui);
+    registerCustomTeams(); // equipos creados en el editor
     this.applyAudio();
     this.quick = { home: 0, away: 1, stadium: 0, half: HALF_OPTIONS.indexOf(this.settings.halfMinutes), difficulty: DIFFS.indexOf(this.settings.difficulty), side: 0, formation: null };
     if (this.quick.half < 0) this.quick.half = 2;
@@ -108,6 +122,24 @@ export class App {
     const unlock = () => this.audio.unlock();
     window.addEventListener('pointerdown', unlock, { once: false });
     window.addEventListener('keydown', unlock, { once: false });
+    // M: silenciar / activar el sonido en cualquier momento (salvo si la tecla está asignada a otra acción)
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'KeyM' || e.repeat || (window as any).__captureKey) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (Object.values(this.settings.bindings).some((ks) => ks.includes('KeyM'))) return;
+      this.toggleMute();
+    });
+  }
+
+  /** Silencia o reactiva todo el sonido y lo indica brevemente en pantalla. */
+  toggleMute() {
+    this.settings.muted = !this.settings.muted;
+    saveSettings(this.settings);
+    this.applyAudio();
+    const t = el('div', 'mute-toast', this.settings.muted ? '🔇 Sonido desactivado <small>(M)</small>' : '🔊 Sonido activado <small>(M)</small>');
+    this.ui.appendChild(t);
+    setTimeout(() => t.remove(), 1400);
   }
 
   private createRenderer() {
@@ -121,7 +153,7 @@ export class App {
 
   private applyAudio() {
     const s = this.settings;
-    this.audio.setVolumes({ master: s.masterVolume, music: s.musicVolume, sfx: s.sfxVolume, crowd: s.crowdVolume });
+    this.audio.setVolumes({ master: s.muted ? 0 : s.masterVolume, music: s.musicVolume, sfx: s.sfxVolume, crowd: s.crowdVolume, ball: s.ballVolume, referee: s.refereeVolume });
   }
 
   private onResize() {
@@ -239,6 +271,8 @@ export class App {
           <button class="menu-item" data-act="career">Carrera<small>Temporadas de liga con tu club</small></button>
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
+          <button class="menu-item" data-act="editor">✏️ Editor de equipos<small>Crea tu equipo · exportar e importar</small></button>
+          <button class="menu-item" data-act="achievements">🏆 Logros<small>${Object.keys(unlockedSet()).length}/${ACHIEVEMENTS.length} desbloqueados</small></button>
           <button class="menu-item" data-act="controls">Controles<small>Teclado y mando · reasignar teclas</small></button>
           ${!isElectron && !isNativeApp() ? '<button class="menu-item apk-item" data-act="apk">📲 Descargar APK<small>Instala el juego en tu Android</small></button>' : ''}
           ${isElectron ? '<button class="menu-item" data-act="quit">Salir</button>' : ''}
@@ -256,6 +290,8 @@ export class App {
       training: () => this.trainingScreen(),
       settings: () => this.settingsScreen(() => this.mainMenu()),
       controls: () => this.controlsScreen(() => this.mainMenu()),
+      achievements: () => this.achievementsScreen(),
+      editor: () => this.teamEditorList(),
       quit: () => window.close(),
       apk: () => { window.open(APK_URL, '_blank', 'noopener'); },
     }, () => this.start());
@@ -282,8 +318,8 @@ export class App {
     const render = () => {
       const home = TEAMS[q.home];
       const away = TEAMS[q.away];
-      const awayKit = chooseAwayKit(home, away);
-      const sideLabel = q.side === 0 ? `Local (${home.short})` : q.side === 1 ? `Visitante (${away.short})` : 'Espectador (IA vs IA)';
+      const awayKit = this.quickAwayKit(home, away);
+      const sideLabel = q.side === 0 ? `Local (${home.short})` : q.side === 1 ? `Visitante (${away.short})` : q.side === 2 ? `2 jugadores: J1 ${home.short} · J2 ${away.short}` : q.side === 3 ? `2 jugadores juntos (${home.short}) contra la IA` : 'Espectador (IA vs IA)';
       return `
       <div class="screen-header"><div><div class="crumb">PARTIDO RÁPIDO</div><h2>Configuración del encuentro</h2></div></div>
       <div class="screen-body">
@@ -297,7 +333,10 @@ export class App {
           ${this.stepper('Duración de cada parte', `${HALF_OPTIONS[q.half]} min`, 'half')}
           ${this.stepper('Dificultad', DIFFICULTY_LABELS[DIFFS[q.difficulty]], 'diff')}
           ${this.stepper('Controlas a', sideLabel, 'side')}
+          ${q.side === 2 || q.side === 3 ? `<div class="muted" style="margin:-4px 0 8px;font-size:13px">🎮 ${esc(versusDevicesLabel())}</div>` : ''}
           ${this.stepper('Tu formación', q.formation ?? 'Por defecto del equipo', 'form')}
+          ${this.stepper('Clima', q.weather === 'random' ? 'Aleatorio' : WEATHER_NAMES[q.weather ?? 'clear'], 'wthr')}
+          ${this.stepper('Equipación del visitante', ({ auto: 'Automática (la que más contrasta)', home: 'Titular', away: 'Suplente' } as const)[q.awayKit ?? 'auto'], 'akit')}
         </div>
       </div>
       <div class="screen-footer">
@@ -317,9 +356,13 @@ export class App {
       halfNext: () => cycle('half', HALF_OPTIONS.length, 1),
       diffPrev: () => cycle('difficulty', DIFFS.length, -1),
       diffNext: () => cycle('difficulty', DIFFS.length, 1),
-      sidePrev: () => { q.side = (q.side === 0 ? -1 : q.side === 1 ? 0 : 1); s.refresh(render()); },
-      sideNext: () => { q.side = (q.side === 0 ? 1 : q.side === 1 ? -1 : 0); s.refresh(render()); },
+      sidePrev: () => { q.side = SIDES[(SIDES.indexOf(q.side) + SIDES.length - 1) % SIDES.length]; s.refresh(render()); },
+      sideNext: () => { q.side = SIDES[(SIDES.indexOf(q.side) + 1) % SIDES.length]; s.refresh(render()); },
       formPrev: () => { const i = q.formation ? FORMATION_IDS.indexOf(q.formation) : 0; q.formation = i <= 0 ? null : FORMATION_IDS[i - 1]; s.refresh(render()); },
+      wthrPrev: () => { q.weather = WEATHER_CYCLE[(WEATHER_CYCLE.indexOf(q.weather ?? 'clear') + WEATHER_CYCLE.length - 1) % WEATHER_CYCLE.length]; s.refresh(render()); },
+      wthrNext: () => { q.weather = WEATHER_CYCLE[(WEATHER_CYCLE.indexOf(q.weather ?? 'clear') + 1) % WEATHER_CYCLE.length]; s.refresh(render()); },
+      akitPrev: () => { q.awayKit = ({ auto: 'away', home: 'auto', away: 'home' } as const)[q.awayKit ?? 'auto']; s.refresh(render()); },
+      akitNext: () => { q.awayKit = ({ auto: 'home', home: 'away', away: 'auto' } as const)[q.awayKit ?? 'auto']; s.refresh(render()); },
       formNext: () => { const i = q.formation ? FORMATION_IDS.indexOf(q.formation) : -1; q.formation = FORMATION_IDS[(i + 1) % FORMATION_IDS.length]; s.refresh(render()); },
       back: () => this.mainMenu(),
       play: () => {
@@ -329,15 +372,22 @@ export class App {
         this.settings.difficulty = DIFFS[q.difficulty];
         saveSettings(this.settings);
         const cfg: MatchConfig = {
-          home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: q.side,
+          home, away, homeKit: home.home, awayKit: this.quickAwayKit(home, away), humanTeam: q.side === 2 || q.side === 3 ? 0 : q.side, versus: q.side === 2, coop: q.side === 3,
+          weather: q.weather === 'random' ? randomWeather(Math.random()) : q.weather ?? 'clear',
           halfLengthSec: HALF_OPTIONS[q.half] * 60, difficulty: DIFFS[q.difficulty], extraTime: false, penalties: false,
-          homeFormation: q.side === 0 && q.formation ? q.formation : undefined,
+          homeFormation: (q.side === 0 || q.side === 2 || q.side === 3) && q.formation ? q.formation : undefined,
           awayFormation: q.side === 1 && q.formation ? q.formation : undefined,
         };
         this.playMatch(cfg, STADIUMS[q.stadium].id, { mode: 'quick' });
       },
     };
     const s = this.show(render(), handlers, () => this.mainMenu());
+  }
+
+  /** Equipación del visitante en el partido rápido según lo elegido. */
+  private quickAwayKit(home: TeamData, away: TeamData) {
+    const k = this.quick.awayKit ?? 'auto';
+    return k === 'home' ? away.home : k === 'away' ? away.away : chooseAwayKit(home, away);
   }
 
   private stepper(label: string, value: string, key: string) {
@@ -421,8 +471,10 @@ export class App {
         ${r.online ? `<div class="muted online-pause-note" style="margin:-6px 0 10px">${r.pauseSecondsLeft >= 0 ? `Partido pausado para los dos · se reanuda solo en <b class="ps-left">${r.pauseSecondsLeft}</b> s · te quedan ${r.pausesLeft} pausas` : 'Ya no te quedan pausas: el partido sigue en juego'}</div>` : ''}
         <button class="menu-item" data-act="resume">Reanudar</button>
         ${r.online ? '<button class="menu-item" data-act="chat">Mensajes rápidos<small>Para tu rival</small></button>' : '<button class="menu-item" data-act="restart">Reiniciar partido</button>'}
+        ${r.localTeam >= 0 && !m.config.training && !r.online ? `<button class="menu-item" data-act="tactics">Tácticas<small>${esc(m.teams[r.localTeam as 0 | 1].formation)} · ${MENTALITY_NAMES[m.teams[r.localTeam as 0 | 1].mentality + 2]}</small></button>` : ''}
         ${r.localTeam >= 0 && !m.config.training ? `<button class="menu-item" data-act="subs">Cambios<small>${m.teams[r.localTeam as 0 | 1].subsUsed}/${MAX_SUBS} realizados</small></button>` : ''}
         <button class="menu-item" data-act="stats">Estadísticas</button>
+        <button class="menu-item" data-act="mute">${this.settings.muted ? '🔊 Activar sonido' : '🔇 Silenciar'}<small>Tecla M</small></button>
         <button class="menu-item" data-act="settings">Configuración</button>
         <button class="menu-item" data-act="controls">Controles</button>
         <button class="menu-item" data-act="quit">Abandonar partido${r.online && this.lastMatch?.ctx.mode === 'online' && this.lastMatch.ctx.start.mode === 'rivals' ? '<small>Cuenta como derrota en Division Rivals</small>' : ''}</button>
@@ -431,7 +483,9 @@ export class App {
     this.overlay = new Screen(this.ui, html, {
       resume,
       restart: () => { close(); this.restartMatch(); },
+      mute: () => { this.toggleMute(); close(); this.pauseMenu(); },
       subs: () => { close(); this.subsMenu(); },
+      tactics: () => { close(); this.tacticsMenu(); },
       chat: () => {
         close();
         const items = QUICK_CHAT.map((t, i) => `<button class="menu-item" data-act="say" data-i="${i}">${esc(t)}</button>`).join('');
@@ -463,6 +517,170 @@ export class App {
   }
 
   /** Cambios: elige quién sale (en el campo) y quién entra (suplentes). */
+  // ==================================================================
+  // Editor de equipos
+  // ==================================================================
+
+  /** Lista de equipos propios: crear, editar, exportar, importar y borrar. */
+  teamEditorList(msg = '') {
+    const list = loadCustomTeams();
+    const rows = list.length
+      ? list.map((t) => `<div class="row editor-row"><span class="crest-mini">${crestSVG(t, 40)}</span><span><b>${esc(t.name)}</b> <span class="muted">${esc(t.short)} · ${t.formation} · nivel ${teamLevel(t)}</span></span>
+          <span><button class="btn" data-act="edit" data-id="${t.id}">Editar</button><button class="btn" data-act="export" data-id="${t.id}">Exportar</button><button class="btn danger" data-act="del" data-id="${t.id}">Borrar</button></span></div>`).join('')
+      : '<p class="muted">Todavía no has creado ningún equipo. Crea uno o importa un archivo .json exportado desde el juego.</p>';
+    const s = this.show(`
+      <div class="screen-header"><div><div class="crumb">EDITOR</div><h2>Mis equipos</h2></div></div>
+      <div class="screen-body"><div class="panel">${msg ? `<div class="editor-msg">${esc(msg)}</div>` : ''}${rows}
+        <p class="muted" style="margin-top:12px;font-size:13px">Tus equipos aparecen en el partido rápido, el torneo y la carrera (no en el online, porque tu rival no los tiene).</p></div></div>
+      <div class="screen-footer">
+        <button class="btn" data-act="back">Volver</button>
+        <button class="btn" data-act="import">Importar…</button>
+        <button class="btn primary" data-act="create">Crear equipo</button>
+      </div>`, {
+      back: () => this.mainMenu(),
+      create: () => this.teamEditor(newCustomTeam(), true),
+      edit: (el) => { const t = list.find((x) => x.id === el.dataset.id); if (t) this.teamEditor(structuredClone(t), false); },
+      del: (el) => {
+        const t = list.find((x) => x.id === el.dataset.id);
+        if (t && window.confirm(`¿Borrar ${t.name}?`)) { deleteCustomTeam(t.id); this.teamEditorList(`${t.name} borrado`); }
+      },
+      export: (el) => {
+        const t = list.find((x) => x.id === el.dataset.id);
+        if (!t) return;
+        const blob = new Blob([exportTeam(t)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${t.name.replace(/[^\w\- ]+/g, '').trim() || 'equipo'}.json`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      },
+      import: () => {
+        const inp = document.createElement('input');
+        inp.type = 'file';
+        inp.accept = '.json,application/json';
+        inp.onchange = () => {
+          const f = inp.files?.[0];
+          if (!f) return;
+          f.text().then((txt) => {
+            try { const t = importTeam(txt); this.teamEditorList(`Importado: ${t.name}`); } catch (e) { this.teamEditorList(String((e as Error).message)); }
+          });
+        };
+        inp.click();
+      },
+    }, () => this.mainMenu());
+    void s;
+  }
+
+  /** Edición de un equipo propio: nombre, escudo, equipaciones, formación, nivel y nombres de los jugadores. */
+  private teamEditor(t: import('../data/types').TeamData, isNew: boolean) {
+    const SHAPES = ['shield', 'circle', 'diamond'] as const;
+    const SYMBOLS = ['star', 'ball', 'lion', 'wave', 'bolt', 'crown', 'tower', 'eagle'] as const;
+    const SYMBOL_NAMES: Record<string, string> = { star: 'Estrella', ball: 'Balón', lion: 'León', wave: 'Ola', bolt: 'Rayo', crown: 'Corona', tower: 'Torre', eagle: 'Águila' };
+    const PATTERNS = ['solid', 'gradient', 'stripes', 'hoops', 'sash'] as const;
+    const PATTERN_NAMES: Record<string, string> = { solid: 'Lisa', gradient: 'Degradado', stripes: 'Rayas', hoops: 'Aros', sash: 'Banda' };
+    const POS = { GK: 'POR', DEF: 'DEF', MID: 'MED', FWD: 'DEL' } as const;
+    const cyc = <T,>(arr: readonly T[], cur: T, d: number) => arr[(arr.indexOf(cur) + d + arr.length) % arr.length];
+    const color = (label: string, field: string, value: string) => `<label class="color-field"><input type="color" data-field="${field}" value="${value}"> ${label}</label>`;
+    const kitPanel = (title: string, k: 'home' | 'away') => `<div class="kit-edit"><div class="crumb">${title}</div><div class="kits">${kitSVG(t[k], 64)}</div>
+      ${color('Camiseta', `${k}.shirt`, t[k].shirt)}${color('Detalle', `${k}.shirt2`, t[k].shirt2)}${color('Pantalón', `${k}.shorts`, t[k].shorts)}${color('Medias', `${k}.socks`, t[k].socks)}${color('Dorsal', `${k}.number`, t[k].number)}
+      ${this.stepper('Diseño', PATTERN_NAMES[t[k].pattern], `${k}Pat`)}</div>`;
+    const html = () => `
+      <div class="screen-header"><div><div class="crumb">EDITOR</div><h2>${isNew ? 'Nuevo equipo' : esc(t.name)}</h2></div></div>
+      <div class="screen-body"><div class="grid3">
+        <div class="panel"><h3>Club</h3>
+          <div class="crest-preview">${crestSVG(t, 110)}</div>
+          <label class="text-field">Nombre <input type="text" maxlength="24" data-field="name" value="${esc(t.name)}"></label>
+          <label class="text-field">Abreviatura <input type="text" maxlength="3" data-field="short" value="${esc(t.short)}"></label>
+          <label class="text-field">Ciudad <input type="text" maxlength="24" data-field="city" value="${esc(t.city)}"></label>
+          ${this.stepper('Escudo', ({ shield: 'Escudo', circle: 'Círculo', diamond: 'Rombo' } as const)[t.crest.shape], 'shape')}
+          ${this.stepper('Símbolo', SYMBOL_NAMES[t.crest.symbol], 'sym')}
+          ${color('Color principal', 'crest.primary', t.crest.primary)}${color('Color secundario', 'crest.secondary', t.crest.secondary)}
+        </div>
+        <div class="panel"><h3>Equipaciones</h3>${kitPanel('TITULAR', 'home')}${kitPanel('SUPLENTE', 'away')}</div>
+        <div class="panel"><h3>Plantilla</h3>
+          ${this.stepper('Formación', t.formation, 'form')}
+          ${this.stepper('Nivel del equipo', String(teamLevel(t)), 'lvl')}
+          <div class="squad-edit">${t.players.map((p, i) => `<div class="row"><span class="pos ${p.position}">${POS[p.position]}</span><input type="text" maxlength="22" data-field="player.${i}" value="${esc(p.name)}"><span class="ovr">${playerOverall(p)}</span>${i === 10 ? '' : ''}</div>${i === 10 ? '<div class="crumb" style="margin:6px 0">SUPLENTES</div>' : ''}`).join('')}</div>
+        </div>
+      </div></div>
+      <div class="screen-footer"><button class="btn" data-act="cancel">Cancelar</button><button class="btn primary" data-act="save">Guardar</button></div>`;
+    // pasa lo escrito en los campos al modelo
+    const sync = () => {
+      const autoShort = t.short === shortOf(t.name);
+      const oldShort = t.short;
+      for (const el of Array.from(sc.root.querySelectorAll<HTMLInputElement>('[data-field]'))) {
+        const f = el.dataset.field!;
+        const v = el.value;
+        if (f === 'name') t.name = v.trim() || t.name;
+        else if (f === 'short') t.short = (v.trim() || shortOf(t.name)).toUpperCase().slice(0, 3);
+        else if (f === 'city') t.city = v.trim();
+        else if (f.startsWith('player.')) { const p = t.players[+f.slice(7)]; if (p && v.trim()) p.name = v.trim(); }
+        else if (f.startsWith('crest.')) (t.crest as any)[f.slice(6)] = v;
+        else if (f.startsWith('home.') || f.startsWith('away.')) (t[f.slice(0, 4) as 'home' | 'away'] as any)[f.slice(5)] = v;
+      }
+      // la abreviatura sigue al nombre mientras no se cambie a mano
+      const shortField = sc.root.querySelector<HTMLInputElement>('[data-field="short"]');
+      if (autoShort && shortField && shortField.value.trim().toUpperCase() === oldShort) t.short = shortOf(t.name);
+    };
+    const refresh = () => { sync(); sc.refresh(html()); };
+    const sc = this.show(html(), {
+      shapePrev: () => { sync(); t.crest.shape = cyc(SHAPES, t.crest.shape, -1); sc.refresh(html()); },
+      shapeNext: () => { sync(); t.crest.shape = cyc(SHAPES, t.crest.shape, 1); sc.refresh(html()); },
+      symPrev: () => { sync(); t.crest.symbol = cyc(SYMBOLS, t.crest.symbol, -1); sc.refresh(html()); },
+      symNext: () => { sync(); t.crest.symbol = cyc(SYMBOLS, t.crest.symbol, 1); sc.refresh(html()); },
+      homePatPrev: () => { sync(); t.home.pattern = cyc(PATTERNS, t.home.pattern, -1); sc.refresh(html()); },
+      homePatNext: () => { sync(); t.home.pattern = cyc(PATTERNS, t.home.pattern, 1); sc.refresh(html()); },
+      awayPatPrev: () => { sync(); t.away.pattern = cyc(PATTERNS, t.away.pattern, -1); sc.refresh(html()); },
+      awayPatNext: () => { sync(); t.away.pattern = cyc(PATTERNS, t.away.pattern, 1); sc.refresh(html()); },
+      formPrev: () => { sync(); t.formation = cyc(FORMATION_IDS, t.formation, -1); sc.refresh(html()); },
+      formNext: () => { sync(); t.formation = cyc(FORMATION_IDS, t.formation, 1); sc.refresh(html()); },
+      lvlPrev: () => { sync(); setTeamLevel(t, Math.max(50, teamLevel(t) - 2)); sc.refresh(html()); },
+      lvlNext: () => { sync(); setTeamLevel(t, Math.min(95, teamLevel(t) + 2)); sc.refresh(html()); },
+      cancel: () => this.teamEditorList(),
+      save: () => { sync(); saveCustomTeam(t); this.teamEditorList(`${t.name} guardado`); },
+    }, () => this.teamEditorList());
+    // los colores actualizan la vista previa al soltarlos
+    sc.root.addEventListener('change', (e) => { if ((e.target as HTMLInputElement).type === 'color') refresh(); });
+  }
+
+  /** Pantalla de logros: desbloqueados y pendientes. */
+  achievementsScreen() {
+    const u = unlockedSet();
+    const done = ACHIEVEMENTS.filter((a) => u[a.id]).length;
+    const rows = ACHIEVEMENTS.map((a) => `<div class="ach ${u[a.id] ? 'on' : ''}"><span class="ic">${u[a.id] ? a.icon : '🔒'}</span><div><b>${esc(a.name)}</b><small>${esc(a.desc)}${u[a.id] ? ` · ${new Date(u[a.id]).toLocaleDateString()}` : ''}</small></div></div>`).join('');
+    this.show(`
+      <div class="screen-header"><div><div class="crumb">DESAFÍOS</div><h2>Logros · ${done}/${ACHIEVEMENTS.length}</h2></div></div>
+      <div class="screen-body"><div class="ach-grid">${rows}</div></div>
+      <div class="screen-footer"><button class="btn primary" data-act="back">Volver</button></div>`, { back: () => this.mainMenu() }, () => this.mainMenu());
+  }
+
+  /** Tácticas en pleno partido: formación y mentalidad del equipo del usuario. */
+  private tacticsMenu() {
+    const r = this.runner;
+    if (!r || r.localTeam < 0) return;
+    const t = r.match.teams[r.localTeam as 0 | 1];
+    const close = () => { this.overlay?.dispose(); this.overlay = null; };
+    const back = () => { close(); this.pauseMenu(); };
+    const html = () => `<div class="overlay"><div class="panel modal">
+      <h2>Tácticas</h2>
+      <div class="muted" style="margin-bottom:10px">Los cambios se aplican al instante.</div>
+      ${this.stepper('Formación', t.formation, 'tf')}
+      ${this.stepper('Mentalidad', MENTALITY_NAMES[t.mentality + 2], 'tm')}
+      <div class="muted" style="margin:8px 0 12px;font-size:13px">Más ofensiva: la línea sube y más jugadores llegan al área. Más defensiva: el bloque se repliega. (En el mando también con la cruceta ← →.)</div>
+      <div class="screen-footer"><button class="btn primary" data-act="back">Volver</button></div>
+    </div></div>`;
+    const refresh = () => this.overlay?.refresh(html());
+    const cycleF = (d: number) => { t.setFormation(FORMATION_IDS[(FORMATION_IDS.indexOf(t.formation) + d + FORMATION_IDS.length) % FORMATION_IDS.length]); refresh(); };
+    this.overlay?.dispose();
+    this.overlay = new Screen(this.ui, html(), {
+      tfPrev: () => cycleF(-1), tfNext: () => cycleF(1),
+      tmPrev: () => { t.mentality = Math.max(-2, t.mentality - 1); refresh(); },
+      tmNext: () => { t.mentality = Math.min(2, t.mentality + 1); refresh(); },
+      back,
+    }, this.audio);
+    this.overlay.onBack = back;
+  }
+
   private subsMenu() {
     const r = this.runner;
     if (!r || r.localTeam < 0) return;
@@ -609,16 +827,29 @@ export class App {
     const m = r.match;
     const [h, a] = m.teams;
     // Registrar en el modo correspondiente
+    // logros: los del resultado y los de los modos (copa, liga, Division Rivals)
+    const newAch: AchievementDef[] = [...(this.runner?.achievements?.unlockedNow ?? [])];
+    this.runner?.achievements?.finish(r.winner, !!r.penalties);
+    if (this.runner?.achievements) for (const a of this.runner.achievements.unlockedNow) if (!newAch.includes(a)) newAch.push(a);
+    const addAch = (id: string) => { const a = unlock(id); if (a) newAch.push(a); };
+    // bajas (lesiones, rojas y amarillas acumuladas) para el próximo partido del usuario
+    let availabilityMsgs: string[] = [];
     if (ctx.mode === 'tournament' && this.tournament) {
-      this.tournament.recordUserResult(ctx.fixture, r.home, r.away, r.penalties ?? undefined);
+      const userIdx = ctx.fixture.home === this.tournament.state.userTeam ? 0 : 1;
+      const d = disciplineOf([...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff]);
+      availabilityMsgs = this.tournament.recordUserResult(ctx.fixture, r.home, r.away, r.penalties ?? undefined, d);
+      if (this.tournament.state.champion === this.tournament.state.userTeam) addAch('cup');
     } else if (ctx.mode === 'career' && this.career) {
       const userIdx = ctx.fixture.home === this.career.state.userTeam ? 0 : 1;
       const scorers = [...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff].filter((p) => p.goals > 0).flatMap((p) => Array(p.goals).fill(p.id));
-      this.career.recordUserResult(ctx.fixture, r.home, r.away, scorers);
+      const d = disciplineOf([...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff]);
+      availabilityMsgs = this.career.recordUserResult(ctx.fixture, r.home, r.away, scorers, d);
+      if (this.career.state.seasonOver && this.career.standings()[0]?.team === this.career.state.userTeam) addAch('league');
     }
     if (ctx.mode === 'online') {
       window.clearInterval(this.onlineWatch);
       this.net?.send({ t: 'result', home: r.home, away: r.away, pens: r.penalties ? r.winner : -1 });
+      if (ctx.start.mode === 'rivals' && r.winner === m.config.humanTeam) addAch('rivals');
     }
     this.runner?.dispose();
     this.runner = null;
@@ -634,6 +865,8 @@ export class App {
           ${pens}
           <div class="scorers"><div style="text-align:right">${scorers(h)}</div><div>${scorers(a)}</div></div>
           ${ctx.mode === 'training' ? '' : this.ratingsHTML(m)}
+          ${newAch.length ? `<div class="ach-msgs"><div class="crumb">LOGROS DESBLOQUEADOS</div>${newAch.map((a) => `<div>${a.icon} <b>${esc(a.name)}</b> <span class="muted">${esc(a.desc)}</span></div>`).join('')}</div>` : ''}
+          ${availabilityMsgs.length ? `<div class="avail-msgs"><div class="crumb">PARTE MÉDICO Y SANCIONES</div>${availabilityMsgs.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}
         </div>
         <div class="panel">${ctx.mode === 'online' && ctx.start.mode === 'rivals' ? '<div class="rivals-change"><div class="net-status"><span class="spinner"></span>Calculando puntos de Division Rivals…</div></div>' : ''}${this.statsHTML(m)}</div>
       </div></div>
@@ -770,8 +1003,8 @@ export class App {
       create: () => this.onlineRoom(),
       join: () => this.onlineJoin(),
       board: () => this.onlineBoard(),
-      teamPrev: () => { this.onlineTeam = (this.onlineTeam + TEAMS.length - 1) % TEAMS.length; sc.refresh(html()); },
-      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % TEAMS.length; sc.refresh(html()); },
+      teamPrev: () => { this.onlineTeam = (this.onlineTeam + BUILTIN_TEAM_COUNT - 1) % BUILTIN_TEAM_COUNT; sc.refresh(html()); },
+      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % BUILTIN_TEAM_COUNT; sc.refresh(html()); },
       back: () => this.mainMenu(),
       disconnect: () => { this.netOff?.(); this.netOff = null; net.close(); this.net = null; this.mainMenu(); },
     }, () => this.mainMenu());
@@ -798,8 +1031,8 @@ export class App {
     const cancel = () => { window.clearInterval(timer); net.send({ t: 'cancel' }); this.onlineHub(); };
     const sc = this.show(html(), {
       cancel,
-      teamPrev: () => { this.onlineTeam = (this.onlineTeam + TEAMS.length - 1) % TEAMS.length; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
-      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % TEAMS.length; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
+      teamPrev: () => { this.onlineTeam = (this.onlineTeam + BUILTIN_TEAM_COUNT - 1) % BUILTIN_TEAM_COUNT; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
+      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % BUILTIN_TEAM_COUNT; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
     }, cancel);
     const timer = window.setInterval(() => {
       if (this.screen !== sc) { window.clearInterval(timer); return; }
@@ -835,8 +1068,8 @@ export class App {
         net.send({ t: 'join', code, team: TEAMS[this.onlineTeam].id });
       },
       back: () => this.onlineHub(),
-      teamPrev: () => { this.onlineTeam = (this.onlineTeam + TEAMS.length - 1) % TEAMS.length; this.onlineJoin(error); },
-      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % TEAMS.length; this.onlineJoin(error); },
+      teamPrev: () => { this.onlineTeam = (this.onlineTeam + BUILTIN_TEAM_COUNT - 1) % BUILTIN_TEAM_COUNT; this.onlineJoin(error); },
+      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % BUILTIN_TEAM_COUNT; this.onlineJoin(error); },
     }, () => this.onlineHub());
     setTimeout(() => (sc.root.querySelector('#on-code') as HTMLInputElement | null)?.focus(), 50);
   }
@@ -931,6 +1164,8 @@ export class App {
       humanTeam: st.role === 'host' ? 0 : 1,
       halfLengthSec: Math.max(2, Math.min(10, st.half)) * 60,
       difficulty: 'pro', extraTime: false, penalties: false, seed: st.seed,
+      // el mismo clima para los dos (sale de la semilla del partido)
+      weather: randomWeather(((st.seed * 7919) % 1000) / 1000),
     };
     const ctx: MatchContext = { mode: 'online', start: st };
     const opp = st.role === 'host' ? st.away : st.home;
@@ -1030,7 +1265,9 @@ export class App {
         this.playMatch({
           home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: side,
           halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty,
-          extraTime: next.knockout, penalties: next.knockout,
+          extraTime: next.knockout, penalties: next.knockout, weather: randomWeather(Math.random()),
+          homeLineup: side === 0 ? st.availability && this.tournament?.matchLineup() : undefined,
+          awayLineup: side === 1 ? st.availability && this.tournament?.matchLineup() : undefined,
         }, this.stadiumForCtx({ mode: 'tournament', fixture: next }), { mode: 'tournament', fixture: next });
       },
     }, () => this.mainMenu());
@@ -1095,7 +1332,8 @@ export class App {
           home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: side,
           halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty, extraTime: false, penalties: false,
           homeFormation: side === 0 ? st.formation : undefined, awayFormation: side === 1 ? st.formation : undefined,
-          homeLineup: side === 0 ? st.lineup : undefined, awayLineup: side === 1 ? st.lineup : undefined,
+          homeLineup: side === 0 ? this.career?.matchLineup() ?? st.lineup : undefined, awayLineup: side === 1 ? this.career?.matchLineup() ?? st.lineup : undefined,
+          weather: randomWeather(Math.random()),
         }, this.stadiumForCtx({ mode: 'career', fixture: next }), { mode: 'career', fixture: next });
       },
     }, () => this.mainMenu());
@@ -1119,7 +1357,10 @@ export class App {
       }).join('');
       const list = team.players.map((p) => {
         const starter = lineup.indexOf(p.id);
-        return `<div class="row ${starter >= 0 ? 'starter' : ''}" data-act="pick" data-id="${p.id}"><span><span class="pos ${p.position}">${p.position === 'GK' ? 'POR' : p.position === 'DEF' ? 'DEF' : p.position === 'MID' ? 'MED' : 'DEL'}</span> ${p.number}. ${esc(p.name)} <span class="muted">${c.state.ages[p.id] ?? ''} años</span></span><span class="ovr">${playerOverall(p)}</span></div>`;
+        const av = c.state.availability;
+        const outInfo = av?.out[p.id];
+        const badge = outInfo ? `<span class="out-badge" title="${outInfo.reason === 'injury' ? 'Lesionado' : 'Sancionado'}">${outInfo.reason === 'injury' ? '🚑' : '🟥'} ${outInfo.games}</span>` : (av?.yellows[p.id] ? `<span class="muted" title="Amarillas acumuladas">🟨${av.yellows[p.id]}</span>` : '');
+        return `<div class="row ${starter >= 0 ? 'starter' : ''} ${isAvailable(av, p.id) ? '' : 'unavailable'}" data-act="pick" data-id="${p.id}"><span><span class="pos ${p.position}">${p.position === 'GK' ? 'POR' : p.position === 'DEF' ? 'DEF' : p.position === 'MID' ? 'MED' : 'DEL'}</span> ${p.number}. ${esc(p.name)} <span class="muted">${c.state.ages[p.id] ?? ''} años</span> ${badge}</span><span class="ovr">${playerOverall(p)}</span></div>`;
       }).join('');
       return `
       <div class="screen-header"><div><div class="crumb">PLANTILLA · ${esc(team.name)}</div><h2>Alineación</h2></div></div>
@@ -1223,7 +1464,11 @@ export class App {
           ${this.stepper('Música', pct(st.musicVolume), 'vmusic')}
           ${this.stepper('Efectos', pct(st.sfxVolume), 'vsfx')}
           ${this.stepper('Público', pct(st.crowdVolume), 'vcrowd')}
+          ${this.stepper('Balón', pct(st.ballVolume), 'vball')}
+          ${this.stepper('Árbitro (silbato)', pct(st.refereeVolume), 'vref')}
           ${toggle('Vibración (mando y móvil)', 'vibration')}
+          ${toggle('Comentarista (rótulos)', 'commentary')}
+          ${toggle('Voz del comentarista', 'commentaryVoice')}
         </div>
         <div class="panel"><h3>Jugabilidad</h3>
           ${this.stepper('Dificultad por defecto', DIFFICULTY_LABELS[st.difficulty], 'diff')}
@@ -1264,6 +1509,8 @@ export class App {
       vmusicPrev: () => step('musicVolume', -1, 0, 1, 0.1), vmusicNext: () => step('musicVolume', 1, 0, 1, 0.1),
       vsfxPrev: () => step('sfxVolume', -1, 0, 1, 0.1), vsfxNext: () => step('sfxVolume', 1, 0, 1, 0.1),
       vcrowdPrev: () => step('crowdVolume', -1, 0, 1, 0.1), vcrowdNext: () => step('crowdVolume', 1, 0, 1, 0.1),
+      vballPrev: () => step('ballVolume', -1, 0, 1, 0.1), vballNext: () => step('ballVolume', 1, 0, 1, 0.1),
+      vrefPrev: () => step('refereeVolume', -1, 0, 1, 0.1), vrefNext: () => step('refereeVolume', 1, 0, 1, 0.1),
       diffPrev: () => { st.difficulty = cycleArr(DIFFS, st.difficulty, -1); apply(); },
       diffNext: () => { st.difficulty = cycleArr(DIFFS, st.difficulty, 1); apply(); },
       halfPrev: () => { st.halfMinutes = cycleArr(HALF_OPTIONS, st.halfMinutes, -1); apply(); },
@@ -1272,7 +1519,7 @@ export class App {
       assistAllNext: () => { st.assist = cycleArr(['auto', 'on', 'off'] as const, st.assist, 1); apply(); },
       assistPrev: () => { st.passAssist = st.passAssist >= 0.5 ? 0 : 1; apply(); },
       assistNext: () => { st.passAssist = st.passAssist >= 0.5 ? 0 : 1; apply(); },
-      pbarPrev: () => step('powerBarTime', -1, 0.6, 1.6, 0.1), pbarNext: () => step('powerBarTime', 1, 0.6, 1.6, 0.1),
+      pbarPrev: () => step('powerBarTime', -1, 0.3, 1.6, 0.1), pbarNext: () => step('powerBarTime', 1, 0.3, 1.6, 0.1),
       dzPrev: () => step('deadzone', -1, 0.05, 0.4, 0.05), dzNext: () => step('deadzone', 1, 0.05, 0.4, 0.05),
       sensPrev: () => step('sensitivity', -1, 0.5, 1.5, 0.1), sensNext: () => step('sensitivity', 1, 0.5, 1.5, 0.1),
       reset: () => { const b = st.bindings; Object.assign(st, structuredClone(DEFAULT_SETTINGS)); st.bindings = b; apply(); },

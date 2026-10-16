@@ -9,6 +9,7 @@ import { Stadium, type GfxQuality } from './stadium/Stadium';
 import { BallModel } from './BallModel';
 import { CameraDirector, type CameraStyle } from './CameraDirector';
 import { HALF_LENGTH } from '../config/constants';
+import { WeatherFX } from './WeatherFX';
 
 export interface ViewOptions {
   quality: GfxQuality;
@@ -54,6 +55,8 @@ export class MatchView {
   readonly ball = new BallModel();
   private models = new Map<string, PlayerModel>();
   private indicators: ({ group: THREE.Group; arrow: THREE.Mesh; head: THREE.Mesh } | null)[] = [null, null];
+  /** Cooperativo: indicador del segundo humano (verde). */
+  private indicator2: { group: THREE.Group; arrow: THREE.Mesh; head: THREE.Mesh } | null = null;
   private receiverRing: THREE.Mesh;
   private replayFrames: ReplayFrame[] = [];
   private replayStart = 0;
@@ -65,6 +68,8 @@ export class MatchView {
   private aimLine: THREE.Line;
   excitement = 0;
   private focus = new THREE.Vector3();
+  private weatherFX: WeatherFX | null = null;
+  private clock = 0;
 
   constructor(readonly renderer: THREE.WebGLRenderer, readonly match: Match, stadiumData: StadiumData, public opts: ViewOptions) {
     const size = renderer.getSize(new THREE.Vector2());
@@ -76,6 +81,21 @@ export class MatchView {
     this.stadium.attachTo(this.scene);
     this.scene.add(this.stadium.group);
     this.scene.add(this.ball.mesh, this.ball.shadow);
+    // Clima: partículas, capa de nieve, luz más apagada y balón naranja en la nieve
+    if (match.weather !== 'clear') {
+      this.weatherFX = new WeatherFX(match.weather, match.ball.env.wind, opts.quality);
+      this.scene.add(this.weatherFX.group);
+      if (match.weather === 'rain' || match.weather === 'snow') {
+        this.stadium.keyLight.intensity *= match.weather === 'rain' ? 0.6 : 0.8;
+        const fog = this.scene.fog as THREE.Fog | null;
+        if (fog && 'near' in fog) {
+          fog.near = 40;
+          fog.far = match.weather === 'rain' ? 260 : 220;
+          fog.color.lerp(new THREE.Color(match.weather === 'rain' ? '#5b6672' : '#d8dee6'), 0.7);
+        }
+      }
+      if (match.weather === 'snow') this.ball.setColor('#ff7a1a');
+    }
     const mq: ModelQuality = opts.quality;
     for (const t of match.teams) for (const p of t.players) this.createModel(p);
     this.rosterVersion = match.rosterVersion;
@@ -97,6 +117,10 @@ export class MatchView {
         this.indicators[t.index] = ind;
         this.scene.add(ind.group);
       }
+    }
+    if (match.config.coop) {
+      this.indicator2 = makeIndicator('#4dff7a');
+      this.scene.add(this.indicator2.group);
     }
     this.receiverRing = new THREE.Mesh(
       new THREE.RingGeometry(0.5, 0.62, 32).rotateX(-Math.PI / 2),
@@ -176,6 +200,8 @@ export class MatchView {
     const target = m.phase === 'goal' ? 1 : m.phase === 'play' ? danger * 0.8 : 0.15;
     this.excitement += (target - this.excitement) * Math.min(1, dt * (target > this.excitement ? 3 : 0.6));
     this.stadium.update(dt, this.excitement, this.camera, this.renderer.domElement.height);
+    this.clock += dt;
+    this.weatherFX?.update(dt, this.camera, this.clock);
 
     // La luz principal sigue la acción para sombras nítidas
     const b = m.ball.pos;
@@ -223,6 +249,16 @@ export class MatchView {
         ind.group.position.set(c.pos.x, 0, c.pos.z);
         ind.group.rotation.y = c.facing;
         ind.head.position.y = c.data.height + 0.55 + Math.sin(m.time * 5) * 0.05;
+      }
+    }
+    if (this.indicator2) {
+      const t = m.teams[m.config.humanTeam === 1 ? 1 : 0];
+      const c = t.controlled2;
+      this.indicator2.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay';
+      if (c) {
+        this.indicator2.group.position.set(c.pos.x, 0, c.pos.z);
+        this.indicator2.group.rotation.y = c.facing;
+        this.indicator2.head.position.y = c.data.height + 0.55 + Math.sin(m.time * 5 + 1) * 0.05;
       }
     }
     if (receiverPreview && this.opts.showIndicators) {
@@ -348,6 +384,7 @@ export class MatchView {
 
   dispose() {
     for (const m of this.models.values()) m.dispose();
+    this.weatherFX?.dispose();
     this.stadium.dispose();
     this.scene.traverse((o) => {
       const mesh = o as THREE.Mesh;

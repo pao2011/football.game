@@ -23,6 +23,16 @@ export interface GameSettings {
   musicVolume: number;
   sfxVolume: number;
   crowdVolume: number;
+  /** Volumen de los sonidos del balón (dentro de los efectos). */
+  ballVolume: number;
+  /** Volumen del silbato del árbitro (dentro de los efectos). */
+  refereeVolume: number;
+  /** Sonido silenciado (tecla M o botón en la pausa); no cambia los volúmenes guardados. */
+  muted: boolean;
+  /** Comentarista: rótulos de transmisión durante el partido. */
+  commentary: boolean;
+  /** Voz del comentarista (síntesis de voz del navegador, si la hay en español). */
+  commentaryVoice: boolean;
   /** Vibración del mando (gamepad) y del móvil en golpeos, entradas y goles. */
   vibration: boolean;
   // Controles
@@ -32,6 +42,7 @@ export interface GameSettings {
   passAssist: number;
   /** Asistencia de pase/tiro/defensa: automática (solo en pantallas táctiles), siempre o desactivada. */
   assist: 'auto' | 'on' | 'off';
+  /** Segundos que tarda en llenarse la barra de potencia. */
   powerBarTime: number;
   deadzone: number;
   sensitivity: number;
@@ -44,6 +55,8 @@ export interface GameSettings {
   // Partido por defecto
   halfMinutes: number;
   difficulty: Difficulty;
+  /** Versión del guardado (para actualizar valores por defecto antiguos). */
+  version?: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -62,13 +75,18 @@ export const DEFAULT_SETTINGS: GameSettings = {
   musicVolume: 0.5,
   sfxVolume: 0.9,
   crowdVolume: 0.7,
+  ballVolume: 1,
+  refereeVolume: 1,
   vibration: true,
+  commentary: true,
+  commentaryVoice: false,
+  muted: false,
   bindings: structuredClone(FIFA_CLASSIC),
   preset: 'fifa',
   autoSwitch: true,
   passAssist: 1,
   assist: 'auto',
-  powerBarTime: 1,
+  powerBarTime: 0.6,
   deadzone: 0.18,
   sensitivity: 1,
   autoSubs: false,
@@ -96,6 +114,11 @@ export function loadSettings(): GameSettings {
     if (!saved[k]) presetDefaults[k] = presetDefaults[k].filter((code) => !used.has(code));
   }
   merged.bindings = { ...presetDefaults, ...saved };
+  // v2: la barra de potencia se llena más rápido (antes 1 s por defecto)
+  if ((merged.version ?? 1) < 2) {
+    if (merged.powerBarTime >= 1) merged.powerBarTime = DEFAULT_SETTINGS.powerBarTime;
+    merged.version = 2;
+  }
   return merged;
 }
 

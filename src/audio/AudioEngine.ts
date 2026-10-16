@@ -20,6 +20,16 @@ export interface AudioVolumes {
   music: number;
   sfx: number;
   crowd: number;
+  /** Sonidos del balón (golpeos, botes, rodar, postes, red), dentro de los efectos. */
+  ball?: number;
+  /** Silbato del árbitro, dentro de los efectos. */
+  referee?: number;
+}
+
+/** Posición en el campo (para el sonido 3D). */
+export interface XZ {
+  x: number;
+  z: number;
 }
 
 type NoiseKind = 'white' | 'pink' | 'brown';
@@ -36,6 +46,9 @@ interface Graph {
   music: GainNode;
   sfx: GainNode;
   crowd: GainNode;
+  /** Sub-buses de efectos con volumen propio. */
+  ball: GainNode;
+  ref: GainNode;
   sfxWet: GainNode;
   crowdWet: GainNode;
   output: AudioNode;
@@ -156,13 +169,16 @@ export class AudioEngine {
   private unlocked = false;
   private disposed = false;
   private g: Graph | null = null;
-  private vols: AudioVolumes = { master: 0.8, music: 0.6, sfx: 0.9, crowd: 0.8 };
+  private vols: Required<AudioVolumes> = { master: 0.8, music: 0.6, sfx: 0.9, crowd: 0.8, ball: 1, referee: 1 };
+  /** Cámara (oyente) para panear y atenuar los sonidos del balón según dónde ocurren. */
+  private listener = { x: 0, z: 0, rx: 1, rz: 0, on: false };
   private noiseBufs: Partial<Record<NoiseKind, AudioBuffer>> = {};
   private applauseBuf: AudioBuffer | null = null;
   private voices: Record<BusKind, Voice[]> = { sfx: [], crowd: [] };
 
   private amb: Ambience | null = null;
-  private roll: { src: AudioBufferSourceNode; bp: BiquadFilterNode; gain: GainNode } | null = null;
+  private weatherNodes: { out: GainNode; sources: AudioScheduledSourceNode[] } | null = null;
+  private roll: { src: AudioBufferSourceNode; bp: BiquadFilterNode; gain: GainNode; pan: StereoPannerNode } | null = null;
   private excitement = 0;
 
   private mus: MusicNodes | null = null;
@@ -232,8 +248,31 @@ export class AudioEngine {
       music: clamp01(v.music),
       sfx: clamp01(v.sfx),
       crowd: clamp01(v.crowd),
+      ball: clamp01(v.ball ?? 1),
+      referee: clamp01(v.referee ?? 1),
     };
     this.safe(() => this.applyVolumes());
+  }
+
+  /** Posición de la cámara y su vector "derecha" en el plano del campo (sonido 3D de los efectos del balón). */
+  setListener(x: number, z: number, rightX: number, rightZ: number): void {
+    const l = Math.hypot(rightX, rightZ) || 1;
+    this.listener = { x, z, rx: rightX / l, rz: rightZ / l, on: true };
+  }
+
+  clearListener(): void {
+    this.listener.on = false;
+  }
+
+  /** Paneo (-1 izquierda .. 1 derecha) y atenuación por distancia de un sonido en `at`. */
+  spatial(at?: XZ): { pan: number; gain: number } {
+    const L = this.listener;
+    if (!at || !L.on) return { pan: 0, gain: 1 };
+    const dx = at.x - L.x;
+    const dz = at.z - L.z;
+    const d = Math.hypot(dx, dz);
+    const side = (dx * L.rx + dz * L.rz) / Math.max(10, d);
+    return { pan: Math.max(-0.85, Math.min(0.85, side)), gain: Math.max(0.4, Math.min(1, 1.25 - d / 80)) };
   }
 
   dispose(): void {
@@ -273,11 +312,11 @@ export class AudioEngine {
   // ======================================================================
 
   /** Ball strike. power 0..1 (soft pass thud .. powerful shot). */
-  kick(power: number): void {
+  kick(power: number, at?: XZ): void {
     this.run((ctx, g) => {
       const p = clamp01(power) * rand(0.92, 1.08);
       const t = ctx.currentTime;
-      const v = this.claim('sfx', t, 0.4);
+      const v = this.claim('sfx', t, 0.4, { bus: 'ball', at });
       // low body thump with pitch drop
       const o = ctx.createOscillator();
       o.type = 'sine';
@@ -323,12 +362,12 @@ export class AudioEngine {
   }
 
   /** Ball bounce on grass. strength 0..1. */
-  bounce(strength: number): void {
+  bounce(strength: number, at?: XZ): void {
     this.run((ctx) => {
       const s = clamp01(strength) * rand(0.9, 1.1);
       if (s < 0.02) return;
       const t = ctx.currentTime;
-      const v = this.claim('sfx', t, 0.25);
+      const v = this.claim('sfx', t, 0.25, { bus: 'ball', at });
       const o = ctx.createOscillator();
       o.frequency.setValueAtTime(80 + 30 * s, t);
       o.frequency.exponentialRampToValueAtTime(40, t + 0.07);
@@ -353,11 +392,11 @@ export class AudioEngine {
   }
 
   /** Ball hitting the metal post / crossbar. */
-  post(): void {
+  post(at?: XZ): void {
     this.run((ctx, g) => {
       const t = ctx.currentTime;
-      const v = this.claim('sfx', t, 1.8);
-      const wet = this.wetSend(g.sfxWet, 0.35);
+      const v = this.claim('sfx', t, 1.8, { bus: 'ball', at });
+      const wet = this.wetSend(g.sfxWet, 0.35 * this.vols.ball);
       v.connect(wet);
       // ball impact
       const o = ctx.createOscillator();
@@ -398,11 +437,11 @@ export class AudioEngine {
   }
 
   /** Ball hitting the net (swish/rustle). */
-  net(): void {
+  net(at?: XZ): void {
     this.run((ctx) => {
       const t = ctx.currentTime;
       const dur = 0.75;
-      const v = this.claim('sfx', t, dur);
+      const v = this.claim('sfx', t, dur, { bus: 'ball', at });
       const n = this.noise('white', t, dur);
       const bp = this.filter('bandpass', 1400, 1.1);
       bp.frequency.setValueAtTime(1300, t);
@@ -456,18 +495,18 @@ export class AudioEngine {
           blasts = [[0, 0.28]];
       }
       const last = blasts[blasts.length - 1];
-      const v = this.claim('sfx', t, last[0] + last[1] + 0.2);
-      v.connect(this.wetSend(g.sfxWet, 0.4));
+      const v = this.claim('sfx', t, last[0] + last[1] + 0.2, { bus: 'ref' });
+      v.connect(this.wetSend(g.sfxWet, 0.4 * this.vols.referee));
       const f = rand(2750, 3050);
       for (const [off, d] of blasts) this.whistleBlast(t + off, d, f * rand(0.99, 1.01), v);
     });
   }
 
   /** Body contact / slide tackle thud. */
-  tackle(): void {
+  tackle(at?: XZ): void {
     this.run((ctx) => {
       const t = ctx.currentTime;
-      const v = this.claim('sfx', t, 0.5);
+      const v = this.claim('sfx', t, 0.5, { bus: 'ball', at });
       const o = ctx.createOscillator();
       o.frequency.setValueAtTime(rand(70, 85), t);
       o.frequency.exponentialRampToValueAtTime(38, t + 0.12);
@@ -494,11 +533,11 @@ export class AudioEngine {
   }
 
   /** Cabezazo: golpe sordo y corto (frente contra cuero), sin el chasquido del empeine. */
-  header(power: number): void {
+  header(power: number, at?: XZ): void {
     this.run((ctx) => {
       const p = clamp01(power) * rand(0.9, 1.1);
       const t = ctx.currentTime;
-      const v = this.claim('sfx', t, 0.3);
+      const v = this.claim('sfx', t, 0.3, { bus: 'ball', at });
       const o = ctx.createOscillator();
       o.type = 'sine';
       o.frequency.setValueAtTime((150 + 60 * p) * rand(0.95, 1.05), t);
@@ -517,11 +556,11 @@ export class AudioEngine {
   }
 
   /** Toque suave: control, primer toque o conducción. power 0..1. */
-  touch(power: number): void {
+  touch(power: number, at?: XZ): void {
     this.run((ctx) => {
       const p = clamp01(power) * rand(0.85, 1.15);
       const t = ctx.currentTime;
-      const v = this.claim('sfx', t, 0.12);
+      const v = this.claim('sfx', t, 0.12, { bus: 'ball', at });
       const o = ctx.createOscillator();
       o.type = 'triangle';
       o.frequency.setValueAtTime(rand(230, 290) + 90 * p, t);
@@ -540,10 +579,10 @@ export class AudioEngine {
   }
 
   /** Arquero que bloca el balón: palmada de guantes + balón que se aprieta contra el pecho. */
-  gloveCatch(): void {
+  gloveCatch(at?: XZ): void {
     this.run((ctx) => {
       const t = ctx.currentTime;
-      const v = this.claim('sfx', t, 0.35);
+      const v = this.claim('sfx', t, 0.35, { bus: 'ball', at });
       const n = this.noise('white', t, 0.08);
       const bp = this.filter('bandpass', 2400, 0.8);
       const ng = ctx.createGain();
@@ -567,11 +606,11 @@ export class AudioEngine {
   }
 
   /** Despeje con los puños / desvío del arquero: golpe seco y brillante. */
-  glovePunch(): void {
+  glovePunch(at?: XZ): void {
     this.run((ctx, g) => {
       const t = ctx.currentTime;
-      const v = this.claim('sfx', t, 0.4);
-      v.connect(this.wetSend(g.sfxWet, 0.2));
+      const v = this.claim('sfx', t, 0.4, { bus: 'ball', at });
+      v.connect(this.wetSend(g.sfxWet, 0.2 * this.vols.ball));
       const n = this.noise('white', t, 0.06);
       const bp = this.filter('bandpass', 3000, 0.9);
       const ng = ctx.createGain();
@@ -589,13 +628,13 @@ export class AudioEngine {
   }
 
   /** Balonazo contra las vallas publicitarias (panel hueco de plástico). strength 0..1. */
-  boards(strength: number): void {
+  boards(strength: number, at?: XZ): void {
     this.run((ctx, g) => {
       const s = clamp01(strength);
       if (s < 0.05) return;
       const t = ctx.currentTime;
-      const v = this.claim('sfx', t, 0.7);
-      v.connect(this.wetSend(g.sfxWet, 0.3));
+      const v = this.claim('sfx', t, 0.7, { bus: 'ball', at });
+      v.connect(this.wetSend(g.sfxWet, 0.3 * this.vols.ball));
       const o = ctx.createOscillator();
       o.frequency.setValueAtTime(95, t);
       o.frequency.exponentialRampToValueAtTime(48, t + 0.15);
@@ -655,21 +694,90 @@ export class AudioEngine {
    * Rodar del balón sobre el césped (sonido continuo). speed en m/s; onGround = el balón toca la hierba.
    * Llamar cada fotograma durante el partido; stopRoll() lo apaga.
    */
-  setRoll(speed: number, onGround: boolean): void {
+  setRoll(speed: number, onGround: boolean, at?: XZ): void {
     this.run((ctx, g) => {
       if (!this.roll) {
         const src = this.noise('pink', ctx.currentTime, -1);
         const bp = this.filter('bandpass', 500, 0.9);
         const gain = ctx.createGain();
         gain.gain.value = 0;
-        src.connect(bp).connect(gain).connect(g.sfx);
-        this.roll = { src, bp, gain };
+        const pan = ctx.createStereoPanner();
+        src.connect(bp).connect(gain).connect(pan).connect(g.ball);
+        this.roll = { src, bp, gain, pan };
       }
       const t = ctx.currentTime;
       const s = Math.min(1, Math.max(0, speed) / 18);
-      const target = onGround && speed > 1.2 ? 0.035 + 0.11 * s : 0;
+      const sp = this.spatial(at);
+      const target = onGround && speed > 1.2 ? (0.035 + 0.11 * s) * sp.gain : 0;
       this.roll.gain.gain.setTargetAtTime(target, t, 0.06);
+      this.roll.pan.pan.setTargetAtTime(sp.pan, t, 0.1);
       this.roll.bp.frequency.setTargetAtTime(350 + 900 * s, t, 0.08);
+    });
+  }
+
+  /**
+   * Ambiente del clima: lluvia (siseo continuo con gotas), viento (ráfagas graves) o nieve (viento suave).
+   * Va por el bus del público (es ambiente).
+   */
+  startWeather(kind: 'rain' | 'snow' | 'wind'): void {
+    this.run((ctx, g) => {
+      if (this.weatherNodes) return;
+      const t = ctx.currentTime;
+      const out = ctx.createGain();
+      out.gain.setValueAtTime(FLOOR, t);
+      out.gain.linearRampToValueAtTime(1, t + 2.5);
+      out.connect(g.crowd);
+      const sources: AudioScheduledSourceNode[] = [];
+      if (kind === 'rain') {
+        const n = this.noise('white', t, -1);
+        sources.push(n);
+        const hp = this.filter('highpass', 1800, 0.5);
+        const lp = this.filter('lowpass', 9000, 0.5);
+        const gg = ctx.createGain();
+        gg.gain.value = 0.11;
+        n.connect(hp).connect(lp).connect(gg).connect(out);
+        // gotas gruesas: crepitar más grave
+        const n2 = this.noise('pink', t, -1);
+        sources.push(n2);
+        const bp = this.filter('bandpass', 900, 0.7);
+        const g2 = ctx.createGain();
+        g2.gain.value = 0.06;
+        n2.connect(bp).connect(g2).connect(out);
+      }
+      // viento: ruido grave con ráfagas lentas (en la lluvia y la nieve, más suave)
+      const w = this.noise('pink', t, -1);
+      sources.push(w);
+      const wb = this.filter('bandpass', kind === 'wind' ? 420 : 320, 0.9);
+      const wg = ctx.createGain();
+      const base = kind === 'wind' ? 0.16 : kind === 'snow' ? 0.07 : 0.04;
+      wg.gain.value = base;
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = kind === 'wind' ? 0.13 : 0.08;
+      const lg = ctx.createGain();
+      lg.gain.value = base * 0.8;
+      lfo.connect(lg).connect(wg.gain);
+      const lfo2 = ctx.createOscillator();
+      lfo2.frequency.value = 0.07;
+      const lg2 = ctx.createGain();
+      lg2.gain.value = 180;
+      lfo2.connect(lg2).connect(wb.frequency);
+      lfo.start(t);
+      lfo2.start(t);
+      sources.push(lfo, lfo2);
+      w.connect(wb).connect(wg).connect(out);
+      this.weatherNodes = { out, sources };
+    });
+  }
+
+  stopWeather(): void {
+    const w = this.weatherNodes;
+    if (!w) return;
+    this.weatherNodes = null;
+    this.safe(() => {
+      const t = this.ctx ? this.ctx.currentTime : 0;
+      w.out.gain.cancelScheduledValues(t);
+      w.out.gain.setTargetAtTime(0, t, 0.3);
+      for (const s of w.sources) this.tryStop(s, t + 1.5);
     });
   }
 
@@ -1061,6 +1169,10 @@ export class AudioEngine {
     music.connect(master);
     sfx.connect(master);
     crowd.connect(master);
+    const ball = ctx.createGain();
+    const ref = ctx.createGain();
+    ball.connect(sfx);
+    ref.connect(sfx);
 
     // reverb
     const conv = ctx.createConvolver();
@@ -1074,7 +1186,7 @@ export class AudioEngine {
     sfxWet.connect(conv);
     crowdWet.connect(conv);
 
-    this.g = { master, music, sfx, crowd, sfxWet, crowdWet, output: shaper };
+    this.g = { master, music, sfx, crowd, ball, ref, sfxWet, crowdWet, output: shaper };
     this.applyVolumes();
   }
 
@@ -1094,10 +1206,12 @@ export class AudioEngine {
     set(g.sfxWet.gain, this.vols.sfx);
     set(g.crowd.gain, this.vols.crowd);
     set(g.crowdWet.gain, this.vols.crowd);
+    set(g.ball.gain, this.vols.ball);
+    set(g.ref.gain, this.vols.referee);
   }
 
   /** Allocates a voice gain on a bus, stealing the oldest one past the limit. */
-  private claim(kind: BusKind, t: number, dur: number): GainNode {
+  private claim(kind: BusKind, t: number, dur: number, route?: { bus?: 'ball' | 'ref'; at?: XZ }): GainNode {
     const ctx = this.ctx!;
     const g = this.g!;
     const now = ctx.currentTime;
@@ -1113,7 +1227,17 @@ export class AudioEngine {
       }
     }
     const v = ctx.createGain();
-    v.connect(kind === 'sfx' ? g.sfx : g.crowd);
+    const bus = kind === 'crowd' ? g.crowd : route?.bus === 'ball' ? g.ball : route?.bus === 'ref' ? g.ref : g.sfx;
+    if (route?.at) {
+      // sonido 3D: paneo según el lado de la cámara y algo más bajo cuanto más lejos
+      const sp = this.spatial(route.at);
+      v.gain.value = sp.gain;
+      if (typeof ctx.createStereoPanner === 'function') {
+        const pn = ctx.createStereoPanner();
+        pn.pan.value = sp.pan;
+        v.connect(pn).connect(bus);
+      } else v.connect(bus);
+    } else v.connect(bus);
     list.push({ end: t + dur, gain: v });
     return v;
   }

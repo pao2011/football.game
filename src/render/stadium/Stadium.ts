@@ -60,6 +60,8 @@ export class Stadium {
   private su: StaticShadowUniforms;
   private prevFog: THREE.Fog | THREE.FogExp2 | null = null;
   private prevBackground: THREE.Scene['background'] = null;
+  private roofOn = true;
+  private fogOverride: { color: string; near: number; far: number } | null = null;
 
   constructor(data: StadiumData, quality: GfxQuality, homeColor: string, awayColor: string, names: [string, string] = ['LOCAL', 'VISITANTE']) {
     this.quality = quality;
@@ -71,7 +73,10 @@ export class Stadium {
 
     // ---- analytic stadium shadow (roof opening) uniforms
     this.su = makeStaticShadowUniforms();
-    this.su.uSOn.value = this.q.staticShadow && this.preset.staticShadow ? (data.timeOfDay === 'night' ? 2 : 1) : 0;
+    // los estadios pequeños no tienen techo: sin la sombra del anillo del techo
+    this.roofOn = this.q.roof && !data.small;
+    this.su.uSOn.value = this.q.staticShadow && this.preset.staticShadow && !data.small ? (data.timeOfDay === 'night' ? 2 : 1) : 0;
+    this.fogOverride = data.fog ? { color: '#5c6670', near: 25, far: 150 } : null;
     this.su.uSSun.value.copy(this.preset.sunDir);
     this.su.uSCore.value.set(CORE_A, CORE_B);
     this.su.uSR.value = STAND_R + ROOF_IN_D;
@@ -100,7 +105,7 @@ export class Stadium {
 
     // ---- stands, roof, boards, dugouts
     const night = data.timeOfDay === 'night';
-    const sb = buildStands({ quality, standColor: data.standColor, roofColor: data.roofColor, homeColor, awayColor, roof: this.q.roof, night });
+    const sb = buildStands({ quality, standColor: data.standColor, roofColor: data.roofColor, homeColor, awayColor, roof: this.roofOn, night, upper: !data.small });
     const staticMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0.05 });
     staticMat.onBeforeCompile = (sh) => patchStaticShadow(sh, this.su);
     this.materials.push(staticMat);
@@ -179,7 +184,7 @@ export class Stadium {
       pg.setAttribute('position', new THREE.Float32BufferAttribute(sb.flares, 3));
       const pm = new THREE.PointsMaterial({
         map: glowTex,
-        size: this.q.roof ? 7 : 10,
+        size: this.roofOn ? 7 : 10,
         sizeAttenuation: true,
         color: new THREE.Color('#dfe9ff').multiplyScalar(0.5 + lightsOn * 0.6),
         transparent: true,
@@ -263,7 +268,8 @@ export class Stadium {
     for (const l of this.lights) if (l.parent !== scene) scene.add(l);
     this.prevFog = scene.fog;
     this.prevBackground = scene.background;
-    scene.fog = new THREE.Fog(new THREE.Color(this.preset.fog), this.preset.fogNear, this.preset.fogFar);
+    const fo = this.fogOverride;
+    scene.fog = fo ? new THREE.Fog(new THREE.Color(fo.color), fo.near, fo.far) : new THREE.Fog(new THREE.Color(this.preset.fog), this.preset.fogNear, this.preset.fogFar);
     scene.background = new THREE.Color(this.preset.skyHorizon);
   }
 
