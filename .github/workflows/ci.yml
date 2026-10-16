@@ -27,6 +27,8 @@ jobs:
         run: npx playwright-core install chromium
       - name: Jugar sin servidor (doble clic en index.html tras descargar el ZIP)
         run: node scripts/e2e-file.mjs index.html
+      - name: Audio por análisis de señal (cada sonido suena, sin saturar; paneo 3D)
+        run: node scripts/e2e-audio.mjs
       - name: Aviso si jugar.html está desactualizado
         run: git diff --quiet -- jugar.html || echo "::warning file=jugar.html::jugar.html no coincide con el código. Ejecuta 'npm run build' y súbelo para que el ZIP del repositorio funcione con doble clic."
       - name: Servidor online (arranca y responde)
