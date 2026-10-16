@@ -437,6 +437,12 @@ export class MatchRunner {
     if (steps >= 8) this.acc = 0;
     if (this.guestFrames.length >= 2) this.online!.send({ k: 'i', f: this.guestFrames.splice(0) });
     for (const e of this.guestSync!.update(performance.now())) this.handleEvent(e);
+    // predicción local de mi jugador (menos sensación de retraso)
+    if (this.localTeam >= 0 && !this.paused) {
+      const mv = this.input.move();
+      const dir = { x: this.guestRight.x * mv.x + this.guestForward.x * mv.y, z: this.guestRight.z * mv.x + this.guestForward.z * mv.y };
+      this.guestSync!.predict(this.localTeam as 0 | 1, dir, dt);
+    }
   }
 
   /** Partido online detenido por una pausa (mía o del rival). */

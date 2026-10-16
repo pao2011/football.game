@@ -4,7 +4,7 @@ import { makeMatch } from './helpers';
 import { DIVISIONS, divisionIndex, divisionInfo, rivalsDelta } from '../server/divisions.mjs';
 // @ts-expect-error módulo JS del servidor (sin tipos)
 import { Lobby } from '../server/lobby.mjs';
-import { GuestSync, HostSync } from '../src/net/NetSync';
+import { GuestSync, HostSync, adaptiveDelay } from '../src/net/NetSync';
 import { RemoteInput, captureFrame, mergeFrames, type InputFrame } from '../src/net/RemoteInput';
 import { HumanController } from '../src/control/HumanController';
 import { Input } from '../src/input/Input';
@@ -144,6 +144,41 @@ describe('Sincronización online', () => {
     expect(guest.ball.pos.distanceTo(host.ball.pos)).toBeLessThan(0.6);
     expect(guest.phase).toBe(host.phase);
     expect(guest.teams[1].subsUsed).toBe(1);
+  });
+
+  it('colchón adaptativo: corto con conexión regular, más largo con tirones', () => {
+    expect(adaptiveDelay(1 / 30, 0.002)).toBeLessThan(0.07);
+    expect(adaptiveDelay(1 / 30, 0.04)).toBeGreaterThan(0.14);
+    expect(adaptiveDelay(0.5, 0.3)).toBe(0.25);
+  });
+
+  it('predicción del invitado: su jugador se adelanta en la dirección del stick y vuelve al soltarlo', () => {
+    const host = makeMatch({ seed: 22 });
+    const guest = makeMatch({ seed: 22 });
+    const input = new Input(undefined, false);
+    const hc = new HumanController(input, { right: new Vector3(1, 0, 0), forward: new Vector3(0, 0, -1) }, { autoSwitch: true, passAssist: 1, powerBarTime: 1, showAimAssist: true, assist: false });
+    const sync = new HostSync(host, hc, 1);
+    const gs = new GuestSync(guest);
+    let t = 0;
+    host.simulate(3);
+    host.phase = 'play';
+    for (let i = 0; i < 30; i++) {
+      host.step(); host.events.length = 0;
+      const s = sync.step(1 / 60);
+      if (s) gs.push(JSON.parse(JSON.stringify(s)), (t += 1000 / 30));
+    }
+    gs.update(t);
+    guest.phase = 'play';
+    guest.gkHolding = null;
+    const p = guest.teams[1].players[8];
+    guest.teams[1].controlled = p;
+    guest.owner = null;
+    const base = p.pos.clone();
+    for (let i = 0; i < 30; i++) { p.pos.copy(base); gs.predict(1, { x: 1, z: 0 }, 1 / 60); }
+    expect(p.pos.x - base.x).toBeGreaterThan(0.4);
+    expect(Math.abs(p.pos.z - base.z)).toBeLessThan(0.05);
+    for (let i = 0; i < 60; i++) { p.pos.copy(base); gs.predict(1, { x: 0, z: 0 }, 1 / 60); }
+    expect(p.pos.distanceTo(base)).toBeLessThan(0.05);
   });
 
   it('mandos remotos: pulsaciones breves no se pierden aunque lleguen juntas', () => {

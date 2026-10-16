@@ -174,8 +174,16 @@ export class GuestSync {
   private offset = NaN;
   private applied = -1;
   private renderTm = 0;
-  /** Colchón de interpolación (s). */
+  /** Colchón de interpolación (s): se adapta a la regularidad con la que llegan las instantáneas. */
   delay = 0.1;
+  /** Media y variación (s) del intervalo entre instantáneas recibidas. */
+  private arrMean = 1 / 30;
+  private arrJitter = 0.01;
+  private lastArr = -1;
+  /** Predicción local: desplazamiento visual del jugador que controla el invitado (sin esperar al anfitrión). */
+  private readonly predOff = new Vector3();
+  /** Desactiva el colchón adaptativo (pruebas). */
+  adaptive = true;
   readonly ctrlView: GuestCtrlView = { charge: null, lastCharge: null, mentalityShownAt: -10 };
   freeKick: { path: Vector3[]; target: Vector3 } | null = null;
   /** Instante (ms) de la última instantánea recibida. */
@@ -188,6 +196,15 @@ export class GuestSync {
   push(s: Snapshot, nowMs: number) {
     this.received++;
     this.lastRecv = nowMs;
+    // regularidad de la conexión → colchón justo (menos retraso con buena conexión, menos tirones con mala)
+    const now = nowMs / 1000;
+    if (this.lastArr >= 0) {
+      const gap = Math.min(0.5, now - this.lastArr);
+      this.arrMean += (gap - this.arrMean) * 0.05;
+      this.arrJitter += (Math.abs(gap - this.arrMean) - this.arrJitter) * 0.05;
+      if (this.adaptive) this.delay = adaptiveDelay(this.arrMean, this.arrJitter);
+    }
+    this.lastArr = now;
     if (this.buf.length && s.tm <= this.buf[this.buf.length - 1].tm) return; // desordenada
     this.buf.push(s);
     const measured = s.tm - nowMs / 1000;
@@ -198,6 +215,33 @@ export class GuestSync {
     }
     else this.offset = Math.max(this.offset + (measured - this.offset) * 0.04, Math.min(this.offset, measured));
     if (this.buf.length > 90) this.buf.splice(0, this.buf.length - 90);
+  }
+
+  /**
+   * Predicción del invitado: adelanta un poco a su jugador controlado en la dirección del stick (lo que tarda la
+   * orden en ir al anfitrión y volver), y suaviza la corrección cuando llega la posición real. `dir` es la
+   * dirección del stick en el campo (longitud 0..1).
+   */
+  predict(team: 0 | 1, dir: { x: number; z: number }, dt: number) {
+    const m = this.match;
+    const p = m.teams[team].controlled;
+    const live = m.phase === 'play' && p && !p.sentOff && !m.gkHolding;
+    const lead = Math.min(0.35, this.delay + 0.06);
+    const speed = p ? Math.min(8, p.maxSpeed(m.owner === p)) : 0;
+    const tx = live ? dir.x * speed * lead : 0;
+    const tz = live ? dir.z * speed * lead : 0;
+    const k = Math.min(1, dt * 8);
+    this.predOff.x += (tx - this.predOff.x) * k;
+    this.predOff.z += (tz - this.predOff.z) * k;
+    if (this.predOff.lengthSq() > 2.25) this.predOff.setLength(1.5);
+    if (!p || this.predOff.lengthSq() < 1e-6) return;
+    p.pos.x += this.predOff.x;
+    p.pos.z += this.predOff.z;
+    // el balón que conduce va con él
+    if (m.owner === p) {
+      m.ball.pos.x += this.predOff.x;
+      m.ball.pos.z += this.predOff.z;
+    }
   }
 
   get hasData() {
@@ -393,4 +437,9 @@ export class GuestSync {
     ref.anim.speed = lerp(fa[5] as number, fb[5] as number, t);
     ref.anim.duration = (t < 0.5 ? fa[6] : fb[6]) as number;
   }
+}
+
+/** Colchón de interpolación según el intervalo medio entre instantáneas y su variación (s). */
+export function adaptiveDelay(mean: number, jitter: number): number {
+  return Math.min(0.25, Math.max(0.06, mean * 1.6 + jitter * 2.5));
 }
