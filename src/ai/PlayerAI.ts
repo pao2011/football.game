@@ -10,7 +10,7 @@ import { angleDiff, clamp, dist2D } from '../util/math';
 import { buildClearance, buildCross, buildGroundPass, buildLob, buildShot, chooseCrossTarget, NORMAL_SHOT } from './Actions';
 import type { SkillKind } from '../sim/types';
 import { getBallPrediction, PRED_DT, PRED_STEPS, timeToReach } from './Predict';
-import { offsideLineU } from '../sim/Rules';
+import { isInPenaltyArea, offsideLineU } from '../sim/Rules';
 import { groundPassVelocity } from '../sim/Kicks';
 import { AERIAL_TIMING, angleTo, ballApproach, chooseAerial, type AerialKind } from '../sim/Aerial';
 
@@ -273,6 +273,25 @@ export function receiveApproach(m: Match, p: Player, dist: number): number {
   return clamp(Math.min(room, 1 + dist * 0.5), 0.8, 4.5);
 }
 
+/** Pared en curso: jugador que corre tras pasar → compañero al que le pasó (quien debe devolvérsela). */
+const wallFrom = new WeakMap<Player, Player>();
+
+/** Rivales (sin el arquero) que tapan la línea de tiro hacia el centro del arco. */
+function shotLaneBlockers(from: Vector3, goal: Vector3, opponents: Player[]): number {
+  let n = 0;
+  const dx = goal.x - from.x;
+  const dz = goal.z - from.z;
+  const len = Math.hypot(dx, dz);
+  for (const o of opponents) {
+    if (o.isGK) continue;
+    const t = ((o.pos.x - from.x) * dx + (o.pos.z - from.z) * dz) / (len * len);
+    if (t <= 0.05 || t >= 1) continue;
+    const off = Math.abs((o.pos.x - from.x) * dz - (o.pos.z - from.z) * dx) / len;
+    if (off < 1.2 + t * 2.5) n++;
+  }
+  return n;
+}
+
 /** Sorteo de remate acrobático, uno por jugador y por balón (para que no se repita cada fotograma). */
 const aerialRoll = new WeakMap<Player, { touch: number; roll: number }>();
 
@@ -469,6 +488,23 @@ function decide(m: Match, p: Player, team: Team, opponents: Player[]) {
     });
   }
 
+  // --- Tiro lejano: buen rematador, de frente al arco y con el rival encerrado en su área ---
+  const goalPt = team.attackGoal;
+  const dGoal = dist2D(p.pos, goalPt);
+  const shooting = p.data.attrs.shooting;
+  if (dGoal > 17 && dGoal < 30 && Math.abs(p.pos.z) < 16 && shooting >= 72 && pressure > 2.2) {
+    const packed = opponents.filter((o) => !o.isGK && isInPenaltyArea(o.pos, goalPt.x > 0 ? 1 : -1)).length;
+    const lane = shotLaneBlockers(p.pos, goalPt, opponents);
+    const lsq = (shooting - 70) / 30 * clamp(1 - (dGoal - 17) / 16, 0.2, 1) * (lane === 0 ? 1 : lane === 1 ? 0.55 : 0.2);
+    options.push({
+      score: 0.5 + lsq * 1.7 + (packed >= 5 ? 0.45 : packed >= 4 ? 0.25 : 0),
+      label: 'longshot',
+      run: () => aiShoot(m, p, team, err),
+    });
+  }
+  // ¿centro del campo tapado? (muchos rivales en el carril central por delante): se buscan las bandas
+  const centralCrowd = opponents.filter((o) => !o.isGK && team.u(o.pos) > pu && Math.abs(o.pos.z) < 12 && team.u(o.pos) - pu < 30).length;
+
   // --- Pases ---
   for (const q of team.active) {
     if (q === p || q.sentOff) continue;
@@ -488,10 +524,30 @@ function decide(m: Match, p: Player, team: Team, opponents: Player[]) {
     const receiverShot = shotQuality(m, team, target, opponents);
     let score = 0.55 + progress * 0.7 + open * 0.45 + danger * 0.45 + receiverShot * 0.8 - (d > 30 ? 0.15 : 0);
     if (progress < 0 && pressure > 3) score -= 0.25; // sin presión no se juega hacia atrás
+    // juego por bandas: con el centro tapado, abrir a un compañero libre en la banda del último tercio
+    if (centralCrowd >= 4 && Math.abs(target.z) > 15 && tu > HALF_LENGTH - 45 && open > 0.5) score += 0.3;
+    // pared: devolver al compañero que acaba de pasar y sigue corriendo al espacio
+    if (q.forcedRunUntil > m.time && wallFrom.get(q) === p && progress > 0) score += 0.35;
     if (safety < 0) score -= 1.2;
     else if (safety < 0.25) score -= 0.4;
     if (d <= 32 || safety >= 0) {
-      options.push({ score, label: 'pass', run: () => m.requestKick(p, buildGroundPass(m, p, target, 0, err, q)) });
+      options.push({
+        score,
+        label: 'pass',
+        run: () => {
+          const ok = m.requestKick(p, buildGroundPass(m, p, target, 0, err, q));
+          // pared: tras un pase corto hacia delante en campo rival, el pasador sigue corriendo al espacio
+          if (ok && d < 20 && progress > 0 && pu > -5 && p.slot.position !== 'DEF' && m.rng.next() < 0.55) {
+            const run = team.toWorld(clamp(pu + 13, -HALF_LENGTH + 8, HALF_LENGTH - 6), clamp(team.l(p.pos) * 0.85, -HALF_WIDTH + 4, HALF_WIDTH - 4));
+            if (nearestOpponentDist(opponents, run) > 3) {
+              p.forcedRunUntil = m.time + 3;
+              p.forcedRunTarget.copy(run);
+              wallFrom.set(p, q);
+            }
+          }
+          return ok;
+        },
+      });
     }
     // Pase elevado si el carril raso está tapado y el receptor está libre
     if (safety < 0.1 && d > 18 && open > 0.5 && progress > 0 && raceMargin(q, target, opponents) > 0.6) {
