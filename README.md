@@ -134,7 +134,7 @@ El mismo juego funciona en móviles con **controles táctiles**, una interfaz ad
 
 ## 4. Controles (idénticos al esquema clásico de FIFA)
 
-Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y suéltalo para golpear. Si lo pulsas antes de que llegue el balón, el jugador lo golpea **de primera**. Con el balón en el aire, **TIRO** elige el remate según la altura a la que llega y hacia dónde miras: **volea** (por debajo de la cintura), **tijera** (de lado, a media altura), **chilena** (de espaldas al arco y alto) o **cabezazo** (a la altura de la cabeza). Si no pulsas nada, el jugador **para el balón con el pecho o el muslo** y lo deja caer a sus pies; si te llega un balón aéreo cerca del arco después de controlarlo con el pecho, pulsa TIRO para rematar de volea antes de que bote.
+Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** (se llena en 0,6 s; ajustable de 0,3 a 1,6 s en *Configuración*) y suéltalo para golpear. El compañero al que le pasas **sale al encuentro del balón** (no lo espera quieto). Si lo pulsas antes de que llegue el balón, el jugador lo golpea **de primera**. Con el balón en el aire, **TIRO** elige el remate según la altura a la que llega y hacia dónde miras: **volea** (por debajo de la cintura), **tijera** (de lado, a media altura), **chilena** (de espaldas al arco y alto) o **cabezazo** (a la altura de la cabeza). Si no pulsas nada, el jugador **para el balón con el pecho o el muslo** y lo deja caer a sus pies; si te llega un balón aéreo cerca del arco después de controlarlo con el pecho, pulsa TIRO para rematar de volea antes de que bote.
 
 | Acción | Teclado (clásico) | Mando Xbox / PlayStation |
 |---|---|---|
@@ -161,6 +161,7 @@ Mantén pulsado un botón de pase o tiro para **cargar la barra de potencia** y 
 | **Regates** | **J / L** bicicleta · **Shift + J / L** elástico · **I** sombrero · **K** arrastre · **R** ruleta (o teclado numérico 4/6/8/2/5) | stick derecho · R3 ruleta |
 | Contener (jockey) · **proteger el balón** (con balón) | **Ctrl** o **C** | LT / L2 |
 | Pausa | **Esc** o **P** | Start / Options |
+| Silenciar / activar el sonido | **M** (también desde la pausa) | — |
 | **En defensa**: presionar al portador | mantener **S** | mantener A / ✕ |
 | **En defensa**: entrada | **D** | B / ○ |
 | **En defensa**: barrida | **A** | X / □ |
@@ -274,8 +275,10 @@ Se puede jugar entre PC, móvil (APK o navegador) y mando: cada uno usa sus prop
 - **Árbitro** en el campo: sigue el juego en diagonal, silba, señala la dirección de los tiros libres y, en las faltas, corre hacia el infractor para hacer un **aviso verbal** (gesto con el dedo; si el jugador reincide, amarilla) o **mostrar la tarjeta amarilla o roja** con el brazo en alto. La cámara hace un plano del árbitro con el jugador, aparece un rótulo con la tarjeta y la reanudación espera a que termine. Segunda amarilla = roja.
 - **Centros**: la trayectoria se calcula con la física real para que el balón llegue a la cabeza del rematador (centro normal, bombeado por encima de la primera línea), a media altura (tenso) o a la cintura (bajo), con efecto alejándose del arquero. Cuando un compañero va a centrar, los delanteros **atacan el área** (primer palo, punto de penal, segundo palo y borde), el que recibe va al **punto de remate** y no a donde bota, y se elige al rematador con espacio y sin defensores en la trayectoria. Los cabezazos se dirigen al palo contrario al arquero y se apuntan en el instante del contacto. En pruebas con 40 centros desde la banda, un atacante toca primero en el 100 % (antes, 90 %) y hay el doble de goles.
 - **Balones aéreos**: los jugadores **paran los centros y pelotazos con el pecho** (por encima de la cintura) **o con el muslo** (más abajo) y los dejan caer a sus pies; si el balón llega demasiado fuerte para su control, rebota en el cuerpo. Dentro de su propia área, los defensores despejan de cabeza los balones altos. Lejos del arco y sin rivales cerca, la IA espera el balón para controlarlo en vez de cabecearlo a ciegas.
-- **Remates acrobáticos**: **volea**, **tijera** (salto de lado) y **chilena** (de espaldas, por encima de la cabeza), cada uno con su animación, su ventana de contacto (el pie golpea cuando el balón pasa por su alcance; si no llega, remata al aire) y su dificultad (la chilena es la menos precisa). La IA los usa en el área rival: volea con los centros bajos o tras controlar con el pecho, y tijera o chilena solo los buenos rematadores y no siempre. El público hace "¡uy!" con las chilenas y las tijeras. En 16 partidos IA contra IA: unos 14 controles de pecho y 9 de muslo por partido, voleas, tijeras y chilenas, y un 40 % más de goles que antes (de 31 a 43).
-- **Recepción de pases**: el jugador al que le pasas va a buscar el balón aunque el stick siga apuntando a otro lado; el stick vuelve a mandar al recibirlo.
+- **Remates acrobáticos**: **volea**, **tijera** (salto de lado) y **chilena** (de espaldas, por encima de la cabeza), cada uno con su animación, su ventana de contacto (el pie golpea cuando el balón pasa por su alcance; si no llega, remata al aire) y su dificultad (la chilena es la menos precisa). La IA los usa en el área rival: volea con los centros bajos o tras controlar con el pecho, y tijera o chilena solo los buenos rematadores y no siempre. El público hace "¡uy!" con las chilenas y las tijeras. En 16 partidos IA contra IA: unos 14 controles de pecho y 9 de muslo por partido, y voleas, tijeras y chilenas en el área rival.
+- **Ley de la ventaja**: si el equipo que recibe la falta conserva el balón (un compañero libre lo tiene cerca, en campo prometedor), el árbitro deja seguir y aparece **VENTAJA ▶**; si lo pierde en los 2,5 s siguientes, vuelve atrás y pita el tiro libre en el lugar de la falta. La amarilla o el aviso se dan igualmente, sin parar el juego. Nunca hay ventaja con roja ni dentro del área (penal).
+- **Arquero con los pies**: con una cesión o un balón suelto en los pies, el arquero lo juega enseguida (pase raso a un compañero libre o despeje largo; sin pensarlo si un rival se le echa encima) y sale a recibir las cesiones en vez de esperarlas en la línea. Antes se quedaba quieto con el balón hasta que un rival se lo quitaba: en las pruebas, unos 24 de cada 34 goles de 16 partidos IA contra IA venían de ahí. Sus estiradas y reflejos también son ahora más humanos (unos 2,7 m de alcance lateral y algo más de tiempo de reacción).
+- **Recepción de pases**: el jugador al que le pasas va a buscar el balón aunque el stick siga apuntando a otro lado, y al llegar al punto de recepción **sigue hacia el balón** (sale al encuentro) a un ritmo que no le impide controlarlo; el stick vuelve a mandar al recibirlo. El que pasa ya no persigue su propio pase.
 - **Tiros libres directos con trayectoria (estilo FC)**: cerca del arco, la cámara se coloca detrás del lanzador (algo más atrás y por encima) y se ve el recorrido previsto del balón con puntos y una mira en el arco. Con el stick / flechas / joystick se mueve la mira (lado y altura), con **J / L**, el stick derecho o los botones táctiles **EFECTO ↶ ↷** se curva la trayectoria, y manteniendo **TIRO** se elige la potencia (poca potencia = parábola más alta; mucha = más tenso). El recorrido se calcula con la misma física del balón, así que lo que ves es lo que hace (más un pequeño error según el lanzador). PASE y ELEVADO siguen sirviendo para jugarlo en corto o centrar.
 - **Penales**: mira visible en el arco (lado según el stick, altura según la potencia que se carga).
 - Fuera de juego evaluado en el momento exacto del pase (penúltimo defensor y balón; sin fuera de juego en saques de banda, de arco ni de esquina).
@@ -294,6 +297,7 @@ Se puede jugar entre PC, móvil (APK o navegador) y mando: cada uno usa sus prop
 - HUD con marcador, reloj, tiempo añadido, radar, jugador controlado con su resistencia, barra de potencia, avisos (gol, falta, tarjeta, fuera de juego), ayudas en balón parado e indicadores del receptor y la dirección de pase.
 - **Sonidos del balón**: golpeo (más seco y con silbido del aire en los tiros fuertes), **cabezazo**, **control y primer toque**, **toques de conducción** al ritmo de la carrera, **balón rodando por el césped** (según su velocidad), botes, postes, red, **balonazo contra las vallas publicitarias**, **blocaje del arquero** (palmada de guantes) y **despeje con los puños**; saques con la mano sin sonido de patada.
 - **Bocina del estadio** después de cada gol.
+- **Sonido 3D**: los sonidos del balón (golpeos, botes, rodar, postes, red, guantes) se panean a la izquierda o la derecha según dónde ocurren respecto a la cámara, y suenan algo más bajos cuanto más lejos. Volúmenes separados para **balón** y **árbitro** en *Configuración → Sonido*, y **M** para silenciarlo todo.
 - Audio procedural original: golpeos, botes, postes, red, silbato, ambiente de estadio, gritos de gol, "¡uy!", aplausos, abucheos, sonidos de interfaz y música de menú.
 - Menús animados navegables con ratón, teclado y mando; pantalla de carga con consejos; pausa; configuración de gráficos (calidad baja/media/alta, sombras, escala de resolución, antialiasing, radar, ayudas, repeticiones), sonido y jugabilidad. Todo se guarda en el almacenamiento local.
 
@@ -327,7 +331,7 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Prueba | Comando | Resultado |
 |---|---|---|
 | Comprobación de tipos (TypeScript estricto) | `npx tsc --noEmit` | ✅ sin errores |
-| Unitarias y de simulación | `npm test` | ✅ **167/167** |
+| Unitarias y de simulación | `npm test` | ✅ **173/173** |
 | Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **15/15** |
 | Extremo a extremo con mando (mando estándar simulado) | `npm run build && npm run test:e2e:gamepad` | ✅ **7/7** |
 | Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **17/17** |
@@ -335,7 +339,8 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Jugar sin servidor (doble clic en `index.html` → `jugar.html`, `file://`) | `npm run build && npm run test:e2e:file` | ✅ pantalla de inicio sin errores |
 | Ejecutable de Linux bajo Xvfb | — | ✅ sin errores (detalle abajo) |
 
-**Unitarias y de simulación (167 pruebas)**
+**Unitarias y de simulación (173 pruebas)**
+- **Arquero con los pies (3)**: juega el balón enseguida, despeja sin pensarlo con un rival encima y sale a recibir una cesión. **Ley de la ventaja (3)**: el juego sigue si se conserva el balón, se vuelve atrás si se pierde enseguida y no hay ventaja sin un compañero libre.
 - **Balones aéreos (8)**: control con el pecho y con el muslo (el balón queda en los pies), pelotazo demasiado fuerte que rebota, elección del remate según altura y orientación, volea de la IA con un centro bajo, y volea, tijera y chilena del jugador controlado con TIRO (el balón va al arco y el jugador se levanta tras caer).
 - **Sonidos (3)**: cada evento suena con el suyo (golpeo, cabezazo, saque con la mano, control, blocaje, despeje, gol con bocina), el balón rueda y el que conduce da toques al ritmo de la carrera, y la simulación avisa de los controles y blocajes.
 - **Cambios (5)**: 7 suplentes, el cambio espera a una interrupción, máximo 5, no vuelve quien salió ni se cambia a un expulsado, el que entra hereda el control y el balón, y la IA cambia a los cansados en partidos completos.
@@ -376,7 +381,7 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 
 **Ejecutable de Linux**: se lanzó bajo Xvfb, se inició un partido desde el menú sin errores y no hizo ninguna conexión de red externa (se desactivaron las conexiones en segundo plano de Chromium y la descarga de diccionarios).
 
-**Estadísticas medias de la IA** (partidos IA contra IA de 2 × 2 min, dificultad *Clase mundial*): unas 75–110 acciones de pase con un 55–75 % completadas, 3–4 tiros, 0,5–1 goles y algunas faltas, tarjetas y atajadas por partido.
+**Estadísticas medias de la IA** (partidos IA contra IA de 2 × 4 min, dificultad *Clase mundial*): unas 150 acciones de pase con un 65 % completadas, unos 7 tiros, alrededor de 1 gol y algunas faltas, tarjetas y atajadas por partido. Con el arreglo del arquero hay menos goles que antes (ya no se regalan): la IA crea pocas ocasiones claras, ver *Problemas pendientes*.
 
 ## 9. Problemas pendientes y limitaciones reales
 
@@ -384,11 +389,11 @@ El plan de mejoras futuras está en **[ROADMAP.md](ROADMAP.md)**.
 
 - **Rendimiento en GPU real no medido.** El entorno de desarrollo no tiene tarjeta gráfica y todo se probó con renderizado por software (SwiftShader), que da pocos FPS. Por diseño (unas 250 llamadas de dibujo, mallas de entre 1.600 y 5.000 vértices por jugador, público instanciado), una GPU integrada moderna debería mantener 60 FPS en calidad media, pero no está verificado. Si va lento, baja la calidad, desactiva las sombras o reduce la escala de resolución en *Configuración*.
 - **Audio procedural** (sintetizado, sin grabaciones): se verificó por análisis de señal (sin silencios, sin saturación y con espectros correctos), pero no se escuchó.
-- **Reglas no implementadas**: ley de la ventaja, mano, faltas del arquero en sus estiradas a los pies y saque de banda mal ejecutado. En un tiro libre indirecto se acepta un gol directo.
+- **Reglas no implementadas**: mano, faltas del arquero en sus estiradas a los pies y saque de banda mal ejecutado. En un tiro libre indirecto se acepta un gol directo.
 - **Online**: el anfitrión simula el partido, así que **el invitado juega con un pequeño retraso** (su ping + 0,1 s de colchón para que se vea fluido): con buena conexión apenas se nota, con mala se nota en los controles. El anfitrión debe **mantener el juego en primer plano** (si minimiza la ventana el navegador frena el partido para los dos). El servidor gratuito de Render **se duerme** tras 15 min sin uso (la primera conexión tarda hasta 1 minuto) y **puede perder la clasificación de Division Rivals al reiniciarse** (su disco es temporal; cada jugador guarda su última división en su dispositivo). La validación de resultados es básica: en Rivals solo cuenta si los dos jugadores informan el mismo marcador. Se probó con dos navegadores en el mismo ordenador (`npm run test:e2e:online`), no con dos dispositivos por Internet. El servidor público por defecto **no existe hasta que alguien publique el Blueprint** de `render.yaml`.
 - **Partidos no jugados por el usuario** en torneo y carrera: se resuelven con un modelo estadístico (Poisson según la media de cada equipo), no con la simulación completa.
 - **Sin multijugador local en el mismo dispositivo** (dos humanos con dos mandos); el multijugador es online.
-- **Equipación del visitante**: se elige automáticamente para que contraste con la del local; no se puede seleccionar a mano.
+- **Equipación del visitante**: en el partido rápido se puede elegir (automática, titular o suplente); en torneo, carrera y online sigue siendo automática.
 - **Animaciones procedurales**: más simples que una captura de movimiento real; las caras son estilizadas.
 - **IA**: tiende a jugar mucho por el centro del campo y a generar pocas ocasiones claras en dificultades bajas. Es funcional y táctica, pero mejorable.
 - Los ejecutables de Windows se generaron pero **solo se probó el de Linux** (no había Windows disponible). El ZIP de Windows lo compila GitHub Actions en `windows-latest` y se publica en *Releases*; no está firmado, así que SmartScreen puede avisar la primera vez. `jugar.html` se probó abriéndolo como archivo (`file://`) en Chromium para Linux, no en un PC con Windows.

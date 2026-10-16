@@ -57,6 +57,8 @@ interface QuickSetup {
   difficulty: number;
   side: 0 | 1 | -1;
   formation: FormationId | null;
+  /** Equipación del visitante: automática (la que más contrasta), titular o suplente. */
+  awayKit?: 'auto' | 'home' | 'away';
 }
 
 type MatchContext =
@@ -108,6 +110,24 @@ export class App {
     const unlock = () => this.audio.unlock();
     window.addEventListener('pointerdown', unlock, { once: false });
     window.addEventListener('keydown', unlock, { once: false });
+    // M: silenciar / activar el sonido en cualquier momento (salvo si la tecla está asignada a otra acción)
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'KeyM' || e.repeat || (window as any).__captureKey) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (Object.values(this.settings.bindings).some((ks) => ks.includes('KeyM'))) return;
+      this.toggleMute();
+    });
+  }
+
+  /** Silencia o reactiva todo el sonido y lo indica brevemente en pantalla. */
+  toggleMute() {
+    this.settings.muted = !this.settings.muted;
+    saveSettings(this.settings);
+    this.applyAudio();
+    const t = el('div', 'mute-toast', this.settings.muted ? '🔇 Sonido desactivado <small>(M)</small>' : '🔊 Sonido activado <small>(M)</small>');
+    this.ui.appendChild(t);
+    setTimeout(() => t.remove(), 1400);
   }
 
   private createRenderer() {
@@ -121,7 +141,7 @@ export class App {
 
   private applyAudio() {
     const s = this.settings;
-    this.audio.setVolumes({ master: s.masterVolume, music: s.musicVolume, sfx: s.sfxVolume, crowd: s.crowdVolume });
+    this.audio.setVolumes({ master: s.muted ? 0 : s.masterVolume, music: s.musicVolume, sfx: s.sfxVolume, crowd: s.crowdVolume, ball: s.ballVolume, referee: s.refereeVolume });
   }
 
   private onResize() {
@@ -282,7 +302,7 @@ export class App {
     const render = () => {
       const home = TEAMS[q.home];
       const away = TEAMS[q.away];
-      const awayKit = chooseAwayKit(home, away);
+      const awayKit = this.quickAwayKit(home, away);
       const sideLabel = q.side === 0 ? `Local (${home.short})` : q.side === 1 ? `Visitante (${away.short})` : 'Espectador (IA vs IA)';
       return `
       <div class="screen-header"><div><div class="crumb">PARTIDO RÁPIDO</div><h2>Configuración del encuentro</h2></div></div>
@@ -298,6 +318,7 @@ export class App {
           ${this.stepper('Dificultad', DIFFICULTY_LABELS[DIFFS[q.difficulty]], 'diff')}
           ${this.stepper('Controlas a', sideLabel, 'side')}
           ${this.stepper('Tu formación', q.formation ?? 'Por defecto del equipo', 'form')}
+          ${this.stepper('Equipación del visitante', ({ auto: 'Automática (la que más contrasta)', home: 'Titular', away: 'Suplente' } as const)[q.awayKit ?? 'auto'], 'akit')}
         </div>
       </div>
       <div class="screen-footer">
@@ -320,6 +341,8 @@ export class App {
       sidePrev: () => { q.side = (q.side === 0 ? -1 : q.side === 1 ? 0 : 1); s.refresh(render()); },
       sideNext: () => { q.side = (q.side === 0 ? 1 : q.side === 1 ? -1 : 0); s.refresh(render()); },
       formPrev: () => { const i = q.formation ? FORMATION_IDS.indexOf(q.formation) : 0; q.formation = i <= 0 ? null : FORMATION_IDS[i - 1]; s.refresh(render()); },
+      akitPrev: () => { q.awayKit = ({ auto: 'away', home: 'auto', away: 'home' } as const)[q.awayKit ?? 'auto']; s.refresh(render()); },
+      akitNext: () => { q.awayKit = ({ auto: 'home', home: 'away', away: 'auto' } as const)[q.awayKit ?? 'auto']; s.refresh(render()); },
       formNext: () => { const i = q.formation ? FORMATION_IDS.indexOf(q.formation) : -1; q.formation = FORMATION_IDS[(i + 1) % FORMATION_IDS.length]; s.refresh(render()); },
       back: () => this.mainMenu(),
       play: () => {
@@ -329,7 +352,7 @@ export class App {
         this.settings.difficulty = DIFFS[q.difficulty];
         saveSettings(this.settings);
         const cfg: MatchConfig = {
-          home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: q.side,
+          home, away, homeKit: home.home, awayKit: this.quickAwayKit(home, away), humanTeam: q.side,
           halfLengthSec: HALF_OPTIONS[q.half] * 60, difficulty: DIFFS[q.difficulty], extraTime: false, penalties: false,
           homeFormation: q.side === 0 && q.formation ? q.formation : undefined,
           awayFormation: q.side === 1 && q.formation ? q.formation : undefined,
@@ -338,6 +361,12 @@ export class App {
       },
     };
     const s = this.show(render(), handlers, () => this.mainMenu());
+  }
+
+  /** Equipación del visitante en el partido rápido según lo elegido. */
+  private quickAwayKit(home: TeamData, away: TeamData) {
+    const k = this.quick.awayKit ?? 'auto';
+    return k === 'home' ? away.home : k === 'away' ? away.away : chooseAwayKit(home, away);
   }
 
   private stepper(label: string, value: string, key: string) {
@@ -423,6 +452,7 @@ export class App {
         ${r.online ? '<button class="menu-item" data-act="chat">Mensajes rápidos<small>Para tu rival</small></button>' : '<button class="menu-item" data-act="restart">Reiniciar partido</button>'}
         ${r.localTeam >= 0 && !m.config.training ? `<button class="menu-item" data-act="subs">Cambios<small>${m.teams[r.localTeam as 0 | 1].subsUsed}/${MAX_SUBS} realizados</small></button>` : ''}
         <button class="menu-item" data-act="stats">Estadísticas</button>
+        <button class="menu-item" data-act="mute">${this.settings.muted ? '🔊 Activar sonido' : '🔇 Silenciar'}<small>Tecla M</small></button>
         <button class="menu-item" data-act="settings">Configuración</button>
         <button class="menu-item" data-act="controls">Controles</button>
         <button class="menu-item" data-act="quit">Abandonar partido${r.online && this.lastMatch?.ctx.mode === 'online' && this.lastMatch.ctx.start.mode === 'rivals' ? '<small>Cuenta como derrota en Division Rivals</small>' : ''}</button>
@@ -431,6 +461,7 @@ export class App {
     this.overlay = new Screen(this.ui, html, {
       resume,
       restart: () => { close(); this.restartMatch(); },
+      mute: () => { this.toggleMute(); close(); this.pauseMenu(); },
       subs: () => { close(); this.subsMenu(); },
       chat: () => {
         close();
@@ -1223,6 +1254,8 @@ export class App {
           ${this.stepper('Música', pct(st.musicVolume), 'vmusic')}
           ${this.stepper('Efectos', pct(st.sfxVolume), 'vsfx')}
           ${this.stepper('Público', pct(st.crowdVolume), 'vcrowd')}
+          ${this.stepper('Balón', pct(st.ballVolume), 'vball')}
+          ${this.stepper('Árbitro (silbato)', pct(st.refereeVolume), 'vref')}
           ${toggle('Vibración (mando y móvil)', 'vibration')}
         </div>
         <div class="panel"><h3>Jugabilidad</h3>
@@ -1264,6 +1297,8 @@ export class App {
       vmusicPrev: () => step('musicVolume', -1, 0, 1, 0.1), vmusicNext: () => step('musicVolume', 1, 0, 1, 0.1),
       vsfxPrev: () => step('sfxVolume', -1, 0, 1, 0.1), vsfxNext: () => step('sfxVolume', 1, 0, 1, 0.1),
       vcrowdPrev: () => step('crowdVolume', -1, 0, 1, 0.1), vcrowdNext: () => step('crowdVolume', 1, 0, 1, 0.1),
+      vballPrev: () => step('ballVolume', -1, 0, 1, 0.1), vballNext: () => step('ballVolume', 1, 0, 1, 0.1),
+      vrefPrev: () => step('refereeVolume', -1, 0, 1, 0.1), vrefNext: () => step('refereeVolume', 1, 0, 1, 0.1),
       diffPrev: () => { st.difficulty = cycleArr(DIFFS, st.difficulty, -1); apply(); },
       diffNext: () => { st.difficulty = cycleArr(DIFFS, st.difficulty, 1); apply(); },
       halfPrev: () => { st.halfMinutes = cycleArr(HALF_OPTIONS, st.halfMinutes, -1); apply(); },

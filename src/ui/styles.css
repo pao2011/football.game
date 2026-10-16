@@ -491,3 +491,7 @@ body.touch .lower-third { bottom: 230px; }
 .remote-pause span { color: #cfd8ee; font-size: 16px; }
 .remote-pause .rp-sec { color: #19e68c; font-weight: 800; }
 .menu-item.apk-item { border-color: rgba(61,220,132,0.5); } .menu-item.apk-item small { color: #3ddc84; }
+.mute-toast { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 60; background: rgba(10,14,24,0.92); border: 1px solid rgba(255,255,255,0.15); padding: 8px 16px; border-radius: 8px; font-size: 16px; font-weight: 700; pointer-events: none; animation: screenIn 0.2s; }
+.mute-toast small { color: var(--muted); font-weight: 400; }
+.adv-badge { position: absolute; top: 66px; left: 50%; transform: translateX(-50%); font-family: var(--display); font-size: 14px; letter-spacing: 0.16em; background: rgba(25,230,140,0.92); color: #06281a; padding: 4px 14px; border-radius: 10px; font-weight: 800; animation: screenIn 0.2s; }
+body.touch .adv-badge { top: 46px; }

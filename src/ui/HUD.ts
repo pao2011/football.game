@@ -43,6 +43,10 @@ export class HUD {
   private intro: HTMLElement | null = null;
   private lastHalf = 1;
 
+  private advBadge: HTMLElement;
+  /** Hasta cuándo se muestra el aviso de ventaja (por eventos: también funciona en el invitado online). */
+  private advUntil = -1;
+
   constructor(parent: HTMLElement, private match: Match, private ctrl: HumanController | null, private bindings: Bindings) {
     const r = document.createElement('div');
     r.className = 'hud';
@@ -56,6 +60,7 @@ export class HUD {
         <div class="sb-added hidden">+1</div>
       </div>
       <div class="mentality hidden"></div>
+      <div class="adv-badge hidden">VENTAJA ▶</div>
       <div class="banner hidden"></div>
       <div class="toast hidden"></div>
       <div class="player-tag hidden"><div class="nm"></div><div class="meta"></div><div class="stamina"><div></div></div></div>
@@ -67,6 +72,7 @@ export class HUD {
       <div class="fps hidden"></div>`;
     parent.appendChild(r);
     this.root = r;
+    this.advBadge = r.querySelector('.adv-badge') as HTMLElement;
     const q = (s: string) => r.querySelector(s) as HTMLElement;
     this.sbHome = q('.sb-team .h');
     this.sbAway = q('.sb-team .a');
@@ -176,6 +182,12 @@ export class HUD {
         if (e.kind === 'shootout') this.showToast(`✋ ¡Atajado! (${e.text ?? ''})`, '#2fb4ff', 1.8);
         else if (e.kind === 'shot') this.showToast('¡Atajada!', '#2fb4ff', 1.4);
         break;
+      case 'advantage':
+        this.advUntil = this.match.time + 2.5;
+        break;
+      case 'whistle':
+        this.advUntil = -1;
+        break;
       case 'foul':
         this.showToast(`Falta de ${teamName(e.team)}`, '#ffcf3f');
         break;
@@ -233,6 +245,7 @@ export class HUD {
 
   update(dt: number) {
     const m = this.match;
+    this.show(this.advBadge, m.time < this.advUntil);
     // mentalidad (cruceta ← → del mando)
     const ht = m.teams.find((t) => t.human);
     if (ht) {

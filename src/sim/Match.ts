@@ -140,6 +140,11 @@ export class Match {
   readonly referee = new Referee();
   /** La reanudación espera a que el árbitro termine de amonestar. */
   private restartHoldUntil = 0;
+  /**
+   * Ley de la ventaja en curso: el árbitro deja seguir porque el equipo que recibió la falta conserva el balón.
+   * Si lo pierde antes de `until`, se vuelve atrás y se pita el tiro libre; si no, se amonesta sin parar el juego.
+   */
+  advantage: { team: 0 | 1; until: number; spot: Vector3; offender: Player; card: 'yellow' | null; warn: boolean } | null = null;
   /** Duración (s) de la fase de repetición: el clip completo a cámara lenta. */
   replayLength = 6.5;
   finished = false;
@@ -350,6 +355,7 @@ export class Match {
     if (ev.net) this.emit({ type: 'net', x: this.ball.pos.x, z: this.ball.pos.z, power: Math.min(1, this.ball.speed / 10) });
     this.gkSaves();
     this.acquireBall();
+    this.updateAdvantage();
     if (this.phase !== 'play') return; // una regla pudo detener el juego (offside...)
     this.checkBallOut();
     if (this.phase !== 'play') return;
@@ -624,6 +630,12 @@ export class Match {
     const out = 0.45 + Math.min(1, Math.hypot(p.vel.x, p.vel.z) * 0.12);
     // el pecho lo amortigua hacia abajo; el muslo lo levanta apenas
     b.vel.set(f.x * out + p.vel.x * 0.7 + Math.cos(ang) * err, chest ? -0.4 : 0.6, f.z * out + p.vel.z * 0.7 + Math.sin(ang) * err);
+    // control orientado (RB + stick derecho antes de recibir): el balón cae hacia ese lado
+    if (p.firstTouchUntil > this.time) {
+      b.vel.x = p.firstTouchDir.x * 2.6 + p.vel.x * 0.4;
+      b.vel.z = p.firstTouchDir.z * 2.6 + p.vel.z * 0.4;
+      p.firstTouchUntil = 0;
+    }
     b.spin.set(0, 0, 0);
     this.owner = p;
     this.debug.controls++;
@@ -732,7 +744,7 @@ export class Match {
         const lift = d.y; // altura de la estirada (m) codificada en dir.y
         ax = gk.pos.x; az = gk.pos.z; ay = 0.3 + lift * 0.4;
         const hl = Math.hypot(d.x, d.z) || 1;
-        bx = gk.pos.x + (d.x / hl) * 1.25; bz = gk.pos.z + (d.z / hl) * 1.25; by = 0.4 + lift;
+        bx = gk.pos.x + (d.x / hl) * 1.1; bz = gk.pos.z + (d.z / hl) * 1.1; by = 0.4 + lift;
         radius = 0.4;
         // la estirada solo es eficaz en su primera parte
         if (gk.action.time > 0.75) continue;
@@ -1215,6 +1227,17 @@ export class Match {
       else warn = true;
     }
     this.emit({ type: 'foul', team: offender.team, playerId: offender.id, x: victim.pos.x, z: victim.pos.z });
+    // Ley de la ventaja: fuera del área, sin roja, y con el balón para un compañero libre en campo prometedor
+    if (!inBox && card !== 'red' && this.advantageLikely(victim)) {
+      this.advantage = {
+        team: victim.team as 0 | 1, until: this.time + 2.5, offender, card, warn,
+        spot: new Vector3(clamp(victim.pos.x, -HALF_LENGTH + 1, HALF_LENGTH - 1), BALL_RADIUS, clamp(victim.pos.z, -HALF_WIDTH + 1, HALF_WIDTH - 1)),
+      };
+      const g = vTeam.attackGoal;
+      this.referee.signal('point', this.time, this.referee.pos.clone(), new Vector3(this.referee.pos.x + Math.sign(g.x - this.referee.pos.x) * 10, 0, this.referee.pos.z), 1.2);
+      this.emit({ type: 'advantage', team: victim.team, playerId: victim.id, x: victim.pos.x, z: victim.pos.z });
+      return;
+    }
     this.emit({ type: 'whistle', kind: 'short' });
     this.addedSeconds += 20;
     const refAt = offender.pos.clone();
@@ -1240,6 +1263,52 @@ export class Match {
     } else {
       const spot = new Vector3(clamp(victim.pos.x, -HALF_LENGTH + 1, HALF_LENGTH - 1), BALL_RADIUS, clamp(victim.pos.z, -HALF_WIDTH + 1, HALF_WIDTH - 1));
       this.stopPlay('freekick', victim.team as 0 | 1, spot);
+    }
+  }
+
+  /** ¿Conviene dejar seguir? El balón queda para un compañero de la víctima, libre y en campo prometedor. */
+  private advantageLikely(victim: Player): boolean {
+    const team = this.teams[victim.team];
+    const b = this.ball.pos;
+    if (team.u(b) < -15) return false; // en su propio campo, mejor el tiro libre
+    let mate = Infinity;
+    for (const q of team.active) if (q !== victim && !q.isGK && q.action.kind !== 'fallen') mate = Math.min(mate, dist2D(q.pos, b));
+    let opp = Infinity;
+    for (const o of this.otherTeam(victim.team as 0 | 1).active) if (o.action.kind !== 'fallen' && o.action.kind !== 'slide') opp = Math.min(opp, dist2D(o.pos, b));
+    // el propio infractor suele estar encima del balón: no cuenta si acaba de hacer la entrada
+    return mate < 7 && mate + 2 < opp;
+  }
+
+  /** Sigue la ventaja: se vuelve atrás si el equipo la pierde enseguida; si no, amonesta sin parar el juego. */
+  private updateAdvantage() {
+    const a = this.advantage;
+    if (!a) return;
+    if (this.phase !== 'play') {
+      this.advantage = null;
+      this.applyAdvantageSanction(a);
+      return;
+    }
+    const lostIt = (this.owner && this.owner.team !== a.team) || (this.gkHolding && this.gkHolding.team !== a.team);
+    if (lostIt) {
+      // no hubo ventaja: falta en el lugar original
+      this.advantage = null;
+      this.emit({ type: 'whistle', kind: 'short' });
+      this.addedSeconds += 20;
+      this.applyAdvantageSanction(a);
+      this.stopPlay('freekick', a.team, a.spot);
+      return;
+    }
+    if (this.time >= a.until) {
+      this.advantage = null;
+      this.applyAdvantageSanction(a);
+    }
+  }
+
+  private applyAdvantageSanction(a: NonNullable<Match['advantage']>) {
+    if (a.card && !a.offender.sentOff) this.giveCard(a.offender, a.card);
+    else if (a.warn) {
+      a.offender.warnings++;
+      this.emit({ type: 'warning', team: a.offender.team, playerId: a.offender.id, text: a.offender.data.name });
     }
   }
 

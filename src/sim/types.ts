@@ -60,6 +60,7 @@ export type MatchEventType =
   | 'goal'
   | 'save'
   | 'foul'
+  | 'advantage' // el árbitro da la ley de la ventaja (no para el juego)
   | 'card'
   | 'offside'
   | 'out'

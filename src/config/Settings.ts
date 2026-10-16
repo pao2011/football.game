@@ -23,6 +23,12 @@ export interface GameSettings {
   musicVolume: number;
   sfxVolume: number;
   crowdVolume: number;
+  /** Volumen de los sonidos del balón (dentro de los efectos). */
+  ballVolume: number;
+  /** Volumen del silbato del árbitro (dentro de los efectos). */
+  refereeVolume: number;
+  /** Sonido silenciado (tecla M o botón en la pausa); no cambia los volúmenes guardados. */
+  muted: boolean;
   /** Vibración del mando (gamepad) y del móvil en golpeos, entradas y goles. */
   vibration: boolean;
   // Controles
@@ -65,7 +71,10 @@ export const DEFAULT_SETTINGS: GameSettings = {
   musicVolume: 0.5,
   sfxVolume: 0.9,
   crowdVolume: 0.7,
+  ballVolume: 1,
+  refereeVolume: 1,
   vibration: true,
+  muted: false,
   bindings: structuredClone(FIFA_CLASSIC),
   preset: 'fifa',
   autoSwitch: true,

@@ -52,7 +52,7 @@ export function requestDive(m: Match, gk: Player, dz: number, y: number, t: numb
   const team = m.teams[gk.team];
   const dirZ = Math.sign(dz) || 1;
   const lift = clamp(y - 0.5, 0, 1.6);
-  const speed = clamp(Math.abs(dz) / Math.max(t, 0.25) + 1.2, 2.5, 6.5);
+  const speed = clamp(Math.abs(dz) / Math.max(t, 0.25) + 1.0, 2.5, 4.6);
   // izquierda del arquero (mirando hacia el campo): con attackDir +1 mira a +x → izquierda = -z
   const facingX = team.attackDir;
   const leftZ = -facingX; // z del lado izquierdo del arquero
@@ -117,7 +117,7 @@ export function updateGoalkeeperAI(m: Match, gk: Player, dt: number) {
     if (onTarget) {
       if (s.threatSince < 0) {
         s.threatSince = m.time;
-        const reaction = (m.teams[gk.team].human ? 0.17 : m.diff.gkReaction) * (1.45 - gk.data.attrs.goalkeeping / 100);
+        const reaction = ((m.teams[gk.team].human ? 0.17 : m.diff.gkReaction) + 0.1) * (1.45 - gk.data.attrs.goalkeeping / 100);
         s.reactAt = m.time + reaction;
       }
       if (m.time >= s.reactAt) {

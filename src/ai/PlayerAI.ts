@@ -463,7 +463,7 @@ function decide(m: Match, p: Player, team: Team, opponents: Player[]) {
   const sq = shotQuality(m, team, p.pos, opponents);
   if (sq > 0.05) {
     options.push({
-      score: sq * 3.2 * (0.6 + p.data.attrs.shooting / 250) + (pu > HALF_LENGTH - 16 ? 0.45 : 0) + 0.15,
+      score: sq * 3.7 * (0.6 + p.data.attrs.shooting / 250) + (pu > HALF_LENGTH - 16 ? 0.6 : 0) + 0.15,
       label: 'shoot',
       run: () => aiShoot(m, p, team, err),
     });

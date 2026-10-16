@@ -156,12 +156,11 @@ export function updateTeamTactics(m: Match, team: Team) {
     if (best) {
       best.duty = 'chase';
       best.tacticalTarget.copy(interceptCache.get(best)!.point);
-      // si la pelota va hacia un compañero (pase), él es el receptor y va a buscarla (salvo que otro
-      // compañero llegue mucho antes y el receptor no llegue antes que el rival)
+      // si la pelota va hacia un compañero (pase), él es el receptor y va a buscarla
       const rec = m.intendedReceiver;
       if (rec && rec.team === team.index && rec !== best && !rec.isGK) {
         const ic = interceptCache.get(rec)!;
-        if (ic.t < bestT + 1.2 || ic.t < oppBest + 0.2) {
+        if (ic.t < bestT + 0.6) {
           best.duty = 'shape';
           shapeTarget(m, team, best, true, best.tacticalTarget);
           rec.duty = 'receive';

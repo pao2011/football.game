@@ -296,7 +296,7 @@ export class MatchRunner {
     } else {
       this.hud.powerAnchor = null;
     }
-    this.audio.update(this.view.excitement);
+    this.audio.update(this.view.excitement, this.view.camera);
     this.hud.update(dt);
     if (this.touch && team) {
       const pt = m.possessionTeam;
