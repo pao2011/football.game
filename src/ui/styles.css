@@ -495,3 +495,4 @@ body.touch .lower-third { bottom: 230px; }
 .mute-toast small { color: var(--muted); font-weight: 400; }
 .adv-badge { position: absolute; top: 66px; left: 50%; transform: translateX(-50%); font-family: var(--display); font-size: 14px; letter-spacing: 0.16em; background: rgba(25,230,140,0.92); color: #06281a; padding: 4px 14px; border-radius: 10px; font-weight: 800; animation: screenIn 0.2s; }
 body.touch .adv-badge { top: 46px; }
+.sb-weather { margin-left: 8px; font-size: 16px; line-height: 1; align-self: center; }

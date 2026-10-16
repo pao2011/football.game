@@ -17,6 +17,7 @@ import { SKILL_KINDS, SKILL_NAMES, type MatchEvent, type SkillKind } from './typ
 import { evaluateOffsidePositions, isInPenaltyArea } from './Rules';
 import { placeForRestart, type RestartType } from './SetPieces';
 import { Referee } from './Referee';
+import { weatherEnv, type Weather } from './Weather';
 import { AERIAL_ERROR, AERIAL_NAMES, AERIAL_TIMING, aerialInReach, aerialShotVelocity } from './Aerial';
 
 export type MatchPhase = 'kickoff' | 'play' | 'stoppage' | 'goal' | 'replay' | 'halftime' | 'fulltime' | 'shootout';
@@ -41,6 +42,8 @@ export interface MatchConfig {
   awayLineup?: string[];
   /** Modo entrenamiento. */
   training?: 'free' | 'penalties' | 'freekicks';
+  /** Clima (por defecto despejado). */
+  weather?: Weather;
 }
 
 export interface Restart {
@@ -101,6 +104,8 @@ export class Match {
   readonly ball = new Ball();
   readonly teams: [Team, Team];
   readonly rng: Rng;
+  /** Clima del partido. */
+  readonly weather: Weather;
   readonly diff: DifficultyParams;
   /** Tiempo de simulación (s reales). */
   time = 0;
@@ -183,6 +188,8 @@ export class Match {
     }
     this.rng = new Rng(config.seed ?? Math.floor(Math.random() * 1e9));
     this.diff = DIFFICULTY[config.difficulty];
+    this.weather = config.weather ?? 'clear';
+    this.ball.env = weatherEnv(this.weather, config.seed ?? Math.floor(this.rng.next() * 1e6));
     this.teams = [
       new Team(0, config.home, config.homeKit, config.humanTeam === 0, config.homeFormation, config.homeLineup),
       new Team(1, config.away, config.awayKit, config.humanTeam === 1, config.awayFormation, config.awayLineup),
@@ -601,8 +608,8 @@ export class Match {
       return;
     }
 
-    // Control: el balón se amortigua; la calidad del primer toque depende del atributo
-    const err = relSpeed * (1 - ctrl) * 0.22;
+    // Control: el balón se amortigua; la calidad del primer toque depende del atributo (peor con el césped mojado o nevado)
+    const err = relSpeed * (1 - ctrl) * 0.22 * (this.weather === 'rain' ? 1.3 : this.weather === 'snow' ? 1.2 : 1);
     const ang = this.rng.next() * Math.PI * 2;
     b.vel.set(p.vel.x * 0.85 + Math.cos(ang) * err, Math.min(b.vel.y, 0) * 0.2, p.vel.z * 0.85 + Math.sin(ang) * err);
     // primer toque orientado (RB + stick derecho antes de recibir): el control sale hacia ese lado

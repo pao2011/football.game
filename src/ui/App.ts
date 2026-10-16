@@ -5,6 +5,7 @@ import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from 
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
 import { STADIUMS, getStadium } from '../data/stadiums';
 import { TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
+import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
 import type { Difficulty, FormationId, PlayerData, TeamData } from '../data/types';
 import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
 import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, type Action } from '../input/Input';
@@ -49,6 +50,8 @@ const TIPS = [
   'En móvil, un toque rápido en PASE o TIRO golpea con potencia automática y elige al mejor compañero o la mejor esquina del arco.',
 ];
 
+const WEATHER_CYCLE: (Weather | 'random')[] = ['clear', 'rain', 'snow', 'wind', 'random'];
+
 interface QuickSetup {
   home: number;
   away: number;
@@ -59,6 +62,8 @@ interface QuickSetup {
   formation: FormationId | null;
   /** Equipación del visitante: automática (la que más contrasta), titular o suplente. */
   awayKit?: 'auto' | 'home' | 'away';
+  /** Clima del partido rápido. */
+  weather?: Weather | 'random';
 }
 
 type MatchContext =
@@ -318,6 +323,7 @@ export class App {
           ${this.stepper('Dificultad', DIFFICULTY_LABELS[DIFFS[q.difficulty]], 'diff')}
           ${this.stepper('Controlas a', sideLabel, 'side')}
           ${this.stepper('Tu formación', q.formation ?? 'Por defecto del equipo', 'form')}
+          ${this.stepper('Clima', q.weather === 'random' ? 'Aleatorio' : WEATHER_NAMES[q.weather ?? 'clear'], 'wthr')}
           ${this.stepper('Equipación del visitante', ({ auto: 'Automática (la que más contrasta)', home: 'Titular', away: 'Suplente' } as const)[q.awayKit ?? 'auto'], 'akit')}
         </div>
       </div>
@@ -341,6 +347,8 @@ export class App {
       sidePrev: () => { q.side = (q.side === 0 ? -1 : q.side === 1 ? 0 : 1); s.refresh(render()); },
       sideNext: () => { q.side = (q.side === 0 ? 1 : q.side === 1 ? -1 : 0); s.refresh(render()); },
       formPrev: () => { const i = q.formation ? FORMATION_IDS.indexOf(q.formation) : 0; q.formation = i <= 0 ? null : FORMATION_IDS[i - 1]; s.refresh(render()); },
+      wthrPrev: () => { q.weather = WEATHER_CYCLE[(WEATHER_CYCLE.indexOf(q.weather ?? 'clear') + WEATHER_CYCLE.length - 1) % WEATHER_CYCLE.length]; s.refresh(render()); },
+      wthrNext: () => { q.weather = WEATHER_CYCLE[(WEATHER_CYCLE.indexOf(q.weather ?? 'clear') + 1) % WEATHER_CYCLE.length]; s.refresh(render()); },
       akitPrev: () => { q.awayKit = ({ auto: 'away', home: 'auto', away: 'home' } as const)[q.awayKit ?? 'auto']; s.refresh(render()); },
       akitNext: () => { q.awayKit = ({ auto: 'home', home: 'away', away: 'auto' } as const)[q.awayKit ?? 'auto']; s.refresh(render()); },
       formNext: () => { const i = q.formation ? FORMATION_IDS.indexOf(q.formation) : -1; q.formation = FORMATION_IDS[(i + 1) % FORMATION_IDS.length]; s.refresh(render()); },
@@ -353,6 +361,7 @@ export class App {
         saveSettings(this.settings);
         const cfg: MatchConfig = {
           home, away, homeKit: home.home, awayKit: this.quickAwayKit(home, away), humanTeam: q.side,
+          weather: q.weather === 'random' ? randomWeather(Math.random()) : q.weather ?? 'clear',
           halfLengthSec: HALF_OPTIONS[q.half] * 60, difficulty: DIFFS[q.difficulty], extraTime: false, penalties: false,
           homeFormation: q.side === 0 && q.formation ? q.formation : undefined,
           awayFormation: q.side === 1 && q.formation ? q.formation : undefined,
@@ -962,6 +971,8 @@ export class App {
       humanTeam: st.role === 'host' ? 0 : 1,
       halfLengthSec: Math.max(2, Math.min(10, st.half)) * 60,
       difficulty: 'pro', extraTime: false, penalties: false, seed: st.seed,
+      // el mismo clima para los dos (sale de la semilla del partido)
+      weather: randomWeather(((st.seed * 7919) % 1000) / 1000),
     };
     const ctx: MatchContext = { mode: 'online', start: st };
     const opp = st.role === 'host' ? st.away : st.home;
@@ -1061,7 +1072,7 @@ export class App {
         this.playMatch({
           home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: side,
           halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty,
-          extraTime: next.knockout, penalties: next.knockout,
+          extraTime: next.knockout, penalties: next.knockout, weather: randomWeather(Math.random()),
         }, this.stadiumForCtx({ mode: 'tournament', fixture: next }), { mode: 'tournament', fixture: next });
       },
     }, () => this.mainMenu());
@@ -1127,6 +1138,7 @@ export class App {
           halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty, extraTime: false, penalties: false,
           homeFormation: side === 0 ? st.formation : undefined, awayFormation: side === 1 ? st.formation : undefined,
           homeLineup: side === 0 ? st.lineup : undefined, awayLineup: side === 1 ? st.lineup : undefined,
+          weather: randomWeather(Math.random()),
         }, this.stadiumForCtx({ mode: 'career', fixture: next }), { mode: 'career', fixture: next });
       },
     }, () => this.mainMenu());

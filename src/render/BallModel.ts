@@ -73,6 +73,11 @@ export class BallModel {
     this.shadow.renderOrder = 1;
   }
 
+  /** Tiñe el balón (p. ej. naranja en la nieve). */
+  setColor(color: string) {
+    (this.mesh.material as THREE.MeshStandardMaterial).color.set(color);
+  }
+
   update(pos: { x: number; y: number; z: number }, vel: { x: number; y: number; z: number }, spinY: number, dt: number) {
     this.mesh.position.set(pos.x, pos.y, pos.z);
     // rodadura / giro

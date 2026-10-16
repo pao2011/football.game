@@ -20,10 +20,12 @@ export class MatchAudio {
   start() {
     this.audio.stopMenuMusic();
     this.audio.startAmbience();
+    if (this.match.weather !== 'clear') this.audio.startWeather(this.match.weather);
   }
 
   stop() {
     this.audio.stopRoll();
+    this.audio.stopWeather();
     this.audio.clearListener();
     this.audio.stopAmbience();
   }

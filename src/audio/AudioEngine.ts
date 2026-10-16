@@ -177,6 +177,7 @@ export class AudioEngine {
   private voices: Record<BusKind, Voice[]> = { sfx: [], crowd: [] };
 
   private amb: Ambience | null = null;
+  private weatherNodes: { out: GainNode; sources: AudioScheduledSourceNode[] } | null = null;
   private roll: { src: AudioBufferSourceNode; bp: BiquadFilterNode; gain: GainNode; pan: StereoPannerNode } | null = null;
   private excitement = 0;
 
@@ -711,6 +712,72 @@ export class AudioEngine {
       this.roll.gain.gain.setTargetAtTime(target, t, 0.06);
       this.roll.pan.pan.setTargetAtTime(sp.pan, t, 0.1);
       this.roll.bp.frequency.setTargetAtTime(350 + 900 * s, t, 0.08);
+    });
+  }
+
+  /**
+   * Ambiente del clima: lluvia (siseo continuo con gotas), viento (ráfagas graves) o nieve (viento suave).
+   * Va por el bus del público (es ambiente).
+   */
+  startWeather(kind: 'rain' | 'snow' | 'wind'): void {
+    this.run((ctx, g) => {
+      if (this.weatherNodes) return;
+      const t = ctx.currentTime;
+      const out = ctx.createGain();
+      out.gain.setValueAtTime(FLOOR, t);
+      out.gain.linearRampToValueAtTime(1, t + 2.5);
+      out.connect(g.crowd);
+      const sources: AudioScheduledSourceNode[] = [];
+      if (kind === 'rain') {
+        const n = this.noise('white', t, -1);
+        sources.push(n);
+        const hp = this.filter('highpass', 1800, 0.5);
+        const lp = this.filter('lowpass', 9000, 0.5);
+        const gg = ctx.createGain();
+        gg.gain.value = 0.11;
+        n.connect(hp).connect(lp).connect(gg).connect(out);
+        // gotas gruesas: crepitar más grave
+        const n2 = this.noise('pink', t, -1);
+        sources.push(n2);
+        const bp = this.filter('bandpass', 900, 0.7);
+        const g2 = ctx.createGain();
+        g2.gain.value = 0.06;
+        n2.connect(bp).connect(g2).connect(out);
+      }
+      // viento: ruido grave con ráfagas lentas (en la lluvia y la nieve, más suave)
+      const w = this.noise('pink', t, -1);
+      sources.push(w);
+      const wb = this.filter('bandpass', kind === 'wind' ? 420 : 320, 0.9);
+      const wg = ctx.createGain();
+      const base = kind === 'wind' ? 0.16 : kind === 'snow' ? 0.07 : 0.04;
+      wg.gain.value = base;
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = kind === 'wind' ? 0.13 : 0.08;
+      const lg = ctx.createGain();
+      lg.gain.value = base * 0.8;
+      lfo.connect(lg).connect(wg.gain);
+      const lfo2 = ctx.createOscillator();
+      lfo2.frequency.value = 0.07;
+      const lg2 = ctx.createGain();
+      lg2.gain.value = 180;
+      lfo2.connect(lg2).connect(wb.frequency);
+      lfo.start(t);
+      lfo2.start(t);
+      sources.push(lfo, lfo2);
+      w.connect(wb).connect(wg).connect(out);
+      this.weatherNodes = { out, sources };
+    });
+  }
+
+  stopWeather(): void {
+    const w = this.weatherNodes;
+    if (!w) return;
+    this.weatherNodes = null;
+    this.safe(() => {
+      const t = this.ctx ? this.ctx.currentTime : 0;
+      w.out.gain.cancelScheduledValues(t);
+      w.out.gain.setTargetAtTime(0, t, 0.3);
+      for (const s of w.sources) this.tryStop(s, t + 1.5);
     });
   }
 

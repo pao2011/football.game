@@ -1,3 +1,4 @@
+import { WEATHER_ICONS, WEATHER_NAMES } from '../sim/Weather';
 import { esc } from './dom';
 import { HALF_LENGTH, HALF_WIDTH } from '../config/constants';
 import type { HumanController } from '../control/HumanController';
@@ -56,7 +57,7 @@ export class HUD {
         <div class="sb-team"><span class="chip" style="background:${h.kit.shirt}"></span><span class="h">${h.data.short}</span></div>
         <div class="sb-score">0 - 0</div>
         <div class="sb-team"><span class="a">${a.data.short}</span><span class="chip" style="background:${a.kit.shirt}"></span></div>
-        <div class="sb-clock">00:00</div>
+        <div class="sb-clock">00:00</div>${match.weather !== 'clear' ? `<div class="sb-weather" title="${WEATHER_NAMES[match.weather]}">${WEATHER_ICONS[match.weather]}</div>` : ''}
         <div class="sb-added hidden">+1</div>
       </div>
       <div class="mentality hidden"></div>
