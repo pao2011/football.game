@@ -79,10 +79,11 @@ export function updateOutfieldAI(m: Match, p: Player, dt: number) {
       p.sprinting = true;
       const d = moveTo(p, p.tacticalTarget, 1, 0.25);
       if (d < 0.6) {
-        // esperar el balón de cara
+        // ya en el punto: sale al encuentro del balón (no lo espera quieto); más despacio si viene muy fuerte
         faceBall(m, p);
         _v.set(ball.x - p.pos.x, 0, ball.z - p.pos.z);
-        if (_v.length() < 4) p.desiredVel.copy(_v.normalize().multiplyScalar(2));
+        const bl = _v.length();
+        if (bl < 15 && !m.owner) p.desiredVel.copy(_v.normalize().multiplyScalar(receiveApproach(m, p, bl)));
       }
       break;
     }
@@ -261,6 +262,15 @@ function chestVolley(m: Match, p: Player, team: Team): boolean {
     return true;
   }
   return m.requestKick(p, aerialShotDecision(m, p, team, 'volley'));
+}
+
+/** Velocidad (m/s) con la que el receptor va hacia el balón que le llega: lo bastante para ganar la posición sin
+ * pasarse del límite de control (un balón muy fuerte se amortigua mejor sin correr contra él). */
+export function receiveApproach(m: Match, p: Player, dist: number): number {
+  const ctrl = p.data.attrs.control / 100;
+  const limit = 9 + ctrl * 13 - 1.5; // margen respecto al límite de control de touchBall
+  const room = limit - m.ball.groundSpeed;
+  return clamp(Math.min(room, 1 + dist * 0.5), 0.8, 4.5);
 }
 
 /** Sorteo de remate acrobático, uno por jugador y por balón (para que no se repita cada fotograma). */

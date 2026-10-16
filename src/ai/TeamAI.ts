@@ -140,7 +140,11 @@ export function updateTeamTactics(m: Match, team: Team) {
     // El más rápido en llegar va a por el balón; si el rival llega antes, un segundo jugador cubre.
     let best: Player | null = null;
     let bestT = Infinity;
+    // el que acaba de pasar no persigue su propio pase
+    const lt = m.lastTouch;
+    const passer = lt && lt.deliberate && lt.team === team.index && m.intendedReceiver && m.intendedReceiver !== lt.player && m.time - lt.time < 3 ? lt.player : null;
     for (const p of players) {
+      if (p === passer) continue;
       const ic = interceptCache.get(p)!;
       if (ic.t < bestT) { bestT = ic.t; best = p; }
     }
@@ -152,11 +156,12 @@ export function updateTeamTactics(m: Match, team: Team) {
     if (best) {
       best.duty = 'chase';
       best.tacticalTarget.copy(interceptCache.get(best)!.point);
-      // si la pelota va hacia un compañero (pase), él es el receptor
+      // si la pelota va hacia un compañero (pase), él es el receptor y va a buscarla (salvo que otro
+      // compañero llegue mucho antes y el receptor no llegue antes que el rival)
       const rec = m.intendedReceiver;
       if (rec && rec.team === team.index && rec !== best && !rec.isGK) {
         const ic = interceptCache.get(rec)!;
-        if (ic.t < bestT + 0.6) {
+        if (ic.t < bestT + 1.2 || ic.t < oppBest + 0.2) {
           best.duty = 'shape';
           shapeTarget(m, team, best, true, best.tacticalTarget);
           rec.duty = 'receive';

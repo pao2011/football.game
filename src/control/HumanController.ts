@@ -13,6 +13,7 @@ import { clamp, dist2D } from '../util/math';
 import { offsideLineU } from '../sim/Rules';
 import { solveCurvedKick } from '../sim/Kicks';
 import { AERIAL_TIMING, angleTo, ballApproach, chooseAerial } from '../sim/Aerial';
+import { receiveApproach } from '../ai/PlayerAI';
 import type { Restart } from '../sim/Match';
 
 /** Orientación de la cámara para convertir el stick (pantalla) en direcciones del mundo. */
@@ -414,8 +415,13 @@ export class HumanController implements TeamController {
     const dz = ic.point.z - p.pos.z;
     const d = Math.hypot(dx, dz);
     if (d < 0.4) {
-      p.desiredVel.set(0, 0, 0);
-      p.desiredFacing = Math.atan2(m.ball.pos.x - p.pos.x, m.ball.pos.z - p.pos.z);
+      // en el punto de recepción: sale al encuentro del balón en vez de esperarlo quieto
+      const bx = m.ball.pos.x - p.pos.x;
+      const bz = m.ball.pos.z - p.pos.z;
+      const bl = Math.hypot(bx, bz);
+      const sp = air || bl > 15 || bl < 1e-3 ? 0 : receiveApproach(m, p, bl);
+      p.desiredVel.set((bx / Math.max(bl, 1e-3)) * sp, 0, (bz / Math.max(bl, 1e-3)) * sp);
+      p.desiredFacing = Math.atan2(bx, bz);
       return true;
     }
     const sp = Math.min(9, d * 3);

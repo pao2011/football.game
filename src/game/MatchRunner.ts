@@ -455,7 +455,7 @@ export class MatchRunner {
         this.remoteController.settings = {
           autoSwitch: c.autoSwitch !== false,
           passAssist: Math.max(0, Math.min(1, Number(c.passAssist ?? 1))),
-          powerBarTime: Math.max(0.5, Math.min(2, Number(c.powerBarTime ?? 1))),
+          powerBarTime: Math.max(0.3, Math.min(2, Number(c.powerBarTime ?? 0.6))),
           showAimAssist: true,
           assist: !!c.assist,
         };

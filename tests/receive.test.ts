@@ -49,10 +49,10 @@ function scene(sx: number, sy: number, human: boolean) {
 }
 
 describe('Los jugadores van al balón cuando se les pasa', () => {
-  it('la IA sale al encuentro del pase', () => {
+  it('la IA sale al encuentro del pase (no lo espera quieta)', () => {
     const r = scene(0, 0, false);
     expect(r.got).toBe(true);
-    expect(r.cameToBall).toBeGreaterThan(2.5);
+    expect(r.cameToBall).toBeGreaterThan(4);
   });
 
   for (const [name, sx, sy] of [['sin stick', 0, 0], ['con el stick hacia el pase', 1, 0], ['con el stick hacia un costado', 0, 1], ['con el stick hacia atrás', -1, 0]] as const) {

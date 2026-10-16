@@ -32,6 +32,7 @@ export interface GameSettings {
   passAssist: number;
   /** Asistencia de pase/tiro/defensa: automática (solo en pantallas táctiles), siempre o desactivada. */
   assist: 'auto' | 'on' | 'off';
+  /** Segundos que tarda en llenarse la barra de potencia. */
   powerBarTime: number;
   deadzone: number;
   sensitivity: number;
@@ -44,6 +45,8 @@ export interface GameSettings {
   // Partido por defecto
   halfMinutes: number;
   difficulty: Difficulty;
+  /** Versión del guardado (para actualizar valores por defecto antiguos). */
+  version?: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -68,7 +71,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   autoSwitch: true,
   passAssist: 1,
   assist: 'auto',
-  powerBarTime: 1,
+  powerBarTime: 0.6,
   deadzone: 0.18,
   sensitivity: 1,
   autoSubs: false,
@@ -96,6 +99,11 @@ export function loadSettings(): GameSettings {
     if (!saved[k]) presetDefaults[k] = presetDefaults[k].filter((code) => !used.has(code));
   }
   merged.bindings = { ...presetDefaults, ...saved };
+  // v2: la barra de potencia se llena más rápido (antes 1 s por defecto)
+  if ((merged.version ?? 1) < 2) {
+    if (merged.powerBarTime >= 1) merged.powerBarTime = DEFAULT_SETTINGS.powerBarTime;
+    merged.version = 2;
+  }
   return merged;
 }
 

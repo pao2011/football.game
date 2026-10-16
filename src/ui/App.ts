@@ -1272,7 +1272,7 @@ export class App {
       assistAllNext: () => { st.assist = cycleArr(['auto', 'on', 'off'] as const, st.assist, 1); apply(); },
       assistPrev: () => { st.passAssist = st.passAssist >= 0.5 ? 0 : 1; apply(); },
       assistNext: () => { st.passAssist = st.passAssist >= 0.5 ? 0 : 1; apply(); },
-      pbarPrev: () => step('powerBarTime', -1, 0.6, 1.6, 0.1), pbarNext: () => step('powerBarTime', 1, 0.6, 1.6, 0.1),
+      pbarPrev: () => step('powerBarTime', -1, 0.3, 1.6, 0.1), pbarNext: () => step('powerBarTime', 1, 0.3, 1.6, 0.1),
       dzPrev: () => step('deadzone', -1, 0.05, 0.4, 0.05), dzNext: () => step('deadzone', 1, 0.05, 0.4, 0.05),
       sensPrev: () => step('sensitivity', -1, 0.5, 1.5, 0.1), sensNext: () => step('sensitivity', 1, 0.5, 1.5, 0.1),
       reset: () => { const b = st.bindings; Object.assign(st, structuredClone(DEFAULT_SETTINGS)); st.bindings = b; apply(); },
