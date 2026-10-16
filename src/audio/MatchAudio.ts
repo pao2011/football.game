@@ -84,7 +84,7 @@ export class MatchAudio {
         break;
       case 'skill':
         // regate que supera al rival, o chilena / tijera: el público se levanta
-        if (e.kind === 'beat' || e.kind === 'bicycle' || e.kind === 'scissor') a.ooh();
+        if (e.kind === 'beat' || e.kind === 'bicycle' || e.kind === 'scissor' || e.kind === 'scorpion') a.ooh();
         break;
       case 'nearMiss':
         a.ooh();

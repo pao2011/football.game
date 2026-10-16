@@ -127,9 +127,10 @@ describe('Remates acrobáticos', () => {
     ['chilena (de espaldas al arco)', -Math.PI / 2, 1.65, 'bicycle'],
     ['tijera (de lado)', 0, 1.35, 'scissor'],
     ['volea', Math.PI / 2, 0.8, 'volley'],
+    ['escorpión (de espaldas, a media altura)', -Math.PI / 2, 0.9, 'scorpion'],
   ] as const) {
     it(`el jugador controlado remata de ${name} con TIRO y el balón va al arco`, () => {
-      const { p, b, input, events, step } = scene({ at: [42, 0], facing, from: kind === 'bicycle' ? [30, 6] : [42, 14], h, T: 1.1, human: true, keeper: false });
+      const { p, b, input, events, step } = scene({ at: [42, 0], facing, from: kind === 'bicycle' || kind === 'scorpion' ? [30, 6] : [42, 14], h, T: 1.1, human: true, keeper: false });
       step(20);
       input.setKey('KeyD', true);
       step(10);
@@ -140,11 +141,31 @@ describe('Remates acrobáticos', () => {
       // tras el golpe el balón viaja hacia el arco rival (+x)
       const goalOrHeading = events.some((e) => e.type === 'goal' && e.team === 0) || b.vel.x > 3 || b.pos.x > 50;
       expect(goalOrHeading).toBe(true);
-      if (kind !== 'volley') {
+      if (kind !== 'volley' && kind !== 'scorpion') {
         // cae al césped y se levanta
         step(80);
         expect(['getup', 'none', 'celebrate'].includes(p.action.kind)).toBe(true);
       }
     });
   }
+});
+
+describe('Cabezazo en plancha y taco', () => {
+  it('con PASE a un balón bajo que cruza por delante, se lanza en plancha', () => {
+    const { p, input, events, step } = scene({ at: [44, 0], facing: Math.PI / 2, from: [44, 14], h: 0.6, T: 0.9, human: true, keeper: false });
+    // el balón pasa algo por delante del jugador (no a sus pies)
+    p.pos.x -= 1.1;
+    step(15);
+    input.setKey('KeyS', true);
+    step(4);
+    input.setKey('KeyS', false);
+    step(50);
+    expect(events.find((e) => e.type === 'skill' && e.playerId === p.id)?.kind).toBe('diving');
+    expect(events.some((e) => e.type === 'kick' && e.playerId === p.id && e.kind === 'header')).toBe(true);
+  });
+
+  it('elige el taco con un balón raso de espaldas al arco', () => {
+    expect(chooseAerial(0.2, true)).toBe('backheel');
+    expect(chooseAerial(0.9, true)).toBe('scorpion');
+  });
 });

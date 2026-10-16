@@ -164,7 +164,7 @@ export class Player {
       act.time += dt;
       if (act.time >= act.duration) {
         const k = act.kind;
-        const acrobatic = act.anim === 'bicycle' || act.anim === 'scissor';
+        const acrobatic = act.anim === 'bicycle' || act.anim === 'scissor' || act.anim === 'diving' || act.anim === 'scorpion';
         this.clearAction();
         if (k === 'slide' || k === 'fallen') this.startAction('getup', 'getup', 0.7);
         else if (acrobatic) this.startAction('getup', 'getup', 0.75); // tras la chilena o la tijera, cae al césped
@@ -173,7 +173,7 @@ export class Player {
 
     if (this.frozen) {
       this.vel.set(0, 0, 0);
-    } else if (this.action.kind === 'slide' || this.action.kind === 'dive') {
+    } else if (this.action.kind === 'slide' || this.action.kind === 'dive' || this.action.anim === 'diving') {
       // Inercia de la barrida / estirada: desaceleración progresiva
       const decel = this.action.kind === 'slide' ? 5.5 : 6.5;
       const s = Math.hypot(this.vel.x, this.vel.z);
@@ -185,7 +185,7 @@ export class Player {
       let maxS = this.maxSpeed(hasBall);
       if (this.action.kind === 'kick' && !this.action.done) maxS = Math.max(maxS * 0.55, 2.6);
       // en el aire (chilena / tijera) casi no se avanza
-      if (this.action.anim === 'bicycle' || this.action.anim === 'scissor') maxS = 1.2;
+      if (this.action.anim === 'bicycle' || this.action.anim === 'scissor' || this.action.anim === 'scorpion') maxS = 1.2;
       // terminando un control con el pecho o el muslo: no se aleja del balón que cae
       else if (this.action.kind === 'trap' && this.action.variant > 0) maxS = Math.min(maxS, 2.2);
       if (this.action.kind === 'tackle' || this.action.kind === 'header') maxS *= 0.6;

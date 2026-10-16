@@ -60,6 +60,9 @@ export class Commentary {
       case 'skill':
         if (e.kind === 'bicycle') return { text: pick([`¡¡CHILENA de ${n}!!`, `¡Increíble! ¡${n} lo intenta de chilena!`]), prio: 4 };
         if (e.kind === 'scissor') return { text: pick([`¡Tijera de ${n}!`, `¡Remate acrobático de ${n}!`]), prio: 3 };
+        if (e.kind === 'scorpion') return { text: `¡¡ESCORPIÓN de ${n}!! ¡Locura!`, prio: 4 };
+        if (e.kind === 'diving') return { text: pick([`¡Se lanza en plancha ${n}!`, `¡Cabezazo en plancha de ${n}!`]), prio: 3 };
+        if (e.kind === 'backheel') return { text: pick([`¡De taco ${n}!`, `¡Qué atrevimiento! Taco de ${n}`]), prio: 3 };
         if (e.kind === 'volley') return { text: pick([`¡Le pega de volea ${n}!`, `¡Volea de ${n}!`]), prio: 3 };
         if (e.kind === 'beat') return { text: pick([`¡Qué jugada de ${n}! Se va de su marcador`, `${n} lo deja sentado con una ${e.text?.toLowerCase() ?? 'finta'}`]), prio: 2 };
         return null;

@@ -297,6 +297,13 @@ const aerialRoll = new WeakMap<Player, { touch: number; roll: number }>();
 
 function pickAerial(m: Match, p: Player, backToGoal: boolean, y: number): AerialKind | null {
   const kind = chooseAerial(y, backToGoal);
+  // centro bajo: a veces en plancha en vez de volea
+  if (kind === 'volley' && y < 0.95) {
+    const touch0 = m.lastTouch?.time ?? 0;
+    let r0 = aerialRoll.get(p);
+    if (!r0 || r0.touch !== touch0) { r0 = { touch: touch0, roll: m.rng.next() }; aerialRoll.set(p, r0); }
+    if (r0.roll > 0.72) return 'diving';
+  }
   if (!kind || kind === 'volley') return kind;
   const touch = m.lastTouch?.time ?? 0;
   let r = aerialRoll.get(p);
@@ -306,7 +313,7 @@ function pickAerial(m: Match, p: Player, backToGoal: boolean, y: number): Aerial
   }
   // la chilena y la tijera solo las intentan los buenos rematadores, y no siempre
   const sh = p.data.attrs.shooting;
-  const chance = sh < 68 ? 0 : (kind === 'bicycle' ? 0.35 : 0.3) * (0.6 + (sh - 68) / 40) * (0.5 + 0.5 * m.diff.skillUse);
+  const chance = sh < 68 ? 0 : (kind === 'bicycle' ? 0.35 : kind === 'scorpion' ? 0.12 : kind === 'backheel' ? 0.25 : 0.3) * (0.6 + (sh - 68) / 40) * (0.5 + 0.5 * m.diff.skillUse);
   if (r.roll < chance) return kind;
   // si no se anima: volea si el balón llega bajo; si no, cabezazo
   return y < 1.3 && !backToGoal ? 'volley' : null;
@@ -318,13 +325,14 @@ function aerialShotDecision(m: Match, p: Player, team: Team, kind: AerialKind) {
   const side = gk ? (gk.pos.z > 0.3 ? -1 : gk.pos.z < -0.3 ? 1 : m.rng.next() < 0.5 ? -1 : 1) : 1;
   const z = side * (GOAL_HALF_WIDTH - 0.8);
   const req = buildShot(m, p, z, 0.5, 0.75, false, errScale(m, p), 'shoot');
-  const hs = kind === 'volley' ? 23 : kind === 'scissor' ? 21 : 20;
+  const hs = kind === 'volley' ? 23 : kind === 'scissor' ? 21 : kind === 'diving' ? 17 : kind === 'backheel' ? 15 : 20;
   const h = Math.hypot(req.velocity.x, req.velocity.z) || 1;
   req.velocity.set((req.velocity.x / h) * hs, 0, (req.velocity.z / h) * hs);
   req.spin.set(0, 0, 0);
   req.style = undefined;
   req.aerial = kind;
-  req.aimAt = new Vector3(goal.x, kind === 'volley' ? 0.6 : 0.9, z);
+  if (kind === 'diving') req.kind = 'header';
+  req.aimAt = new Vector3(goal.x, kind === 'volley' || kind === 'backheel' ? 0.6 : kind === 'diving' ? 0.5 : 0.9, z);
   req.power = 0.8;
   return req;
 }
@@ -686,6 +694,8 @@ function aiSkill(m: Match, p: Player, team: Team, opponents: Player[]): boolean 
   const r = m.rng.next();
   let kind: SkillKind;
   if (nearLine && r < 0.5) kind = 'dragback';
+  else if (td < 2 && Math.abs(lat) < 0.5 && ctrl > 70 && r < 0.62) kind = 'nutmeg'; // rival justo delante: caño
+  else if (ctrl > 78 && r < 0.72 && r > 0.6) kind = 'croqueta';
   else if (td < 1.6 && r < 0.4) kind = 'roulette';
   else if (ctrl > 82 && r < 0.18) kind = 'rainbow';
   else if (ctrl > 75 && r < 0.45) kind = 'elastico';

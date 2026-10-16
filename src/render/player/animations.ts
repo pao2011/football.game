@@ -514,6 +514,76 @@ function bicycle(c: Ctx, p: Pose) {
   p.rot(BONE.farmR, -25 * k);
 }
 
+/** Cabezazo en plancha: se lanza hacia delante en horizontal, cabezazo y cae boca abajo con los brazos. */
+function diving(c: Ctx, p: Pose) {
+  const n = c.n;
+  p.hips.set(0, tr(n, [0, 0.95, 0.12, 0.85, 0.26, 0.62, 0.5, 0.3, 0.7, 0.16, 1, 0.15]), tr(n, [0, 0, 0.3, 0.15, 1, 0.3]));
+  p.rot(BONE.hips, tr(n, [0, 5, 0.12, 30, 0.26, 72, 0.5, 85, 1, 88]), 0, 0);
+  p.rot(BONE.thighL, tr(n, [0, 0, 0.12, -20, 0.3, 10, 1, 15]), 0, 4);
+  p.rot(BONE.thighR, tr(n, [0, 0, 0.12, 25, 0.3, 15, 1, 12]), 0, -4);
+  p.rot(BONE.shinL, tr(n, [0, 10, 0.3, 20, 1, 15]));
+  p.rot(BONE.shinR, tr(n, [0, 10, 0.3, 30, 1, 15]));
+  p.rot(BONE.footL, 40);
+  p.rot(BONE.footR, 40);
+  // cabeza levantada mirando al balón (el cuerpo está horizontal)
+  const k = sstep(0.05, 0.22, n);
+  p.rot(BONE.spine, -10 * k, 0, 0);
+  p.rot(BONE.chest, -12 * k, 0, 0);
+  p.rot(BONE.neck, tr(n, [0, 0, 0.24, -40, 0.3, -20, 1, -35]), 0, 0);
+  p.rot(BONE.head, -20 * k, 0, 0);
+  // brazos hacia delante para amortiguar
+  const a = sstep(0.2, 0.55, n);
+  p.rot(BONE.uarmL, -40 - 80 * a, 0, 20);
+  p.rot(BONE.uarmR, -40 - 80 * a, 0, -20);
+  p.rot(BONE.farmL, -30 + 20 * a);
+  p.rot(BONE.farmR, -30 + 20 * a);
+}
+
+/** Escorpión: se lanza hacia delante de cara al suelo y golpea con los talones por encima de la espalda. */
+function scorpion(c: Ctx, p: Pose) {
+  const n = c.n;
+  p.hips.set(0, tr(n, [0, 0.95, 0.15, 0.85, 0.34, 0.7, 0.6, 0.35, 0.85, 0.16, 1, 0.15]), 0);
+  p.rot(BONE.hips, tr(n, [0, 0, 0.15, 30, 0.34, 70, 0.6, 85, 1, 88]), 0, 0);
+  // las piernas se doblan hacia atrás y arriba (los talones por encima de la espalda)
+  p.rot(BONE.thighL, tr(n, [0, 0, 0.2, 20, 0.34, 45, 0.6, 30, 1, 10]), 0, 6);
+  p.rot(BONE.thighR, tr(n, [0, 0, 0.2, 25, 0.34, 50, 0.6, 30, 1, 10]), 0, -6);
+  p.rot(BONE.shinL, tr(n, [0, 10, 0.2, 90, 0.34, 135, 0.6, 90, 1, 20]));
+  p.rot(BONE.shinR, tr(n, [0, 10, 0.2, 95, 0.34, 140, 0.6, 95, 1, 20]));
+  p.rot(BONE.footL, 30);
+  p.rot(BONE.footR, 30);
+  const k = sstep(0.05, 0.25, n);
+  p.rot(BONE.spine, -12 * k, 0, 0);
+  p.rot(BONE.chest, -14 * k, 0, 0);
+  p.rot(BONE.neck, -30 * k, 0, 0);
+  p.rot(BONE.head, -20 * k, 0, 0);
+  const a = sstep(0.1, 0.5, n);
+  p.rot(BONE.uarmL, -50 - 70 * a, 0, 25);
+  p.rot(BONE.uarmR, -50 - 70 * a, 0, -25);
+  p.rot(BONE.farmL, -20);
+  p.rot(BONE.farmR, -20);
+}
+
+/** Taco: de espaldas, la pierna derecha golpea hacia atrás con el talón. */
+function backheel(c: Ctx, p: Pose) {
+  const n = c.n;
+  const e = sstep(0, 0.2, n) * (1 - sstep(0.75, 1, n));
+  p.hips.set(0, 0.93 - 0.03 * e, 0);
+  p.rot(BONE.hips, 10 * e, 0, 0);
+  p.rot(BONE.thighR, tr(n, [0, 0, 0.2, -20, 0.4, 32, 0.6, 20, 1, 0]), 0, -4 * e);
+  p.rot(BONE.shinR, tr(n, [0, 10, 0.2, 50, 0.4, 25, 0.6, 40, 1, 10]));
+  p.rot(BONE.footR, -10 * e);
+  _pole.set(0.1, 0, 1);
+  solveLeg(p, 0, V(0.14, ANKLE_H, 0.05), _pole, footQ(0, 10));
+  p.rot(BONE.spine, 12 * e, 0, 0);
+  p.rot(BONE.chest, 6 * e, 0, 0);
+  p.rot(BONE.neck, 15 * e, 0, 0);
+  p.rot(BONE.head, 20 * e, 0, 0);
+  p.rot(BONE.uarmL, -15 * e, 0, 20 + 30 * e);
+  p.rot(BONE.uarmR, 15 * e, 0, -20 - 25 * e);
+  p.rot(BONE.farmL, -25);
+  p.rot(BONE.farmR, -25);
+}
+
 function header(c: Ctx, p: Pose) {
   const n = c.n;
   const fl = clamp((n - 0.25) / 0.6, 0, 1);
@@ -770,8 +840,35 @@ function gkKick(c: Ctx, p: Pose) {
 
 // ------------------------------------------------------------------ celebraciones / reacciones
 function celebrate(c: Ctx, p: Pose) {
-  const v = ((c.variant % 4) + 4) % 4;
+  const v = ((c.variant % 6) + 6) % 6;
   const t = c.t;
+  if (v === 4) {
+    // "silencio": dedo índice en los labios mirando a la grada
+    base(c, p);
+    const e = sstep(0, 0.4, t);
+    p.addRot(BONE.chest, -4 * e, 0, 0);
+    p.addRot(BONE.head, -6 * e, 0, 0);
+    p.rot(BONE.uarmR, -60 * e, 25 * e, -18 * e);
+    p.rot(BONE.farmR, -140 * e);
+    p.rot(BONE.handR, -10 * e, 0, 0);
+    p.rot(BONE.uarmL, -10 * e, 0, 30 * e);
+    p.rot(BONE.farmL, -20);
+    return;
+  }
+  if (v === 5) {
+    // al cielo: los dos índices hacia arriba, mirando al cielo
+    base(c, p);
+    const e = sstep(0, 0.35, t);
+    const bob = Math.sin(t * 4) * 4;
+    p.addRot(BONE.chest, -10 * e, 0, 0);
+    p.addRot(BONE.neck, -15 * e, 0, 0);
+    p.addRot(BONE.head, -25 * e, 0, 0);
+    p.rot(BONE.uarmL, (-150 + bob) * e, 0, 20 * e);
+    p.rot(BONE.uarmR, (-150 - bob) * e, 0, -20 * e);
+    p.rot(BONE.farmL, -25 * e);
+    p.rot(BONE.farmR, -25 * e);
+    return;
+  }
   if (v === 0) {
     base(c, p);
     const sh = Math.sin(t * 7) * 6;
@@ -892,6 +989,37 @@ function skillMove(c: Ctx, p: Pose) {
     p.rot(BONE.farmL, -30);
     p.rot(BONE.farmR, -30);
   };
+  if (v === 6) {
+    // caño: toque corto con el interior por delante, entre las piernas del rival
+    kick({ ...c, n: clamp(n * 0.9, 0, 1) }, p, 'pass');
+    return;
+  }
+  if (v === 7) {
+    // croqueta: el balón pasa del interior derecho al izquierdo con un salto lateral del cuerpo
+    const e = sstep(0, 0.12, n) * (1 - sstep(0.8, 1, n));
+    const shift = tr(n, [0, 0, 0.3, -1, 0.55, 1, 1, 0.4]);
+    p.hips.set(0.07 * shift, 0.92 - 0.03 * e, 0);
+    p.rot(BONE.hips, 6 * e, 0, -6 * shift);
+    const r = sstep(0.05, 0.25, n) * (1 - sstep(0.3, 0.45, n));
+    const l = sstep(0.35, 0.5, n) * (1 - sstep(0.6, 0.8, n));
+    p.rot(BONE.thighR, -25 * r, -30 * r, -8 * r);
+    p.rot(BONE.shinR, 20 + 20 * r);
+    p.rot(BONE.footR, 0, 0, -20 * r);
+    if (l > 0.01) {
+      p.rot(BONE.thighL, -25 * l, 30 * l, 8 * l);
+      p.rot(BONE.shinL, 20 + 20 * l);
+      p.rot(BONE.footL, 0, 0, 20 * l);
+      _pole.set(-0.1, 0, 1);
+      solveLeg(p, 1, V(-0.15 + 0.06 * shift, ANKLE_H, 0.02), _pole, footQ(0, -10));
+    } else {
+      plant();
+    }
+    p.rot(BONE.spine, 10 * e, 0, 6 * shift);
+    p.rot(BONE.chest, 6 * e, 0, 0);
+    p.rot(BONE.head, 18 * e, 0, 0);
+    arms(e * 0.5);
+    return;
+  }
   if (v === 5) {
     // amago: armado del disparo que se corta y sale en conducción lateral
     if (n < 0.55) {
@@ -1039,7 +1167,7 @@ function referee(c: Ctx, p: Pose) {
 
 // ------------------------------------------------------------------ despacho
 const DEFAULT_DUR: Partial<Record<AnimState, number>> = {
-  pass: 0.45, lob: 0.55, shoot: 0.55, header: 0.75, volley: 0.55, scissor: 0.85, bicycle: 1.05, tackle: 0.6, slide: 1.0, getup: 1.2, throwin: 1.0, trap: 0.4, skill: 0.6,
+  pass: 0.45, lob: 0.55, shoot: 0.55, header: 0.75, volley: 0.55, scissor: 0.85, bicycle: 1.05, diving: 0.95, scorpion: 1.0, backheel: 0.5, tackle: 0.6, slide: 1.0, getup: 1.2, throwin: 1.0, trap: 0.4, skill: 0.6,
   gk_dive_left: 1.1, gk_dive_right: 1.1, gk_catch: 0.5, gk_throw: 0.8, gk_kick: 0.85,
 };
 
@@ -1082,7 +1210,10 @@ function evalState(c: Ctx, p: Pose) {
     case 'volley':
     case 'scissor':
     case 'bicycle':
-      (c.state === 'volley' ? volley : c.state === 'scissor' ? scissor : bicycle)(c, p);
+    case 'diving':
+    case 'scorpion':
+    case 'backheel':
+      ({ volley, scissor, bicycle, diving, scorpion, backheel } as const)[c.state](c, p);
       if (!right) p.mirror();
       return;
     case 'tackle':
@@ -1139,8 +1270,8 @@ function blendTime(from: AnimState | '', to: AnimState) {
   if (from === 'slide' && to === 'fallen') return 0.3;
   if (from === 'fallen' || to === 'fallen') return 0.25;
   if (to === 'pass' || to === 'shoot' || to === 'lob' || to === 'trap' || to === 'skill') return 0.12;
-  if (to === 'volley' || to === 'scissor' || to === 'bicycle') return 0.1;
-  if ((from === 'bicycle' || from === 'scissor') && to === 'getup') return 0.2;
+  if (to === 'volley' || to === 'scissor' || to === 'bicycle' || to === 'diving' || to === 'scorpion' || to === 'backheel') return 0.1;
+  if ((from === 'bicycle' || from === 'scissor' || from === 'diving' || from === 'scorpion') && to === 'getup') return 0.2;
   if (to === 'celebrate' || to === 'dejected' || to === 'throwin') return 0.3;
   if ((from === 'locomotion' || from === 'dribble') && (to === 'locomotion' || to === 'dribble')) return 0.25;
   return 0.16;

@@ -5,12 +5,15 @@ import { BALL_RADIUS, GRAVITY } from '../config/constants';
 import type { Ball } from './Ball';
 import type { Player } from './Player';
 
-export type AerialKind = 'volley' | 'scissor' | 'bicycle';
+export type AerialKind = 'volley' | 'scissor' | 'bicycle' | 'diving' | 'scorpion' | 'backheel';
 
 export const AERIAL_NAMES: Record<AerialKind, string> = {
   volley: 'Volea',
   scissor: 'Tijera',
   bicycle: 'Chilena',
+  diving: 'Cabezazo en plancha',
+  scorpion: 'Escorpión',
+  backheel: 'Taco',
 };
 
 /**
@@ -21,6 +24,9 @@ export const AERIAL_TIMING: Record<AerialKind, { duration: number; contact: numb
   volley: { duration: 0.55, contact: 0.2, window: 0.16 },
   scissor: { duration: 0.85, contact: 0.3, window: 0.17 },
   bicycle: { duration: 1.05, contact: 0.38, window: 0.18 },
+  diving: { duration: 0.95, contact: 0.24, window: 0.16 },
+  scorpion: { duration: 1.0, contact: 0.34, window: 0.16 },
+  backheel: { duration: 0.5, contact: 0.2, window: 0.14 },
 };
 
 /** Banda de alturas (m) del balón en la que se puede golpear con cada remate. */
@@ -28,13 +34,17 @@ export const AERIAL_HEIGHT: Record<AerialKind, [number, number]> = {
   volley: [0.35, 1.2],
   scissor: [0.95, 1.85],
   bicycle: [1.15, 2.35],
+  diving: [0.3, 1.0],
+  scorpion: [0.6, 1.3],
+  backheel: [0.05, 0.55],
 };
 
 /** Dificultad de ejecución (multiplica el error del golpeo). */
-export const AERIAL_ERROR: Record<AerialKind, number> = { volley: 1.1, scissor: 1.5, bicycle: 1.8 };
+export const AERIAL_ERROR: Record<AerialKind, number> = { volley: 1.1, scissor: 1.5, bicycle: 1.8, diving: 1.3, scorpion: 2.0, backheel: 1.6 };
 
 /** Distancia del pie al centro del jugador en el momento del contacto (hacia delante). */
-const REACH: Record<AerialKind, number> = { volley: 0.6, scissor: 0.5, bicycle: 0.15 };
+// (negativo = por detrás del jugador: escorpión y taco)
+const REACH: Record<AerialKind, number> = { volley: 0.6, scissor: 0.5, bicycle: 0.15, diving: 0.95, scorpion: -0.2, backheel: -0.35 };
 
 /** Punto (en el suelo) donde el pie golpea el balón. */
 export function aerialContactPoint(kind: AerialKind, p: Player, out = new Vector3()): Vector3 {
@@ -99,6 +109,9 @@ export function angleTo(p: Player, x: number, z: number): number {
  */
 export function chooseAerial(y: number, backToGoal: boolean): AerialKind | null {
   if (backToGoal && y >= AERIAL_HEIGHT.bicycle[0] && y <= AERIAL_HEIGHT.bicycle[1]) return 'bicycle';
+  // de espaldas y bajo: escorpión (a media altura) o taco (a ras de suelo)
+  if (backToGoal && y >= AERIAL_HEIGHT.scorpion[0] && y < AERIAL_HEIGHT.bicycle[0]) return 'scorpion';
+  if (backToGoal && y <= AERIAL_HEIGHT.backheel[1]) return 'backheel';
   if (y > 1.7) return null;
   if (y >= 1.05) return 'scissor';
   if (y >= AERIAL_HEIGHT.volley[0]) return 'volley';

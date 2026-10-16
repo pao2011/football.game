@@ -18,7 +18,7 @@ import { evaluateOffsidePositions, isInPenaltyArea } from './Rules';
 import { placeForRestart, type RestartType } from './SetPieces';
 import { Referee } from './Referee';
 import { weatherEnv, type Weather } from './Weather';
-import { AERIAL_ERROR, AERIAL_NAMES, AERIAL_TIMING, aerialInReach, aerialShotVelocity } from './Aerial';
+import { AERIAL_ERROR, AERIAL_NAMES, AERIAL_TIMING, aerialInReach, aerialShotVelocity, ballApproach } from './Aerial';
 
 export type MatchPhase = 'kickoff' | 'play' | 'stoppage' | 'goal' | 'replay' | 'halftime' | 'fulltime' | 'shootout';
 
@@ -688,11 +688,23 @@ export class Match {
     p.startAction('kick', kind, tm.duration, tm.contact, { kick: req, done: false });
     // orientación: la volea mira al objetivo; la tijera, de lado; la chilena, de espaldas
     const ga = Math.atan2(req.velocity.x, req.velocity.z);
-    const fa = kind === 'bicycle' ? ga + Math.PI : kind === 'scissor' ? ga - 1.05 : ga;
+    const backward = kind === 'bicycle' || kind === 'scorpion' || kind === 'backheel';
+    const fa = backward ? ga + Math.PI : kind === 'scissor' ? ga - 1.05 : ga;
     p.action.dir.set(Math.sin(fa), 0, Math.cos(fa));
     p.anim.foot = 1;
     // anticipa el giro para que el pie llegue bien colocado
-    p.facing = approachAngleRad(p.facing, fa, kind === 'volley' ? 0.6 : 1.2);
+    p.facing = approachAngleRad(p.facing, fa, kind === 'volley' || kind === 'backheel' ? 0.6 : 1.2);
+    // cabezazo en plancha: se lanza hacia el balón
+    if (kind === 'diving') {
+      // hacia el punto por donde va a pasar el balón (menos el alcance de la cabeza), no hacia donde está ahora
+      const ap = ballApproach(b, p, 0.7, 0.2, 1.2);
+      const tx = (ap ? ap.point.x : b.pos.x) - Math.sin(p.facing) * 0.9;
+      const tz = (ap ? ap.point.z : b.pos.z) - Math.cos(p.facing) * 0.9;
+      const to = _w.set(tx - p.pos.x, 0, tz - p.pos.z);
+      const l = to.length();
+      const sp = Math.min(6, l / Math.max(0.15, ap ? ap.t : tm.contact) + 1);
+      if (l > 0.05) p.vel.set((to.x / l) * sp, 0, (to.z / l) * sp);
+    }
     return true;
   }
 
@@ -1010,6 +1022,8 @@ export class Match {
       case 'rainbow': dur = 0.78; key = 0.34; exit.copy(fwd); break;
       case 'dragback': dur = 0.55; key = 0.3; exit.copy(fwd).multiplyScalar(-1).addScaledVector(left, side * 0.35); break;
       case 'fakeshot': dur = 0.55; key = 0.3; exit.copy(fwd).multiplyScalar(0.35).addScaledVector(left, side * 0.95); break;
+      case 'nutmeg': dur = 0.45; key = 0.2; exit.copy(fwd); break;
+      case 'croqueta': dur = 0.6; key = 0.22; exit.copy(fwd).multiplyScalar(0.5).addScaledVector(left, side * 0.85); break;
     }
     exit.normalize();
     p.startAction('skill', 'skill', dur, key, { variant: SKILL_KINDS.indexOf(kind), done: false, aux: fwd });
@@ -1038,7 +1052,7 @@ export class Match {
       } else if (kind === 'dragback') {
         sp(0.6, fwd);
       } else {
-        sp(kind === 'rainbow' ? 3.5 : 1.8, fwd);
+        sp(kind === 'rainbow' ? 3.5 : kind === 'nutmeg' ? 2.6 : kind === 'croqueta' ? 2.2 : 1.8, fwd);
       }
       if (t >= a.contactAt) {
         a.done = true;
@@ -1046,7 +1060,7 @@ export class Match {
       }
     } else {
       // salida explosiva en la nueva dirección
-      const v = kind === 'dragback' ? 4.2 : kind === 'rainbow' ? 7 : kind === 'roulette' ? 5 : 6.4;
+      const v = kind === 'dragback' ? 4.2 : kind === 'rainbow' ? 7 : kind === 'roulette' ? 5 : kind === 'nutmeg' ? 6.8 : 6.4;
       sp(v, a.dir);
       p.sprinting = true;
       p.facing = approachAngleRad(p.facing, Math.atan2(a.dir.x, a.dir.z), 0.35);
@@ -1083,14 +1097,26 @@ export class Match {
       const front = (dx * fwd.x + dz * fwd.z) / Math.max(d, 0.01);
       if (d < bestD && front > -0.2 && !o.isGK) { best = o; bestD = d; }
     }
-    const bonus: Record<SkillKind, number> = { stepover: 0, elastico: 0.08, roulette: 0.1, rainbow: 0.12, dragback: 0.05, fakeshot: 0.1 };
+    if (kind === 'nutmeg') {
+      // caño: el balón pasa entre las piernas del rival que tiene delante (si lo engaña) o le pega en las piernas
+      this.owner = null;
+      b.vel.set(fwd.x * 7.5, 0, fwd.z * 7.5);
+      p.noTouchUntil = this.time + 0.22;
+      this.setLastTouch(p, false, 'control');
+    }
+    const bonus: Record<SkillKind, number> = { stepover: 0, elastico: 0.08, roulette: 0.1, rainbow: 0.12, dragback: 0.05, fakeshot: 0.1, nutmeg: 0.12, croqueta: 0.08 };
     let beat = false;
     if (best) {
       const chance = clamp(0.42 + (ctrl - best.data.attrs.defending) / 100 + bonus[kind], 0.15, 0.9);
       if (this.rng.next() < chance) {
-        best.stunnedUntil = this.time + 0.7;
+        best.stunnedUntil = this.time + (kind === 'nutmeg' ? 0.9 : 0.7);
         if (best.action.kind === 'none') best.vel.multiplyScalar(0.4);
+        // en el caño el balón le pasa entre las piernas: no puede tocarlo
+        if (kind === 'nutmeg') best.noTouchUntil = Math.max(best.noTouchUntil, this.time + 0.45);
         beat = true;
+      } else if (kind === 'nutmeg' && bestD < 2.4) {
+        // le pega en las piernas: el balón queda suelto cerca del rival
+        b.vel.set(-fwd.x * 1.5 + (this.rng.next() - 0.5) * 3, 0.3, -fwd.z * 1.5 + (this.rng.next() - 0.5) * 3);
       }
     }
     // el amago de tiro también engaña al arquero y a quien intenta tapar el disparo
@@ -1606,7 +1632,7 @@ export class Match {
     this.enterPhase('goal');
     // Celebración
     for (const p of t.active) {
-      if (p === scorer) p.startAction('celebrate', 'celebrate', 3.4, 0, { variant: this.rng.int(0, 3) });
+      if (p === scorer) p.startAction('celebrate', 'celebrate', 3.4, 0, { variant: this.rng.int(0, 5) });
     }
     for (const p of this.otherTeam(team).active) {
       if (!p.isGK || this.rng.next() < 0.7) p.startAction('dejected', 'dejected', 3.2, 0, { variant: this.rng.int(0, 1) });

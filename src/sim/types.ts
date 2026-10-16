@@ -14,6 +14,9 @@ export type AnimState =
   | 'volley' // volea (balón a media altura)
   | 'scissor' // tijera: remate de lado en el aire
   | 'bicycle' // chilena: de espaldas, por encima de la cabeza
+  | 'diving' // cabezazo en plancha (lanzándose hacia delante)
+  | 'scorpion' // escorpión: de cara al suelo, golpe con el talón por encima de la espalda
+  | 'backheel' // taco de primera
   | 'tackle' // entrada de pie
   | 'slide' // barrida
   | 'fallen' // caído tras una falta / barrida
@@ -86,7 +89,7 @@ export interface MatchEvent {
 }
 
 /** Regates disponibles. El índice es la variante de animación. */
-export const SKILL_KINDS = ['stepover', 'roulette', 'elastico', 'rainbow', 'dragback', 'fakeshot'] as const;
+export const SKILL_KINDS = ['stepover', 'roulette', 'elastico', 'rainbow', 'dragback', 'fakeshot', 'nutmeg', 'croqueta'] as const;
 export type SkillKind = (typeof SKILL_KINDS)[number];
 
 export const SKILL_NAMES: Record<SkillKind, string> = {
@@ -96,4 +99,6 @@ export const SKILL_NAMES: Record<SkillKind, string> = {
   rainbow: 'Sombrero',
   dragback: 'Arrastre',
   fakeshot: 'Amago de tiro',
+  nutmeg: 'Caño',
+  croqueta: 'Croqueta',
 };

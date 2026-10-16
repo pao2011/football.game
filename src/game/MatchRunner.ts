@@ -283,6 +283,8 @@ export class MatchRunner {
         }
         // la base de la cámara orienta el stick
         if (this.controller) this.view.director.basis(this.controller.view.right, this.controller.view.forward);
+        // tras marcar el jugador del usuario: el stick derecho (o I/J/K/L, R) elige la celebración
+        if (m.phase === 'goal') this.chooseCelebration();
         if (m.phase === 'replay' && (this.input.pressed('pass') || this.input.pressed('shoot') || !this.settings.replays)) m.skipReplay();
         m.step(SIM_DT);
         for (const e of m.events) this.handleEvent(e);
@@ -360,6 +362,21 @@ export class MatchRunner {
       setTimeout(() => { if (!this.disposed) this.audioEngine.chant(0.8); }, 3200);
     }
     if (this.settings.vibration !== false) this.vibrate(e);
+  }
+
+  /** Celebración elegida por el usuario: ↑ brazos arriba, ↓ de rodillas, → saltos, ← avión, R silencio, RB+↑ al cielo. */
+  private chooseCelebration() {
+    const sc = this.match.lastGoal?.scorer;
+    if (!sc || sc.action.kind !== 'celebrate' || sc.action.time > 2) return;
+    const i = this.match.teams[sc.team].human ? (sc.team === this.localTeam ? this.input : this.input2) : null;
+    if (!i) return;
+    let v = -1;
+    if (i.pressed('skillUp')) v = i.held('finesse') ? 5 : 0;
+    else if (i.pressed('skillDown')) v = 1;
+    else if (i.pressed('skillRight')) v = 2;
+    else if (i.pressed('skillLeft')) v = 3;
+    else if (i.pressed('skillSpin')) v = 4;
+    if (v >= 0) sc.action.variant = v;
   }
 
   /** Vibración en golpeos propios, entradas, postes y goles: en el móvil y en el mando (si lo admite). */
