@@ -51,6 +51,7 @@ const TIPS = [
   'En móvil, un toque rápido en PASE o TIRO golpea con potencia automática y elige al mejor compañero o la mejor esquina del arco.',
 ];
 
+const MENTALITY_NAMES = ['Ultradefensiva', 'Defensiva', 'Equilibrada', 'Ofensiva', 'Ultraofensiva'];
 const SIDES: QuickSetup['side'][] = [0, 1, 2, 3, -1];
 const WEATHER_CYCLE: (Weather | 'random')[] = ['clear', 'rain', 'snow', 'wind', 'random'];
 
@@ -463,6 +464,7 @@ export class App {
         ${r.online ? `<div class="muted online-pause-note" style="margin:-6px 0 10px">${r.pauseSecondsLeft >= 0 ? `Partido pausado para los dos · se reanuda solo en <b class="ps-left">${r.pauseSecondsLeft}</b> s · te quedan ${r.pausesLeft} pausas` : 'Ya no te quedan pausas: el partido sigue en juego'}</div>` : ''}
         <button class="menu-item" data-act="resume">Reanudar</button>
         ${r.online ? '<button class="menu-item" data-act="chat">Mensajes rápidos<small>Para tu rival</small></button>' : '<button class="menu-item" data-act="restart">Reiniciar partido</button>'}
+        ${r.localTeam >= 0 && !m.config.training && !r.online ? `<button class="menu-item" data-act="tactics">Tácticas<small>${esc(m.teams[r.localTeam as 0 | 1].formation)} · ${MENTALITY_NAMES[m.teams[r.localTeam as 0 | 1].mentality + 2]}</small></button>` : ''}
         ${r.localTeam >= 0 && !m.config.training ? `<button class="menu-item" data-act="subs">Cambios<small>${m.teams[r.localTeam as 0 | 1].subsUsed}/${MAX_SUBS} realizados</small></button>` : ''}
         <button class="menu-item" data-act="stats">Estadísticas</button>
         <button class="menu-item" data-act="mute">${this.settings.muted ? '🔊 Activar sonido' : '🔇 Silenciar'}<small>Tecla M</small></button>
@@ -476,6 +478,7 @@ export class App {
       restart: () => { close(); this.restartMatch(); },
       mute: () => { this.toggleMute(); close(); this.pauseMenu(); },
       subs: () => { close(); this.subsMenu(); },
+      tactics: () => { close(); this.tacticsMenu(); },
       chat: () => {
         close();
         const items = QUICK_CHAT.map((t, i) => `<button class="menu-item" data-act="say" data-i="${i}">${esc(t)}</button>`).join('');
@@ -507,6 +510,33 @@ export class App {
   }
 
   /** Cambios: elige quién sale (en el campo) y quién entra (suplentes). */
+  /** Tácticas en pleno partido: formación y mentalidad del equipo del usuario. */
+  private tacticsMenu() {
+    const r = this.runner;
+    if (!r || r.localTeam < 0) return;
+    const t = r.match.teams[r.localTeam as 0 | 1];
+    const close = () => { this.overlay?.dispose(); this.overlay = null; };
+    const back = () => { close(); this.pauseMenu(); };
+    const html = () => `<div class="overlay"><div class="panel modal">
+      <h2>Tácticas</h2>
+      <div class="muted" style="margin-bottom:10px">Los cambios se aplican al instante.</div>
+      ${this.stepper('Formación', t.formation, 'tf')}
+      ${this.stepper('Mentalidad', MENTALITY_NAMES[t.mentality + 2], 'tm')}
+      <div class="muted" style="margin:8px 0 12px;font-size:13px">Más ofensiva: la línea sube y más jugadores llegan al área. Más defensiva: el bloque se repliega. (En el mando también con la cruceta ← →.)</div>
+      <div class="screen-footer"><button class="btn primary" data-act="back">Volver</button></div>
+    </div></div>`;
+    const refresh = () => this.overlay?.refresh(html());
+    const cycleF = (d: number) => { t.setFormation(FORMATION_IDS[(FORMATION_IDS.indexOf(t.formation) + d + FORMATION_IDS.length) % FORMATION_IDS.length]); refresh(); };
+    this.overlay?.dispose();
+    this.overlay = new Screen(this.ui, html(), {
+      tfPrev: () => cycleF(-1), tfNext: () => cycleF(1),
+      tmPrev: () => { t.mentality = Math.max(-2, t.mentality - 1); refresh(); },
+      tmNext: () => { t.mentality = Math.min(2, t.mentality + 1); refresh(); },
+      back,
+    }, this.audio);
+    this.overlay.onBack = back;
+  }
+
   private subsMenu() {
     const r = this.runner;
     if (!r || r.localTeam < 0) return;

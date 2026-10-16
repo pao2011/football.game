@@ -107,6 +107,33 @@ export class Team {
     }
   }
 
+  /**
+   * Cambia la formación en pleno partido: el arquero sigue en su puesto y el resto ocupa el puesto nuevo que mejor
+   * le encaja (mismo tipo de puesto y lado parecido).
+   */
+  setFormation(f: FormationId) {
+    if (f === this.formation) return;
+    this.formation = f;
+    const slots = FORMATIONS[f];
+    const field = this.players.filter((p) => !p.isGK);
+    const free = new Set(field);
+    const order = slots.map((s, i) => ({ s, i })).filter((x) => x.i > 0).sort((a, b) => a.s.depth - b.s.depth);
+    for (const { s, i } of order) {
+      let best: Player | null = null;
+      let bestScore = Infinity;
+      for (const p of free) {
+        const score = (p.data.position === s.position ? 0 : p.slot.position === s.position ? 0.5 : 2) + Math.abs(p.slot.lateral - s.lateral) * 0.6 + Math.abs(p.slot.depth - s.depth);
+        if (score < bestScore) { bestScore = score; best = p; }
+      }
+      if (!best) break;
+      free.delete(best);
+      best.slot = s;
+      best.slotIndex = i;
+    }
+    const gk = this.players.find((p) => p.isGK);
+    if (gk) { gk.slot = slots[0]; gk.slotIndex = 0; }
+  }
+
   get goalkeeper(): Player | undefined {
     return this.players.find((p) => p.isGK && !p.sentOff);
   }
