@@ -44,6 +44,7 @@ const SOUNDS = [
   ['roll', 'a.setRoll(8, true)', 1],
   ['chant', 'a.startAmbience(); a.chant(1)', 3],
   ['firework', 'a.firework(40)', 2.5],
+  ['menu music', 'a.startMenuMusic()', 4],
 ];
 
 const results = [];
