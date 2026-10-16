@@ -7,6 +7,7 @@ import { STADIUMS, getStadium } from '../data/stadiums';
 import { TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
 import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
 import { disciplineOf, isAvailable } from '../modes/Availability';
+import { ACHIEVEMENTS, unlock, unlockedSet, type AchievementDef } from '../modes/Achievements';
 import type { Difficulty, FormationId, PlayerData, TeamData } from '../data/types';
 import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
 import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, versusDevicesLabel, type Action } from '../input/Input';
@@ -268,6 +269,7 @@ export class App {
           <button class="menu-item" data-act="career">Carrera<small>Temporadas de liga con tu club</small></button>
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
+          <button class="menu-item" data-act="achievements">🏆 Logros<small>${Object.keys(unlockedSet()).length}/${ACHIEVEMENTS.length} desbloqueados</small></button>
           <button class="menu-item" data-act="controls">Controles<small>Teclado y mando · reasignar teclas</small></button>
           ${!isElectron && !isNativeApp() ? '<button class="menu-item apk-item" data-act="apk">📲 Descargar APK<small>Instala el juego en tu Android</small></button>' : ''}
           ${isElectron ? '<button class="menu-item" data-act="quit">Salir</button>' : ''}
@@ -285,6 +287,7 @@ export class App {
       training: () => this.trainingScreen(),
       settings: () => this.settingsScreen(() => this.mainMenu()),
       controls: () => this.controlsScreen(() => this.mainMenu()),
+      achievements: () => this.achievementsScreen(),
       quit: () => window.close(),
       apk: () => { window.open(APK_URL, '_blank', 'noopener'); },
     }, () => this.start());
@@ -510,6 +513,17 @@ export class App {
   }
 
   /** Cambios: elige quién sale (en el campo) y quién entra (suplentes). */
+  /** Pantalla de logros: desbloqueados y pendientes. */
+  achievementsScreen() {
+    const u = unlockedSet();
+    const done = ACHIEVEMENTS.filter((a) => u[a.id]).length;
+    const rows = ACHIEVEMENTS.map((a) => `<div class="ach ${u[a.id] ? 'on' : ''}"><span class="ic">${u[a.id] ? a.icon : '🔒'}</span><div><b>${esc(a.name)}</b><small>${esc(a.desc)}${u[a.id] ? ` · ${new Date(u[a.id]).toLocaleDateString()}` : ''}</small></div></div>`).join('');
+    this.show(`
+      <div class="screen-header"><div><div class="crumb">DESAFÍOS</div><h2>Logros · ${done}/${ACHIEVEMENTS.length}</h2></div></div>
+      <div class="screen-body"><div class="ach-grid">${rows}</div></div>
+      <div class="screen-footer"><button class="btn primary" data-act="back">Volver</button></div>`, { back: () => this.mainMenu() }, () => this.mainMenu());
+  }
+
   /** Tácticas en pleno partido: formación y mentalidad del equipo del usuario. */
   private tacticsMenu() {
     const r = this.runner;
@@ -683,21 +697,29 @@ export class App {
     const m = r.match;
     const [h, a] = m.teams;
     // Registrar en el modo correspondiente
+    // logros: los del resultado y los de los modos (copa, liga, Division Rivals)
+    const newAch: AchievementDef[] = [...(this.runner?.achievements?.unlockedNow ?? [])];
+    this.runner?.achievements?.finish(r.winner, !!r.penalties);
+    if (this.runner?.achievements) for (const a of this.runner.achievements.unlockedNow) if (!newAch.includes(a)) newAch.push(a);
+    const addAch = (id: string) => { const a = unlock(id); if (a) newAch.push(a); };
     // bajas (lesiones, rojas y amarillas acumuladas) para el próximo partido del usuario
     let availabilityMsgs: string[] = [];
     if (ctx.mode === 'tournament' && this.tournament) {
       const userIdx = ctx.fixture.home === this.tournament.state.userTeam ? 0 : 1;
       const d = disciplineOf([...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff]);
       availabilityMsgs = this.tournament.recordUserResult(ctx.fixture, r.home, r.away, r.penalties ?? undefined, d);
+      if (this.tournament.state.champion === this.tournament.state.userTeam) addAch('cup');
     } else if (ctx.mode === 'career' && this.career) {
       const userIdx = ctx.fixture.home === this.career.state.userTeam ? 0 : 1;
       const scorers = [...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff].filter((p) => p.goals > 0).flatMap((p) => Array(p.goals).fill(p.id));
       const d = disciplineOf([...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff]);
       availabilityMsgs = this.career.recordUserResult(ctx.fixture, r.home, r.away, scorers, d);
+      if (this.career.state.seasonOver && this.career.standings()[0]?.team === this.career.state.userTeam) addAch('league');
     }
     if (ctx.mode === 'online') {
       window.clearInterval(this.onlineWatch);
       this.net?.send({ t: 'result', home: r.home, away: r.away, pens: r.penalties ? r.winner : -1 });
+      if (ctx.start.mode === 'rivals' && r.winner === m.config.humanTeam) addAch('rivals');
     }
     this.runner?.dispose();
     this.runner = null;
@@ -713,6 +735,7 @@ export class App {
           ${pens}
           <div class="scorers"><div style="text-align:right">${scorers(h)}</div><div>${scorers(a)}</div></div>
           ${ctx.mode === 'training' ? '' : this.ratingsHTML(m)}
+          ${newAch.length ? `<div class="ach-msgs"><div class="crumb">LOGROS DESBLOQUEADOS</div>${newAch.map((a) => `<div>${a.icon} <b>${esc(a.name)}</b> <span class="muted">${esc(a.desc)}</span></div>`).join('')}</div>` : ''}
           ${availabilityMsgs.length ? `<div class="avail-msgs"><div class="crumb">PARTE MÉDICO Y SANCIONES</div>${availabilityMsgs.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}
         </div>
         <div class="panel">${ctx.mode === 'online' && ctx.start.mode === 'rivals' ? '<div class="rivals-change"><div class="net-status"><span class="spinner"></span>Calculando puntos de Division Rivals…</div></div>' : ''}${this.statsHTML(m)}</div>

@@ -9,6 +9,7 @@ import { MatchView } from '../render/MatchView';
 import type { MatchEvent } from '../sim/types';
 import { HUD } from '../ui/HUD';
 import { Commentary } from '../ui/Commentary';
+import { AchievementTracker } from '../modes/Achievements';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { MatchAudio } from '../audio/MatchAudio';
 import { activePad } from '../input/pads';
@@ -67,6 +68,8 @@ export class MatchRunner {
   private input2: Input | null = null;
   private controller2: HumanController | null = null;
   private savedInput: { bindings: Bindings; pad: Input['padSource']; keyboard: boolean } | null = null;
+  /** Logros del usuario en este partido. */
+  readonly achievements: AchievementTracker | null = null;
   /** Comentarista (rótulos y voz opcional). */
   private commentary: Commentary | null = null;
   readonly controller: HumanController | null;
@@ -189,6 +192,10 @@ export class MatchRunner {
     }
     this.hud.showRadar = settings.showRadar;
     this.hud.popups = settings.popups;
+    if (config.humanTeam >= 0 && !config.training && !config.versus) {
+      this.achievements = new AchievementTracker(this.match, config.humanTeam as 0 | 1);
+      this.achievements.onUnlock = (a) => this.hud.showBanner(`🏆 ${a.icon} ${escapeHtml(a.name)}`, `Logro desbloqueado · ${escapeHtml(a.desc)}`, '#ffd23f', 3.2);
+    }
     this.commentary = settings.commentary !== false && !config.training ? new Commentary(uiRoot, this.match, !!settings.commentaryVoice) : null;
     this.touch = wantTouch && (this.controller || isGuest) ? new TouchControls(uiRoot, input) : null;
     document.body.classList.toggle('touch', !!this.touch);
@@ -353,6 +360,7 @@ export class MatchRunner {
     const m = this.match;
     this.hud.onEvent(e);
     this.commentary?.onEvent(e);
+    this.achievements?.onEvent(e);
     this.audio.onEvent(e);
     if (e.type === 'net' && e.x !== undefined && e.z !== undefined) this.view.netImpact(e.x, e.z, e.power ?? 0.6);
     if (e.type === 'goal' && e.kind !== 'shootout') {
