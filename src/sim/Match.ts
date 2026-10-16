@@ -551,6 +551,11 @@ export class Match {
       this.callOffside(p);
       return;
     }
+    // Mano: balón a la altura del brazo, por el costado y con los brazos separados del cuerpo
+    if (!gkHands && this.isHandball(p, relSpeed)) {
+      this.callHandball(p);
+      return;
+    }
     if (this.offsideTeam !== -1 && this.offsideTeam !== p.team) {
       // un rival juega el balón: se anula la situación de fuera de juego
       this.offsideSet.clear();
@@ -1195,6 +1200,56 @@ export class Match {
         this.foul(p, o, slide);
         return;
       }
+    }
+  }
+
+  /**
+   * ¿El balón le da en la mano? Criterios objetivos: llega con algo de fuerza, a la altura del brazo (no del
+   * pecho ni de la cabeza), por el costado, y el jugador tiene los brazos separados del cuerpo por el gesto que
+   * está haciendo (saltando a cabecear o en barrida). No cuenta para el destinatario de un pase.
+   */
+  private isHandball(p: Player, relSpeed: number): boolean {
+    const b = this.ball;
+    const lt = this.lastTouch;
+    if (!lt || lt.player === p || relSpeed < 7 || this.intendedReceiver === p) return false;
+    const h = b.pos.y / (p.data.height / 1.8);
+    if (h < 1.0 || h > 1.6) return false;
+    const a = p.action;
+    const armsOut = (a.kind === 'header' && a.time > 0.1 && a.time < 0.55) || a.kind === 'slide';
+    if (!armsOut) return false;
+    // lateral: distancia del balón al eje del cuerpo medida hacia los costados
+    const lx = Math.cos(p.facing);
+    const lz = -Math.sin(p.facing);
+    const side = Math.abs((b.pos.x - p.pos.x) * lx + (b.pos.z - p.pos.z) * lz);
+    // al saltar, los brazos suben con el impulso: solo cuenta un balón bien separado del cuerpo, a la altura del brazo levantado
+    if (a.kind === 'header') return side > 0.45 && h > 1.3;
+    return side > 0.33;
+  }
+
+  private callHandball(p: Player) {
+    const team = this.teams[p.team];
+    const other = this.teams[p.team === 0 ? 1 : 0];
+    team.stats.fouls++;
+    p.ps.fouls++;
+    this.debug.fouls++;
+    this.emit({ type: 'handball', team: p.team, playerId: p.id, text: p.data.name, x: p.pos.x, z: p.pos.z });
+    this.emit({ type: 'whistle', kind: 'short' });
+    this.addedSeconds += 20;
+    // amarilla si la mano cortó un tiro
+    const stoppedShot = !!this.lastShot && this.lastShot.team !== p.team && this.time - this.lastShot.time < 1.5;
+    if (stoppedShot) {
+      this.referee.signal('card', this.time, p.pos, p.pos, 3.4, p.yellowCards >= 1 ? 'red' : 'yellow');
+      this.restartHoldUntil = this.time + 3.6;
+      this.giveCard(p, 'yellow');
+    }
+    this.ball.vel.multiplyScalar(0.2);
+    this.owner = null;
+    if (isInPenaltyArea(p.pos, -team.attackDir)) {
+      this.addedSeconds += 30;
+      this.stopPlay('penalty', other.index as 0 | 1, new Vector3(other.attackGoal.x - other.attackDir * 11, BALL_RADIUS, 0));
+    } else {
+      const spot = new Vector3(clamp(p.pos.x, -HALF_LENGTH + 1, HALF_LENGTH - 1), BALL_RADIUS, clamp(p.pos.z, -HALF_WIDTH + 1, HALF_WIDTH - 1));
+      this.stopPlay('freekick', other.index as 0 | 1, spot);
     }
   }
 

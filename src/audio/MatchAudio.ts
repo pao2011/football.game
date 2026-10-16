@@ -88,6 +88,7 @@ export class MatchAudio {
         a.ooh();
         break;
       case 'foul':
+      case 'handball':
         a.boo();
         break;
       case 'tackle':
