@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AutoQuality, type QualityStep } from './AutoQuality';
 import { SIM_DT } from '../config/constants';
 import type { GameSettings } from '../config/Settings';
 import { HumanController } from '../control/HumanController';
@@ -96,6 +97,11 @@ export class MatchRunner {
   private pendingTip: string | null = null;
   /** Velocidad de simulación (para pruebas automáticas). */
   timeScale = 1;
+  /** Calidad automática según los FPS (la pone App si está activada). */
+  autoQuality: AutoQuality | null = null;
+  /** Duración real del último fotograma (sin el recorte que usa la simulación). */
+  private realDt = 0;
+  onQualityStep: (s: QualityStep) => void = () => {};
   /** Equipo del jugador local (0 local, 1 visitante, -1 ninguno). */
   readonly localTeam: 0 | 1 | -1;
   /** Partido online: el anfitrión simula; el invitado dibuja lo que recibe. */
@@ -241,7 +247,8 @@ export class MatchRunner {
     const loop = (now: number) => {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(loop);
-      const dt = Math.min(0.1, (now - this.last) / 1000);
+      this.realDt = (now - this.last) / 1000;
+      const dt = Math.min(0.1, this.realDt);
       this.last = now;
       this.frame(dt);
     };
@@ -343,6 +350,10 @@ export class MatchRunner {
       // con el balón suelto se mantiene el modo anterior (evita parpadeos de botones)
       if (pt !== -1 || m.phase !== 'play') this.touch.setContext(pt === team.index || m.gkHolding?.team === team.index || (m.phase !== 'play' && m.restart?.team === team.index));
       this.touch.setVisible(!this.paused && !this.inIntro && m.phase !== 'replay' && !m.finished);
+    }
+    if (this.autoQuality && !this.paused) {
+      const step = this.autoQuality.sample(this.realDt);
+      if (step) this.onQualityStep(step);
     }
     this.view.render();
 

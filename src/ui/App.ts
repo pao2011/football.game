@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { DIFFICULTY_LABELS } from '../ai/Difficulty';
+import { AutoQuality } from '../game/AutoQuality';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
 import { STADIUMS, getStadium } from '../data/stadiums';
@@ -420,6 +421,7 @@ export class App {
           const runner = new MatchRunner(this.renderer, config, getStadium(stadiumId), this.settings, this.input, this.audio, this.ui, online);
           this.runner = runner;
           runner.resize(window.innerWidth, window.innerHeight);
+          if (this.settings.autoQuality) this.attachAutoQuality(runner);
           // precompilar shaders
           this.renderer.compile(runner.view.scene, runner.view.camera);
           bar.style.width = '100%';
@@ -734,6 +736,25 @@ export class App {
     // al refrescar la lista no se repite la animación de entrada
     setTimeout(() => screen.root.classList.add('no-anim'), 250);
     this.overlay = screen;
+  }
+
+  /** Calidad automática: si los FPS no llegan, baja la resolución y luego las sombras (y lo guarda). */
+  private attachAutoQuality(runner: MatchRunner) {
+    const aq = new AutoQuality({ resolutionScale: this.settings.resolutionScale, shadows: this.settings.shadows });
+    runner.autoQuality = aq;
+    runner.onQualityStep = (step) => {
+      if (step === 'resolution') {
+        this.settings.resolutionScale = aq.resolutionScale;
+        this.onResize();
+      } else {
+        this.settings.shadows = false;
+        runner.view.setShadows(false);
+      }
+      saveSettings(this.settings);
+      const t = el('div', 'mute-toast', `⚙ Calidad ajustada para ir más fluido <small>(${step === 'resolution' ? `resolución ${Math.round(aq.resolutionScale * 100)}%` : 'sin sombras'})</small>`);
+      this.ui.appendChild(t);
+      setTimeout(() => t.remove(), 2200);
+    };
   }
 
   private applyLiveSettings() {
@@ -1494,6 +1515,7 @@ export class App {
           ${toggle('Sombras', 'shadows')}
           ${this.stepper('Escala de resolución', pct(st.resolutionScale), 'res')}
           ${toggle('Antialiasing (reiniciar)', 'antialias')}
+          ${toggle('Calidad automática (según FPS)', 'autoQuality')}
           ${this.stepper('Cámara', CL[st.cameraStyle], 'cam')}
           ${this.stepper('Zoom de cámara', st.cameraZoom.toFixed(1) + 'x', 'zoom')}
           ${toggle('Radar', 'showRadar')}

@@ -10,6 +10,8 @@ export interface GameSettings {
   shadows: boolean;
   resolutionScale: number; // 0.5 .. 1
   antialias: boolean;
+  /** Bajar la resolución y las sombras solo si el equipo no llega a unos FPS fluidos. */
+  autoQuality: boolean;
   showRadar: boolean;
   showIndicators: boolean;
   cameraStyle: CameraStyle;
@@ -64,6 +66,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   shadows: true,
   resolutionScale: 1,
   antialias: true,
+  autoQuality: true,
   showRadar: true,
   showIndicators: true,
   cameraStyle: 'broadcast',

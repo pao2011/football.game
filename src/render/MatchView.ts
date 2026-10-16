@@ -159,6 +159,15 @@ export class MatchView {
     this.stadium.keyLight.castShadow = opts.shadows;
   }
 
+  /** Activa o quita las sombras en caliente (calidad automática). */
+  setShadows(on: boolean) {
+    this.opts.shadows = on;
+    this.renderer.shadowMap.enabled = on;
+    this.stadium.keyLight.castShadow = on;
+    this.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.castShadow) o.castShadow = on; });
+    this.scene.traverse((o) => { const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined; if (mat) (Array.isArray(mat) ? mat : [mat]).forEach((x) => (x.needsUpdate = true)); });
+  }
+
   private refModel: PlayerModel;
   private refCard: THREE.Mesh;
   /** Tiro libre directo en curso: recorrido previsto y punto de mira (lo actualiza el bucle del partido). */
