@@ -189,6 +189,9 @@ export class HUD {
       case 'whistle':
         this.advUntil = -1;
         break;
+      case 'injury':
+        this.showToast(`🚑 Lesionado: ${e.text ?? ''}`, '#ff6b76');
+        break;
       case 'handball':
         this.showToast(`✋ Mano de ${e.text ?? ''}`, '#ffcf3f');
         break;

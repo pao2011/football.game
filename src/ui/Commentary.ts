@@ -84,6 +84,8 @@ export class Commentary {
         return { text: pick(['¡Ley de la ventaja! Sigue el juego', 'El árbitro deja seguir: ventaja']), prio: 2 };
       case 'handball':
         return { text: pick([`¡Mano de ${e.text ?? n}!`, `El balón le dio en el brazo a ${e.text ?? n}: ¡mano!`]), prio: 3 };
+      case 'injury':
+        return { text: pick([`${e.text} se duele… parece lesionado`, `Mala noticia: ${e.text} se lesiona y tendrá que salir`]), prio: 3 };
       case 'card':
         if (e.kind === 'yellow') return { text: pick([`Amarilla para ${e.text}`, `Tarjeta amarilla a ${e.text}`]), prio: 3 };
         return { text: pick([`¡Roja! ${e.text} se va a la calle`, `¡Expulsado ${e.text}!`]), prio: 4 };

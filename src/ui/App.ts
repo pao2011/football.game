@@ -6,6 +6,7 @@ import { FORMATION_IDS, FORMATIONS } from '../data/formations';
 import { STADIUMS, getStadium } from '../data/stadiums';
 import { TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
 import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
+import { disciplineOf, isAvailable } from '../modes/Availability';
 import type { Difficulty, FormationId, PlayerData, TeamData } from '../data/types';
 import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
 import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, versusDevicesLabel, type Action } from '../input/Input';
@@ -652,12 +653,17 @@ export class App {
     const m = r.match;
     const [h, a] = m.teams;
     // Registrar en el modo correspondiente
+    // bajas (lesiones, rojas y amarillas acumuladas) para el próximo partido del usuario
+    let availabilityMsgs: string[] = [];
     if (ctx.mode === 'tournament' && this.tournament) {
-      this.tournament.recordUserResult(ctx.fixture, r.home, r.away, r.penalties ?? undefined);
+      const userIdx = ctx.fixture.home === this.tournament.state.userTeam ? 0 : 1;
+      const d = disciplineOf([...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff]);
+      availabilityMsgs = this.tournament.recordUserResult(ctx.fixture, r.home, r.away, r.penalties ?? undefined, d);
     } else if (ctx.mode === 'career' && this.career) {
       const userIdx = ctx.fixture.home === this.career.state.userTeam ? 0 : 1;
       const scorers = [...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff].filter((p) => p.goals > 0).flatMap((p) => Array(p.goals).fill(p.id));
-      this.career.recordUserResult(ctx.fixture, r.home, r.away, scorers);
+      const d = disciplineOf([...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff]);
+      availabilityMsgs = this.career.recordUserResult(ctx.fixture, r.home, r.away, scorers, d);
     }
     if (ctx.mode === 'online') {
       window.clearInterval(this.onlineWatch);
@@ -677,6 +683,7 @@ export class App {
           ${pens}
           <div class="scorers"><div style="text-align:right">${scorers(h)}</div><div>${scorers(a)}</div></div>
           ${ctx.mode === 'training' ? '' : this.ratingsHTML(m)}
+          ${availabilityMsgs.length ? `<div class="avail-msgs"><div class="crumb">PARTE MÉDICO Y SANCIONES</div>${availabilityMsgs.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}
         </div>
         <div class="panel">${ctx.mode === 'online' && ctx.start.mode === 'rivals' ? '<div class="rivals-change"><div class="net-status"><span class="spinner"></span>Calculando puntos de Division Rivals…</div></div>' : ''}${this.statsHTML(m)}</div>
       </div></div>
@@ -1076,6 +1083,8 @@ export class App {
           home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: side,
           halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty,
           extraTime: next.knockout, penalties: next.knockout, weather: randomWeather(Math.random()),
+          homeLineup: side === 0 ? st.availability && this.tournament?.matchLineup() : undefined,
+          awayLineup: side === 1 ? st.availability && this.tournament?.matchLineup() : undefined,
         }, this.stadiumForCtx({ mode: 'tournament', fixture: next }), { mode: 'tournament', fixture: next });
       },
     }, () => this.mainMenu());
@@ -1140,7 +1149,7 @@ export class App {
           home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: side,
           halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty, extraTime: false, penalties: false,
           homeFormation: side === 0 ? st.formation : undefined, awayFormation: side === 1 ? st.formation : undefined,
-          homeLineup: side === 0 ? st.lineup : undefined, awayLineup: side === 1 ? st.lineup : undefined,
+          homeLineup: side === 0 ? this.career?.matchLineup() ?? st.lineup : undefined, awayLineup: side === 1 ? this.career?.matchLineup() ?? st.lineup : undefined,
           weather: randomWeather(Math.random()),
         }, this.stadiumForCtx({ mode: 'career', fixture: next }), { mode: 'career', fixture: next });
       },
@@ -1165,7 +1174,10 @@ export class App {
       }).join('');
       const list = team.players.map((p) => {
         const starter = lineup.indexOf(p.id);
-        return `<div class="row ${starter >= 0 ? 'starter' : ''}" data-act="pick" data-id="${p.id}"><span><span class="pos ${p.position}">${p.position === 'GK' ? 'POR' : p.position === 'DEF' ? 'DEF' : p.position === 'MID' ? 'MED' : 'DEL'}</span> ${p.number}. ${esc(p.name)} <span class="muted">${c.state.ages[p.id] ?? ''} años</span></span><span class="ovr">${playerOverall(p)}</span></div>`;
+        const av = c.state.availability;
+        const outInfo = av?.out[p.id];
+        const badge = outInfo ? `<span class="out-badge" title="${outInfo.reason === 'injury' ? 'Lesionado' : 'Sancionado'}">${outInfo.reason === 'injury' ? '🚑' : '🟥'} ${outInfo.games}</span>` : (av?.yellows[p.id] ? `<span class="muted" title="Amarillas acumuladas">🟨${av.yellows[p.id]}</span>` : '');
+        return `<div class="row ${starter >= 0 ? 'starter' : ''} ${isAvailable(av, p.id) ? '' : 'unavailable'}" data-act="pick" data-id="${p.id}"><span><span class="pos ${p.position}">${p.position === 'GK' ? 'POR' : p.position === 'DEF' ? 'DEF' : p.position === 'MID' ? 'MED' : 'DEL'}</span> ${p.number}. ${esc(p.name)} <span class="muted">${c.state.ages[p.id] ?? ''} años</span> ${badge}</span><span class="ovr">${playerOverall(p)}</span></div>`;
       }).join('');
       return `
       <div class="screen-header"><div><div class="crumb">PLANTILLA · ${esc(team.name)}</div><h2>Alineación</h2></div></div>

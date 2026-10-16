@@ -79,6 +79,9 @@ export class Player {
   warnings = 0;
   /** Desmarque pedido por el jugador humano (LB): hasta cuándo y hacia dónde. */
   forcedRunUntil = -1;
+  /** Lesionado en este partido (y partidos que se perderá en torneo o carrera). */
+  injured = false;
+  injuryGames = 0;
   readonly forcedRunTarget = new Vector3();
   duty: 'shape' | 'press' | 'cover' | 'mark' | 'chase' | 'support' | 'run' | 'carrier' | 'receive' | 'setpiece' = 'shape';
   markTarget: Player | null = null;
@@ -130,6 +133,7 @@ export class Player {
     const jog = 4.6 + (a.speed / 100) * 1.0;
     let s = this.sprinting ? top : jog;
     s *= 0.82 + 0.18 * this.stamina;
+    if (this.injured) s *= 0.8; // lesionado: cojea hasta que lo cambian
     if (withBall) s *= 0.86 + (a.control / 100) * 0.08;
     // contener: más rápido si además se esprinta (LT + RT, "brega rápida")
     if (this.jockeying) s = Math.min(s, this.sprinting ? 5.2 : 3.2);

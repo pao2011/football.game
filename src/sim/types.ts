@@ -62,6 +62,7 @@ export type MatchEventType =
   | 'foul'
   | 'advantage' // el árbitro da la ley de la ventaja (no para el juego)
   | 'handball' // mano (text: nombre del jugador)
+  | 'injury' // lesión (text: nombre; power: partidos que se perderá)
   | 'card'
   | 'offside'
   | 'out'

@@ -1307,6 +1307,8 @@ export class Match {
       else warn = true;
     }
     this.emit({ type: 'foul', team: offender.team, playerId: offender.id, x: victim.pos.x, z: victim.pos.z });
+    // Entrada muy dura: puede lesionar al rival
+    if (severity >= 0.75 && !victim.injured && !victim.isGK && this.rng.next() < 0.45) this.injure(victim);
     // Ley de la ventaja: fuera del área, sin roja, y con el balón para un compañero libre en campo prometedor
     if (!inBox && card !== 'red' && this.advantageLikely(victim)) {
       this.advantage = {
@@ -1390,6 +1392,17 @@ export class Match {
       a.offender.warnings++;
       this.emit({ type: 'warning', team: a.offender.team, playerId: a.offender.id, text: a.offender.data.name });
     }
+  }
+
+  /** Lesiona a un jugador: cojea y se pide el cambio para la próxima interrupción (si quedan cambios). */
+  injure(p: Player) {
+    p.injured = true;
+    p.injuryGames = 1 + Math.floor(this.rng.next() * 3);
+    this.emit({ type: 'injury', team: p.team, playerId: p.id, text: p.data.name, power: p.injuryGames });
+    const t = this.teams[p.team];
+    if (this.config.training) return;
+    const inn = t.bench.find((q) => q.data.position === p.position) ?? t.bench.find((q) => q.data.position !== 'GK');
+    if (inn) this.requestSub(t.index, p.id, inn.id);
   }
 
   giveCard(p: Player, card: 'yellow' | 'red') {

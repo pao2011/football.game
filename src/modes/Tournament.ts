@@ -2,6 +2,7 @@ import { getTeam, TEAMS } from '../data/teams';
 import { loadJSON, removeKey, saveJSON } from '../save/Storage';
 import { Rng } from '../util/math';
 import { computeStandings, quickSim, roundRobin, winnerOf, type Fixture, type StandingRow } from './Competition';
+import { applyAfterMatch, emptyAvailability, fixLineup, type AvailabilityState, type Discipline } from './Availability';
 
 /**
  * Copa Élite: 8 equipos, dos grupos de 4 (todos contra todos), semifinales cruzadas y final.
@@ -15,6 +16,8 @@ export interface TournamentState {
   seed: number;
   champion: string | null;
   eliminated: boolean;
+  /** Lesionados, sancionados y amarillas acumuladas del equipo del usuario. */
+  availability?: AvailabilityState;
 }
 
 const KEY = 'tournament';
@@ -70,7 +73,14 @@ export class Tournament {
   }
 
   /** Registra el resultado del partido del usuario y simula el resto de la ronda. */
-  recordUserResult(fx: Fixture, homeGoals: number, awayGoals: number, pens?: [number, number]) {
+  /** Alineación del usuario para el próximo partido (sin lesionados ni sancionados). */
+  matchLineup(): string[] {
+    const t = getTeam(this.state.userTeam);
+    return fixLineup(t, t.formation, t.players.slice(0, 11).map((p) => p.id), this.state.availability);
+  }
+
+  recordUserResult(fx: Fixture, homeGoals: number, awayGoals: number, pens?: [number, number], discipline?: Discipline): string[] {
+    const msgs = discipline ? applyAfterMatch((this.state.availability ??= emptyAvailability()), getTeam(this.state.userTeam), discipline) : [];
     const f = this.state.fixtures.find((x) => x.id === fx.id)!;
     f.played = true;
     f.homeGoals = homeGoals;
@@ -79,6 +89,7 @@ export class Tournament {
     this.simulateRound(f.round, f.knockout);
     this.advance();
     this.save();
+    return msgs;
   }
 
   private simulateRound(round: number, knockout: boolean) {
