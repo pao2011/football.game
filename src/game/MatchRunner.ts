@@ -27,6 +27,8 @@ export interface OnlineLink {
   send(d: object): void;
   /** Nombre del rival (para los avisos). */
   opponentName?: string;
+  /** Espectador: recibe el partido del anfitrión pero no manda nada ni controla a nadie. */
+  spectator?: boolean;
 }
 
 /** Pausas por jugador en un partido online y duración máxima de cada una. */
@@ -203,7 +205,7 @@ export class MatchRunner {
       this.achievements.onUnlock = (a) => this.hud.showBanner(`🏆 ${a.icon} ${escapeHtml(a.name)}`, `Logro desbloqueado · ${escapeHtml(a.desc)}`, '#ffd23f', 3.2);
     }
     this.commentary = settings.commentary !== false && !config.training ? new Commentary(uiRoot, this.match, !!settings.commentaryVoice) : null;
-    this.touch = wantTouch && (this.controller || isGuest) ? new TouchControls(uiRoot, input) : null;
+    this.touch = wantTouch && (this.controller || (isGuest && !online?.spectator)) ? new TouchControls(uiRoot, input) : null;
     document.body.classList.toggle('touch', !!this.touch);
     if (this.touch) {
       // consejo de uso las primeras partidas
@@ -573,8 +575,8 @@ export class MatchRunner {
     this.paused = true;
     if (this.online) {
       this.input.suppressed = true;
-      // la pausa detiene el partido para los dos (un número limitado de veces)
-      if (!this.inIntro && !this.localHalt && this.pausesLeft > 0) {
+      // la pausa detiene el partido para los dos (un número limitado de veces); el espectador solo abre el menú
+      if (!this.online.spectator && !this.inIntro && !this.localHalt && this.pausesLeft > 0) {
         this.pausesLeft--;
         this.localHalt = true;
         this.haltStarted = performance.now();

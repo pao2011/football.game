@@ -641,3 +641,7 @@ body.touch .commentary { bottom: auto; top: 84px; font-size: 14px; padding: 6px 
 .replay-bar .rb-title { display: flex; align-items: center; gap: 8px; font-family: var(--display); letter-spacing: 0.04em; }
 .replay-bar .rb-btns { display: flex; gap: 6px; }
 .replay-bar .btn { padding: 8px 14px; }
+/* Selectores (‹ valor ›) que no desbordan su panel en pantallas medianas */
+.row > label { min-width: 0; }
+.row > .stepper { min-width: 0; flex-shrink: 1; }
+.stepper .val { min-width: clamp(70px, 9vw, 150px); }

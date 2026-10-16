@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { DIFFICULTY_LABELS } from '../ai/Difficulty';
 import { AutoQuality } from '../game/AutoQuality';
+import { LANG_NAMES, setLang } from '../i18n';
 import { ReplayViewer } from '../game/ReplayViewer';
 import type { MatchView } from '../render/MatchView';
 import { deleteReplay, encodeFrames, lastSeconds, listReplays, MAX_SAVED_REPLAYS, saveReplay, type SavedReplay } from '../modes/SavedReplays';
@@ -119,6 +120,7 @@ export class App {
     this.bg = el('div', 'menu-bg', '<div class="pitch-lines"></div>');
     document.body.insertBefore(this.bg, ui);
     registerCustomTeams(); // equipos creados en el editor
+    setLang(this.settings.language);
     this.applyAudio();
     this.quick = { home: 0, away: 1, stadium: 0, half: HALF_OPTIONS.indexOf(this.settings.halfMinutes), difficulty: DIFFS.indexOf(this.settings.difficulty), side: 0, formation: null };
     if (this.quick.half < 0) this.quick.half = 2;
@@ -661,9 +663,10 @@ export class App {
       <h2>Pausa</h2>
       <div class="muted" style="margin-bottom:14px">${esc(m.teams[0].data.name)} ${m.teams[0].stats.goals} - ${m.teams[1].stats.goals} ${esc(m.teams[1].data.name)} · ${m.clockText}</div>
       <div class="menu-list">
-        ${r.online ? `<div class="muted online-pause-note" style="margin:-6px 0 10px">${r.pauseSecondsLeft >= 0 ? `Partido pausado para los dos · se reanuda solo en <b class="ps-left">${r.pauseSecondsLeft}</b> s · te quedan ${r.pausesLeft} pausas` : 'Ya no te quedan pausas: el partido sigue en juego'}</div>` : ''}
+        ${r.online?.spectator ? '<div class="muted" style="margin:-6px 0 10px">👁 Estás mirando como espectador: el partido sigue.</div>' : ''}
+        ${r.online && !r.online.spectator ? `<div class="muted online-pause-note" style="margin:-6px 0 10px">${r.pauseSecondsLeft >= 0 ? `Partido pausado para los dos · se reanuda solo en <b class="ps-left">${r.pauseSecondsLeft}</b> s · te quedan ${r.pausesLeft} pausas` : 'Ya no te quedan pausas: el partido sigue en juego'}</div>` : ''}
         <button class="menu-item" data-act="resume">Reanudar</button>
-        ${r.online ? '<button class="menu-item" data-act="chat">Mensajes rápidos<small>Para tu rival</small></button>' : '<button class="menu-item" data-act="restart">Reiniciar partido</button>'}
+        ${r.online?.spectator ? '' : r.online ? '<button class="menu-item" data-act="chat">Mensajes rápidos<small>Para tu rival</small></button>' : '<button class="menu-item" data-act="restart">Reiniciar partido</button>'}
         ${r.localTeam >= 0 && !m.config.training && !r.online ? `<button class="menu-item" data-act="tactics">Tácticas<small>${esc(m.teams[r.localTeam as 0 | 1].formation)} · ${MENTALITY_NAMES[m.teams[r.localTeam as 0 | 1].mentality + 2]}</small></button>` : ''}
         ${r.localTeam >= 0 && !m.config.training ? `<button class="menu-item" data-act="subs">Cambios<small>${m.teams[r.localTeam as 0 | 1].subsUsed}/${MAX_SUBS} realizados</small></button>` : ''}
         <button class="menu-item" data-act="stats">Estadísticas</button>
@@ -1280,11 +1283,17 @@ export class App {
       <input class="text-in code-in" id="on-code" maxlength="5" autocomplete="off" autocapitalize="characters" placeholder="ABCDE" data-enter="go">
       ${error ? `<div class="sub-msg" style="margin-top:10px">${esc(error)}</div>` : ''}
       <div style="margin-top:12px">${this.onlineTeamStepper()}</div>
-      <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn primary" data-act="go">Unirse</button></div></div>`, {
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn" data-act="watch">👁 Mirar</button><button class="btn primary" data-act="go">Unirse</button></div>
+      <div class="muted" style="font-size:12px;margin-top:8px">Con <b>Mirar</b> ves como espectador un partido de sala privada que ya empezó.</div></div>`, {
       go: () => {
         const code = ((sc.root.querySelector('#on-code') as HTMLInputElement)?.value ?? '').trim().toUpperCase();
         if (code.length < 4) return;
         net.send({ t: 'join', code, team: TEAMS[this.onlineTeam].id });
+      },
+      watch: () => {
+        const code = ((sc.root.querySelector('#on-code') as HTMLInputElement)?.value ?? '').trim().toUpperCase();
+        if (code.length < 4) return;
+        net.send({ t: 'watch', code });
       },
       back: () => this.onlineHub(),
       teamPrev: () => { this.onlineTeam = (this.onlineTeam + BUILTIN_TEAM_COUNT - 1) % BUILTIN_TEAM_COUNT; this.onlineJoin(error); },
@@ -1345,6 +1354,25 @@ export class App {
           this.onlineNotice('Tu rival se fue', 'Tu rival abandonó el partido: ganas 3-0.', true);
         }
         break;
+      case 'spectators': {
+        const n = Number((m as unknown as { n: number }).n) || 0;
+        if (runner?.online) {
+          const t = el('div', 'mute-toast', n > 0 ? `👁 ${n} ${n === 1 ? 'espectador' : 'espectadores'} mirando` : '👁 Sin espectadores');
+          this.ui.appendChild(t);
+          setTimeout(() => t.remove(), 2000);
+        }
+        break;
+      }
+      case 'watchEnd':
+        if (runner?.online?.spectator && !runner.match.finished) {
+          runner.dispose();
+          this.runner = null;
+          this.overlay?.dispose();
+          this.overlay = null;
+          window.clearInterval(this.onlineWatch);
+          this.onlineNotice('Fin de la transmisión', (m as unknown as { forfeit: boolean }).forfeit ? 'Uno de los jugadores abandonó el partido.' : 'El partido terminó.');
+        }
+        break;
       case 'final':
         this.onlineFinal = m as unknown as FinalMsg;
         this.showOnlineFinal();
@@ -1380,7 +1408,7 @@ export class App {
     const away = teamOf(st.away);
     const cfg: MatchConfig = {
       home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away),
-      humanTeam: st.role === 'host' ? 0 : 1,
+      humanTeam: st.role === 'host' ? 0 : st.role === 'guest' ? 1 : -1,
       halfLengthSec: Math.max(2, Math.min(10, st.half)) * 60,
       difficulty: 'pro', extraTime: false, penalties: false, seed: st.seed,
       // el mismo clima para los dos (sale de la semilla del partido)
@@ -1388,12 +1416,21 @@ export class App {
     };
     const ctx: MatchContext = { mode: 'online', start: st };
     const opp = st.role === 'host' ? st.away : st.home;
-    const link: OnlineLink = { role: st.role, send: (d) => net.relay(d), opponentName: opp.name };
+    const link: OnlineLink = st.role === 'spectator'
+      ? { role: 'guest', spectator: true, send: () => {}, opponentName: `${st.home.name} - ${st.away.name}` }
+      : { role: st.role, send: (d) => net.relay(d), opponentName: opp.name };
     this.playMatch(cfg, this.stadiumForCtx(ctx), ctx, link);
     // el invitado comprueba que siguen llegando datos del anfitrión
     window.clearInterval(this.onlineWatch);
+    let lastTick = performance.now();
     this.onlineWatch = window.setInterval(() => {
       const r = this.runner;
+      const now = performance.now();
+      // si la propia página estuvo congelada (cargando la escena, en segundo plano…), los datos que llegaron
+      // mientras tanto aún no se procesaron: no cuenta como silencio del rival
+      const frozen = now - lastTick > 2500;
+      lastTick = now;
+      if (r?.guestSync && frozen) r.guestSync.lastRecv = Math.max(r.guestSync.lastRecv, now);
       if (!r || !r.guestSync || r.inIntro || r.match.finished || r.halted) return;
       if (r.guestSync.received > 0 && performance.now() - r.guestSync.lastRecv > 12000) {
         window.clearInterval(this.onlineWatch);
@@ -1700,6 +1737,7 @@ export class App {
   settingsScreen(back: () => void, inMatch = false) {
     const st = this.settings;
     const Q = ['low', 'medium', 'high'] as const;
+    const LANGS = ['es', 'en', 'pt'] as const;
     const QL = { low: 'Baja', medium: 'Media', high: 'Alta' };
     const CAMS = ['broadcast', 'tele', 'wide'] as const;
     const CL = { broadcast: 'Transmisión', tele: 'Tele', wide: 'Panorámica' };
@@ -1709,6 +1747,7 @@ export class App {
       <div class="screen-header"><div><div class="crumb">CONFIGURACIÓN</div><h2>Opciones</h2></div></div>
       <div class="screen-body"><div class="grid3">
         <div class="panel"><h3>Gráficos</h3>
+          ${this.stepper('Idioma / Language', LANG_NAMES[st.language], 'lang')}
           ${this.stepper('Calidad', QL[st.quality] + (inMatch ? ' (próximo partido)' : ''), 'qual')}
           ${toggle('Sombras', 'shadows')}
           ${this.stepper('Escala de resolución', pct(st.resolutionScale), 'res')}
@@ -1760,6 +1799,8 @@ export class App {
     };
     const h: Handlers = {
       tog: (t) => { const k = t.dataset.key as keyof GameSettings; (st as any)[k] = !st[k]; apply(); },
+      langPrev: () => { st.language = cycleArr(LANGS, st.language, -1); setLang(st.language); apply(); },
+      langNext: () => { st.language = cycleArr(LANGS, st.language, 1); setLang(st.language); apply(); },
       qualPrev: () => { st.quality = cycleArr(Q, st.quality, -1); apply(); },
       qualNext: () => { st.quality = cycleArr(Q, st.quality, 1); apply(); },
       resPrev: () => step('resolutionScale', -1, 0.5, 1, 0.1), resNext: () => step('resolutionScale', 1, 0.5, 1, 0.1),

@@ -102,6 +102,50 @@ describe('Servidor online (sala de espera)', () => {
     expect(b.last('match').mode).toBe('friendly');
   });
 
+  it('espectadores: miran un partido de sala privada con su código', () => {
+    const lobby = new Lobby(memStore());
+    const a = hello(lobby, 'Ana');
+    const b = hello(lobby, 'Beto');
+    const c = hello(lobby, 'Caro');
+    a.msg({ t: 'create', team: 'marea', half: 3 });
+    const code = a.last('room').code;
+    c.msg({ t: 'watch', code });
+    expect(c.last('error')).toBeTruthy(); // todavía no empezó
+    b.msg({ t: 'join', code });
+    c.msg({ t: 'watch', code: code.toLowerCase() });
+    const m = c.last('match');
+    expect(m.role).toBe('spectator');
+    expect(m.seed).toBe(a.last('match').seed);
+    expect(a.last('spectators').n).toBe(1);
+    // recibe las instantáneas del anfitrión, pero no lo que manda el invitado
+    a.msg({ t: 'relay', d: { k: 's', x: 7 } });
+    expect(c.last('relay').d.x).toBe(7);
+    b.msg({ t: 'relay', d: { k: 'i', f: [] } });
+    expect(c.last('relay').d.k).toBe('s');
+    // sus resultados no cuentan; al terminar se le avisa
+    c.msg({ t: 'result', home: 9, away: 0 });
+    a.msg({ t: 'result', home: 1, away: 0 });
+    b.msg({ t: 'result', home: 1, away: 0 });
+    expect(a.last('final').outcome.home).toBe(1);
+    expect(c.last('watchEnd')).toBeTruthy();
+    c.msg({ t: 'watch', code });
+    expect(c.last('error').text).toMatch(/No hay/);
+  });
+
+  it('latido: tolera un ping sin respuesta y desconecta tras dos', () => {
+    const lobby = new Lobby(memStore());
+    const a = hello(lobby, 'Ana');
+    const b = hello(lobby, 'Beto');
+    lobby.heartbeat(); // ping
+    b.handlers.pong(); // Beto responde, Ana no
+    lobby.heartbeat(); // Ana: primer latido perdido (se tolera)
+    expect(lobby.clients.size).toBe(2);
+    b.handlers.pong();
+    lobby.heartbeat(); // Ana: segundo latido perdido → fuera
+    expect(lobby.clients.size).toBe(1);
+    void a;
+  });
+
   it('en Rivals no empareja divisiones muy distintas enseguida', () => {
     const store = memStore();
     let now = 0;
