@@ -382,7 +382,55 @@ export class MatchView {
     return model;
   }
 
+  /** Modo foto: cámara libre que orbita alrededor de un punto (el partido queda congelado). */
+  photo: { target: THREE.Vector3; yaw: number; pitch: number; dist: number } | null = null;
+
+  startPhoto() {
+    const c = this.camera;
+    const t = this.match.ball.pos.clone();
+    t.y = Math.max(0.6, t.y);
+    const off = c.position.clone().sub(t);
+    const d = Math.max(4, off.length());
+    this.photo = { target: t, yaw: Math.atan2(off.x, off.z), pitch: Math.asin(Math.min(1, Math.max(-1, off.y / d))), dist: Math.min(60, d) };
+  }
+
+  /** Gira (dYaw, dPitch en rad), acerca (factor de zoom) o mueve el punto de mira (en el plano, relativo a la cámara). */
+  photoMove(dYaw: number, dPitch: number, zoom = 1, panRight = 0, panForward = 0) {
+    const p = this.photo;
+    if (!p) return;
+    p.yaw += dYaw;
+    p.pitch = Math.min(1.45, Math.max(0.02, p.pitch + dPitch));
+    p.dist = Math.min(120, Math.max(1.5, p.dist * zoom));
+    if (panRight || panForward) {
+      // ejes de la cámara proyectados en el césped
+      const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
+      p.target.x += fz * -panRight + fx * panForward;
+      p.target.z += -fx * -panRight + fz * panForward;
+      p.target.x = Math.max(-75, Math.min(75, p.target.x));
+      p.target.z = Math.max(-50, Math.min(50, p.target.z));
+    }
+  }
+
+  stopPhoto() {
+    this.photo = null;
+  }
+
+  private applyPhoto() {
+    const p = this.photo!;
+    const c = this.camera;
+    const h = Math.cos(p.pitch) * p.dist;
+    c.position.set(p.target.x + Math.sin(p.yaw) * h, Math.max(0.25, p.target.y + Math.sin(p.pitch) * p.dist), p.target.z + Math.cos(p.yaw) * h);
+    c.lookAt(p.target);
+  }
+
+  /** Captura de la imagen actual como PNG (se renderiza justo antes para que el búfer tenga la imagen). */
+  capture(): string {
+    this.render();
+    return this.renderer.domElement.toDataURL('image/png');
+  }
+
   render() {
+    if (this.photo) this.applyPhoto();
     this.renderer.render(this.scene, this.camera);
   }
 

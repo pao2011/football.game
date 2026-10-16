@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { DIFFICULTY_LABELS } from '../ai/Difficulty';
 import { AutoQuality } from '../game/AutoQuality';
+import { ReplayViewer } from '../game/ReplayViewer';
+import type { MatchView } from '../render/MatchView';
+import { deleteReplay, encodeFrames, lastSeconds, listReplays, MAX_SAVED_REPLAYS, saveReplay, type SavedReplay } from '../modes/SavedReplays';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
 import { STADIUMS, getStadium } from '../data/stadiums';
@@ -92,6 +95,8 @@ export class App {
   private overlay: Screen | null = null;
   private quick: QuickSetup;
   private lastMatch: { config: MatchConfig; ctx: MatchContext } | null = null;
+  private lastStadiumId = '';
+  private replayViewer: ReplayViewer | null = null;
   tournament: Tournament | null = null;
   career: Career | null = null;
 
@@ -163,6 +168,7 @@ export class App {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * this.settings.resolutionScale);
     this.renderer.setSize(w, h, false);
     this.runner?.resize(w, h);
+    this.replayViewer?.resize(w, h);
   }
 
   private show(html: string, handlers: Handlers, back: (() => void) | null, cls = '') {
@@ -273,6 +279,7 @@ export class App {
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
           <button class="menu-item" data-act="editor">✏️ Editor de equipos<small>Crea tu equipo · exportar e importar</small></button>
+          <button class="menu-item" data-act="replays">🎬 Repeticiones<small>Tus jugadas guardadas</small></button>
           <button class="menu-item" data-act="achievements">🏆 Logros<small>${Object.keys(unlockedSet()).length}/${ACHIEVEMENTS.length} desbloqueados</small></button>
           <button class="menu-item" data-act="controls">Controles<small>Teclado y mando · reasignar teclas</small></button>
           ${!isElectron && !isNativeApp() ? '<button class="menu-item apk-item" data-act="apk">📲 Descargar APK<small>Instala el juego en tu Android</small></button>' : ''}
@@ -285,6 +292,7 @@ export class App {
       </div>
       <div class="version-tag">v${VERSION} · ${isTouchDevice() ? 'Toca una opción para elegir' : '↑↓ para navegar · Enter/S para elegir · Esc para volver'}</div>`, {
       quick: () => this.quickMatchScreen(),
+      replays: () => this.replaysScreen(),
       online: () => this.onlineMenu(),
       tournament: () => this.tournamentHub(),
       career: () => this.careerHub(),
@@ -402,6 +410,7 @@ export class App {
 
   playMatch(config: MatchConfig, stadiumId: string, ctx: MatchContext, online: OnlineLink | null = null) {
     this.lastMatch = { config, ctx };
+    this.lastStadiumId = stadiumId;
     const home = config.home;
     const away = config.away;
     const tip = TIPS[Math.floor(Math.random() * TIPS.length)];
@@ -460,6 +469,188 @@ export class App {
       <button class="btn" data-act="menu">Menú principal</button></div>`, { menu: () => this.mainMenu() }, () => this.mainMenu());
   }
 
+  /** Modo foto: el partido queda congelado y la cámara se mueve libre (arrastrar, rueda/pellizco, teclas). */
+  private photoMode(target?: { view: MatchView; onExit: () => void }) {
+    const r = this.runner;
+    if (!target && !r) return;
+    const view = target?.view ?? r!.view;
+    const onExit = target?.onExit ?? (() => this.pauseMenu());
+    view.startPhoto();
+    const hudRoot = target ? null : r!.hud.root;
+    if (hudRoot) hudRoot.style.visibility = 'hidden';
+    const savedInd = view.opts.showIndicators;
+    view.opts.showIndicators = false;
+    const root = el('div', 'photo-mode', `
+      <div class="pm-surface"></div>
+      <div class="pm-bar">
+        <button class="btn primary" data-act="shot">📷 Capturar</button>
+        <button class="btn" data-act="exit">Salir</button>
+      </div>
+      <div class="pm-hint">${isTouchDevice() ? 'Arrastra para girar · dos dedos: acercar y mover' : 'Arrastra para girar · rueda: acercar · WASD / flechas: mover · Q/E: subir y bajar · F: capturar'}</div>`);
+    this.ui.appendChild(root);
+    const surface = root.querySelector('.pm-surface') as HTMLElement;
+    const pts = new Map<number, { x: number; y: number }>();
+    let pinch = 0;
+    let mid = { x: 0, y: 0 };
+    surface.addEventListener('pointerdown', (e) => { surface.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); pinch = 0; });
+    surface.addEventListener('pointermove', (e) => {
+      const prev = pts.get(e.pointerId);
+      if (!prev) return;
+      const cur = { x: e.clientX, y: e.clientY };
+      if (pts.size === 1) {
+        view.photoMove(-(cur.x - prev.x) * 0.006, (cur.y - prev.y) * 0.005);
+      }
+      pts.set(e.pointerId, cur);
+      if (pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        if (pinch > 0) view.photoMove(0, 0, pinch / d, -(m.x - mid.x) * 0.05, (m.y - mid.y) * 0.05);
+        pinch = d;
+        mid = m;
+      }
+    });
+    const up = (e: PointerEvent) => { pts.delete(e.pointerId); pinch = 0; };
+    surface.addEventListener('pointerup', up);
+    surface.addEventListener('pointercancel', up);
+    surface.addEventListener('wheel', (e) => { e.preventDefault(); view.photoMove(0, 0, Math.exp(e.deltaY * 0.001)); }, { passive: false });
+    const held = new Set<string>();
+    const key = (e: KeyboardEvent) => {
+      if (e.type === 'keydown') held.add(e.code); else held.delete(e.code);
+      if (e.type === 'keydown' && e.code === 'KeyF') shot();
+      if (e.type === 'keydown' && e.code === 'Escape') exit();
+      e.stopPropagation();
+    };
+    window.addEventListener('keydown', key, true);
+    window.addEventListener('keyup', key, true);
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const k = (c: string, c2: string) => (held.has(c) || held.has(c2) ? 1 : 0);
+      const s = 0.35;
+      const pr = k('KeyD', 'ArrowRight') - k('KeyA', 'ArrowLeft');
+      const pf = k('KeyW', 'ArrowUp') - k('KeyS', 'ArrowDown');
+      const pz = k('KeyQ', 'PageUp') - k('KeyE', 'PageDown');
+      if (pr || pf || pz) view.photoMove(0, pz * 0.02, 1, pr * s, pf * s);
+    };
+    raf = requestAnimationFrame(tick);
+    const shot = () => {
+      const url = view.capture();
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `football-elite-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      root.classList.remove('flash');
+      void root.offsetWidth;
+      root.classList.add('flash');
+      this.audio.uiClick();
+    };
+    const exit = () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('keydown', key, true);
+      window.removeEventListener('keyup', key, true);
+      root.remove();
+      view.stopPhoto();
+      view.opts.showIndicators = savedInd;
+      if (hudRoot) hudRoot.style.visibility = '';
+      onExit();
+    };
+    root.querySelector('[data-act=shot]')!.addEventListener('click', shot);
+    root.querySelector('[data-act=exit]')!.addEventListener('click', exit);
+  }
+
+  /** Guarda los últimos 8 s del partido en curso como repetición. */
+  private saveLastPlay(): boolean {
+    const r = this.runner;
+    if (!r) return false;
+    const m = r.match;
+    const frames = lastSeconds(m.replay, 8);
+    if (frames.length < 2) return false;
+    const end = frames[frames.length - 1];
+    const [a, b] = m.teams;
+    return saveReplay({
+      id: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`,
+      date: Date.now(),
+      title: `${a.data.short} - ${b.data.short}`,
+      clock: m.clockText,
+      score: `${a.stats.goals} - ${b.stats.goals}`,
+      stadiumId: this.lastStadiumId,
+      goalSide: end.ball[0] >= 0 ? 1 : -1,
+      home: m.config.home, away: m.config.away, homeKit: m.config.homeKit, awayKit: m.config.awayKit,
+      weather: m.weather,
+      data: encodeFrames(frames),
+    });
+  }
+
+  /** Lista de repeticiones guardadas. */
+  replaysScreen() {
+    this.setMenuMode(true);
+    const list = listReplays();
+    const date = (t: number) => new Date(t).toLocaleString(undefined, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const s = this.show(`
+      <div class="screen-header"><div><div class="crumb">GALERÍA</div><h2>Repeticiones</h2></div></div>
+      <div class="screen-body">
+        ${list.length ? `<div class="replay-list">${list.map((r) => `<div class="panel replay-item">
+          <div class="ri-teams">${crestSVG(r.home, 34)}<div><b>${esc(r.title)}</b> <span class="muted">${esc(r.score)} · ${esc(r.clock)}</span><small class="muted">${esc(getStadium(r.stadiumId).name)} · ${date(r.date)}</small></div>${crestSVG(r.away, 34)}</div>
+          <div class="ri-actions"><button class="btn primary" data-act="watch" data-id="${r.id}">▶ Ver</button><button class="btn" data-act="del" data-id="${r.id}">🗑</button></div>
+        </div>`).join('')}</div>` : '<div class="panel muted">Todavía no guardaste ninguna jugada. Durante un partido, pausa y elige <b>💾 Guardar jugada</b> para conservar los últimos 8 segundos (hasta ' + MAX_SAVED_REPLAYS + ').</div>'}
+      </div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, {
+      watch: (b) => { const r = list.find((x) => x.id === b.dataset.id); if (r) this.watchReplay(r); },
+      del: (b) => { deleteReplay(b.dataset.id!); this.replaysScreen(); },
+      back: () => this.mainMenu(),
+    }, () => this.mainMenu());
+    void s;
+  }
+
+  private watchReplay(saved: SavedReplay) {
+    this.screen?.dispose();
+    this.screen = null;
+    this.audio.stopMenuMusic();
+    let viewer: ReplayViewer;
+    try {
+      viewer = new ReplayViewer(this.renderer, saved, getStadium(saved.stadiumId), this.settings);
+    } catch (e) {
+      console.error(e);
+      this.replaysScreen();
+      return;
+    }
+    this.setMenuMode(false);
+    this.canvas.classList.remove('hidden');
+    this.bg.classList.add('hidden');
+    viewer.resize(window.innerWidth, window.innerHeight);
+    this.replayViewer = viewer;
+    viewer.start();
+    const controls = () => {
+      const s = this.show(`
+        <div class="replay-bar">
+          <div class="rb-title">${crestSVG(saved.home, 26)} <b>${esc(saved.title)}</b> <span class="muted">${esc(saved.score)} · ${esc(saved.clock)}</span></div>
+          <div class="rb-btns">
+            <button class="btn" data-act="toggle">${viewer.paused ? '▶' : '❚❚'}</button>
+            <button class="btn" data-act="restart">⏮</button>
+            <button class="btn" data-act="speed">${viewer.speed === 1 ? '1x' : viewer.speed < 1 ? '½x' : '2x'}</button>
+            <button class="btn" data-act="photo">📷</button>
+            <button class="btn" data-act="back">Salir</button>
+          </div>
+        </div>`, {
+        toggle: () => { viewer.paused = !viewer.paused; controls(); },
+        restart: () => { viewer.restart(); viewer.paused = false; controls(); },
+        speed: () => { viewer.speed = viewer.speed === 1 ? 0.5 : viewer.speed < 1 ? 2 : 1; controls(); },
+        photo: () => {
+          viewer.paused = true;
+          this.screen?.dispose();
+          this.screen = null;
+          this.photoMode({ view: viewer.view, onExit: () => controls() });
+        },
+        back: () => { viewer.dispose(); this.replayViewer = null; this.replaysScreen(); },
+      }, () => { viewer.dispose(); this.replayViewer = null; this.replaysScreen(); }, 'replay-screen');
+      void s;
+    };
+    controls();
+  }
+
   private pauseMenu() {
     const r = this.runner;
     if (!r) return;
@@ -476,6 +667,8 @@ export class App {
         ${r.localTeam >= 0 && !m.config.training && !r.online ? `<button class="menu-item" data-act="tactics">Tácticas<small>${esc(m.teams[r.localTeam as 0 | 1].formation)} · ${MENTALITY_NAMES[m.teams[r.localTeam as 0 | 1].mentality + 2]}</small></button>` : ''}
         ${r.localTeam >= 0 && !m.config.training ? `<button class="menu-item" data-act="subs">Cambios<small>${m.teams[r.localTeam as 0 | 1].subsUsed}/${MAX_SUBS} realizados</small></button>` : ''}
         <button class="menu-item" data-act="stats">Estadísticas</button>
+        ${!r.online ? '<button class="menu-item" data-act="photo">📷 Modo foto<small>Cámara libre y captura</small></button>' : ''}
+        ${m.replay.length > 30 && !m.config.training ? '<button class="menu-item" data-act="savePlay">💾 Guardar jugada<small>Los últimos 8 segundos</small></button>' : ''}
         <button class="menu-item" data-act="mute">${this.settings.muted ? '🔊 Activar sonido' : '🔇 Silenciar'}<small>Tecla M</small></button>
         <button class="menu-item" data-act="settings">Configuración</button>
         <button class="menu-item" data-act="controls">Controles</button>
@@ -488,6 +681,11 @@ export class App {
       mute: () => { this.toggleMute(); close(); this.pauseMenu(); },
       subs: () => { close(); this.subsMenu(); },
       tactics: () => { close(); this.tacticsMenu(); },
+      photo: () => { close(); this.photoMode(); },
+      savePlay: (b) => {
+        const ok = this.saveLastPlay();
+        b.innerHTML = ok ? '✅ Jugada guardada<small>Menú principal → Repeticiones</small>' : '⚠ No hay espacio para guardarla';
+      },
       chat: () => {
         close();
         const items = QUICK_CHAT.map((t, i) => `<button class="menu-item" data-act="say" data-i="${i}">${esc(t)}</button>`).join('');
