@@ -2,7 +2,7 @@
 
 Plan de lo que falta o se puede mejorar, ordenado por fases. Cada punto dice **qué** hacer, **por qué** importa y **dónde** está el código que hay que tocar, para poder tomarlo como tarea suelta. Esfuerzo aproximado: **S** (horas), **M** (1–3 días), **L** (una semana o más).
 
-Ya hecho en esta versión: `jugar.html` (el juego en un solo archivo, se abre con doble clic tras descargar el ZIP), sonidos nuevos del balón (cabezazo, control, toques de conducción, rodar por el césped, vallas, guantes del arquero), bocina de gol, vibración del mando, prueba automática sin servidor y ZIP de Windows publicado en *Releases*. Después: **control de balones aéreos con el pecho y el muslo** y **remates de volea, tijera y chilena** (jugador y IA). Luego: receptores que salen al encuentro del pase, barra de potencia más rápida, arquero que juega con los pies, ley de la ventaja, sonido 3D, volúmenes de balón y árbitro, silencio con M, equipación del visitante a elegir, control aéreo orientado y regeneración automática de `jugar.html` (hook de pre-commit).
+Ya hecho en esta versión: `jugar.html` (el juego en un solo archivo, se abre con doble clic tras descargar el ZIP), sonidos nuevos del balón (cabezazo, control, toques de conducción, rodar por el césped, vallas, guantes del arquero), bocina de gol, vibración del mando, prueba automática sin servidor y ZIP de Windows publicado en *Releases*. Después: **control de balones aéreos con el pecho y el muslo** y **remates de volea, tijera y chilena** (jugador y IA). Luego: receptores que salen al encuentro del pase, barra de potencia más rápida, arquero que juega con los pies, ley de la ventaja, sonido 3D, volúmenes de balón y árbitro, silencio con M, equipación del visitante a elegir, control aéreo orientado y regeneración automática de `jugar.html` (hook de pre-commit). Y después: logros, tres estadios nuevos, editor de equipos, liga con dos divisiones y mercado, UI de celular que entra en cualquier pantalla, calidad automática, modo foto y repeticiones guardadas, pruebas de audio, instalador de Windows y app de macOS, inglés y portugués, y espectadores y menos retraso en el online.
 
 ---
 
@@ -39,23 +39,23 @@ Ya hecho en esta versión: `jugar.html` (el juego en un solo archivo, se abre co
 
 | # | Mejora | Por qué | Dónde | Esfuerzo |
 |---|---|---|---|---|
-| 3.1 | **Editor de equipos**: nombre, colores, escudo, jugadores y atributos, guardado local y exportable | Que cada uno juegue con "su" equipo | Nuevo `src/ui/Editor.ts`, `data/teams.ts`, `save/Storage.ts` | L |
-| 3.2 | **Modo Liga completa** con varias divisiones, ascensos y descensos, y mercado de fichajes en la carrera | Rejugabilidad | `modes/Career.ts`, `modes/Competition.ts` | L |
-| 3.3 | **Más estadios** (tamaños distintos, estadio pequeño de barrio, estadio de noche con niebla) | Variedad visual | `data/stadiums.ts`, `render/stadium/*` | M |
-| 3.4 | **Repeticiones guardables** y modo foto (cámara libre en la pausa) | Compartir jugadas | `render/CameraDirector.ts`, grabación de estados que ya usa la repetición | M |
-| 3.5 | **Logros y desafíos** (marcar de vaselina, ganar sin recibir goles, remontar…) | Objetivos a corto plazo | Nuevo `src/modes/Achievements.ts` escuchando `MatchEvent` | M |
-| 3.6 | **Online mejorado**: predicción del lado del invitado (menos retraso), espectadores y torneos online | Limitación conocida del online | `net/NetSync.ts`, `server/` | L |
-| 3.7 | **Traducción al inglés y portugués** | Más jugadores | Extraer textos de `App.ts`/`HUD.ts` a un `src/i18n/` | M |
+| 3.1 | ~~**Editor de equipos**: nombre, colores, escudo, jugadores y atributos, guardado local y exportable~~ ✅ hecho: crear y editar equipos (colores, escudo, jugadores, atributos), exportar e importar | Que cada uno juegue con "su" equipo | Nuevo `src/ui/Editor.ts`, `data/teams.ts`, `save/Storage.ts` | L |
+| 3.2 | ~~**Modo Liga completa** con varias divisiones, ascensos y descensos, y mercado de fichajes en la carrera~~ ✅ hecho: dos divisiones con ascensos y descensos, presupuesto, noticias y mercado de fichajes | Rejugabilidad | `modes/Career.ts`, `modes/Competition.ts` | L |
+| 3.3 | ~~**Más estadios** (tamaños distintos, estadio pequeño de barrio, estadio de noche con niebla)~~ ✅ hecho: cancha de barrio, puerto de noche con niebla y Gran Monumental | Variedad visual | `data/stadiums.ts`, `render/stadium/*` | M |
+| 3.4 | ~~**Repeticiones guardables** y modo foto (cámara libre en la pausa)~~ ✅ hecho: modo foto en la pausa (cámara libre y captura PNG) y galería de repeticiones guardadas | Compartir jugadas | `render/CameraDirector.ts`, grabación de estados que ya usa la repetición | M |
+| 3.5 | ~~**Logros y desafíos** (marcar de vaselina, ganar sin recibir goles, remontar…)~~ ✅ hecho: 20 logros con su pantalla y avisos durante el partido | Objetivos a corto plazo | Nuevo `src/modes/Achievements.ts` escuchando `MatchEvent` | M |
+| 3.6 | ~~**Online mejorado**: predicción del lado del invitado (menos retraso), espectadores y torneos online~~ ✅ hecho en parte: colchón adaptativo, predicción del invitado y espectadores en salas privadas (los torneos online quedan pendientes) | Limitación conocida del online | `net/NetSync.ts`, `server/` | L |
+| 3.7 | ~~**Traducción al inglés y portugués**~~ ✅ hecho: inglés y portugués (Brasil), selector en Configuración | Más jugadores | Extraer textos de `App.ts`/`HUD.ts` a un `src/i18n/` | M |
 
 ## Fase 4 — Técnica y calidad
 
 | # | Mejora | Por qué | Dónde | Esfuerzo |
 |---|---|---|---|---|
 | 4.1 | **Medir el rendimiento en GPU real** (portátil con gráfica integrada y móvil de gama baja) y ajustar los valores por defecto | Solo se probó con renderizado por software | `config/Settings.ts` (`mobileDefaults`) | S |
-| 4.2 | **Ajuste automático de calidad** según los FPS de los primeros segundos | Que funcione bien en cualquier equipo sin tocar opciones | `MatchRunner.frame`, `MatchView` | M |
-| 4.3 | **Dividir los archivos grandes** (`Match.ts`, `App.ts`, `AudioEngine.ts` superan las 1.300 líneas) | Mantenimiento | `src/sim/`, `src/ui/`, `src/audio/` | M |
-| 4.4 | **Pruebas de audio por análisis de señal** en CI (cada sonido produce señal, sin saturar) | Que un cambio no deje un sonido mudo | `tests/` + `OfflineAudioContext` en el navegador | S |
-| 4.5 | **Instalador de Windows** (`.exe` con acceso directo) y versión para **macOS** | Instalación más cómoda en PC | `scripts/package.mjs`, `ci.yml` (`macos-latest`) | M |
+| 4.2 | ~~**Ajuste automático de calidad** según los FPS de los primeros segundos~~ ✅ hecho: baja resolución y sombras si no llega a 40 FPS, y lo recuerda | Que funcione bien en cualquier equipo sin tocar opciones | `MatchRunner.frame`, `MatchView` | M |
+| 4.3 | ~~**Dividir los archivos grandes** (`Match.ts`, `App.ts`, `AudioEngine.ts` superan las 1.300 líneas)~~ ✅ hecho en parte: la música del menú salió de `AudioEngine.ts` a `MenuMusic.ts` (`Match.ts` y `App.ts` siguen grandes) | Mantenimiento | `src/sim/`, `src/ui/`, `src/audio/` | M |
+| 4.4 | ~~**Pruebas de audio por análisis de señal** en CI (cada sonido produce señal, sin saturar)~~ ✅ hecho: `scripts/e2e-audio.mjs` (29 comprobaciones, también en CI) | Que un cambio no deje un sonido mudo | `tests/` + `OfflineAudioContext` en el navegador | S |
+| 4.5 | ~~**Instalador de Windows** (`.exe` con acceso directo) y versión para **macOS**~~ ✅ hecho: instalador `FootballElite3D-Setup.exe` (Inno Setup) y app universal de macOS en CI | Instalación más cómoda en PC | `scripts/package.mjs`, `ci.yml` (`macos-latest`) | M |
 
 ---
 
