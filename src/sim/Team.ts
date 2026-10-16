@@ -29,8 +29,38 @@ export class Team {
   subsUsed = 0;
   /** +1 si ataca hacia x positivo, -1 si ataca hacia x negativo. */
   attackDir: 1 | -1;
+  private _c: Player | null = null;
+  private _c2: Player | null = null;
   /** Jugador controlado por el humano (null si el equipo es de la IA). */
-  controlled: Player | null = null;
+  get controlled(): Player | null {
+    return this._c;
+  }
+  set controlled(p: Player | null) {
+    // cooperativo: los dos humanos nunca controlan al mismo futbolista (se intercambian)
+    if (p && p === this._c2) this._c2 = this._c;
+    this._c = p;
+  }
+  /** Segundo humano en el mismo equipo (cooperativo en el mismo PC); null si no hay. */
+  get controlled2(): Player | null {
+    return this._c2;
+  }
+  set controlled2(p: Player | null) {
+    if (p && p === this._c) this._c = this._c2;
+    this._c2 = p;
+  }
+  /** Intercambia los dos controlados (para que el controlador del humano 2 trabaje sobre el suyo). */
+  swapControl() {
+    const c = this._c;
+    this._c = this._c2;
+    this._c2 = c;
+  }
+  /** Cooperativo: qué humano tocó el balón por última vez (el receptor de su pase pasa a ser suyo). */
+  lastHumanSlot: 1 | 2 = 1;
+  /** Da el control de `p` al humano que hizo el último pase (en cooperativo) o al humano 1. */
+  giveControl(p: Player) {
+    if (this._c2 && this.lastHumanSlot === 2) this.controlled2 = p;
+    else this.controlled = p;
+  }
   readonly stats: TeamStats = {
     goals: 0, shots: 0, shotsOnTarget: 0, passes: 0, passesCompleted: 0, possessionTime: 0,
     fouls: 0, corners: 0, offsides: 0, yellow: 0, red: 0, saves: 0, tackles: 0,

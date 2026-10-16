@@ -8,7 +8,7 @@ import { TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
 import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
 import type { Difficulty, FormationId, PlayerData, TeamData } from '../data/types';
 import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
-import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, type Action } from '../input/Input';
+import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, versusDevicesLabel, type Action } from '../input/Input';
 import { MAX_SUBS, type MatchConfig } from '../sim/Match';
 import { manOfTheMatch, playerRatings } from '../sim/Ratings';
 import { Career } from '../modes/Career';
@@ -50,6 +50,7 @@ const TIPS = [
   'En móvil, un toque rápido en PASE o TIRO golpea con potencia automática y elige al mejor compañero o la mejor esquina del arco.',
 ];
 
+const SIDES: QuickSetup['side'][] = [0, 1, 2, 3, -1];
 const WEATHER_CYCLE: (Weather | 'random')[] = ['clear', 'rain', 'snow', 'wind', 'random'];
 
 interface QuickSetup {
@@ -58,7 +59,8 @@ interface QuickSetup {
   stadium: number;
   half: number;
   difficulty: number;
-  side: 0 | 1 | -1;
+  /** 0 local, 1 visitante, -1 espectador, 2 = dos jugadores (local contra visitante), 3 = dos jugadores en el local contra la IA. */
+  side: 0 | 1 | -1 | 2 | 3;
   formation: FormationId | null;
   /** Equipación del visitante: automática (la que más contrasta), titular o suplente. */
   awayKit?: 'auto' | 'home' | 'away';
@@ -308,7 +310,7 @@ export class App {
       const home = TEAMS[q.home];
       const away = TEAMS[q.away];
       const awayKit = this.quickAwayKit(home, away);
-      const sideLabel = q.side === 0 ? `Local (${home.short})` : q.side === 1 ? `Visitante (${away.short})` : 'Espectador (IA vs IA)';
+      const sideLabel = q.side === 0 ? `Local (${home.short})` : q.side === 1 ? `Visitante (${away.short})` : q.side === 2 ? `2 jugadores: J1 ${home.short} · J2 ${away.short}` : q.side === 3 ? `2 jugadores juntos (${home.short}) contra la IA` : 'Espectador (IA vs IA)';
       return `
       <div class="screen-header"><div><div class="crumb">PARTIDO RÁPIDO</div><h2>Configuración del encuentro</h2></div></div>
       <div class="screen-body">
@@ -322,6 +324,7 @@ export class App {
           ${this.stepper('Duración de cada parte', `${HALF_OPTIONS[q.half]} min`, 'half')}
           ${this.stepper('Dificultad', DIFFICULTY_LABELS[DIFFS[q.difficulty]], 'diff')}
           ${this.stepper('Controlas a', sideLabel, 'side')}
+          ${q.side === 2 || q.side === 3 ? `<div class="muted" style="margin:-4px 0 8px;font-size:13px">🎮 ${esc(versusDevicesLabel())}</div>` : ''}
           ${this.stepper('Tu formación', q.formation ?? 'Por defecto del equipo', 'form')}
           ${this.stepper('Clima', q.weather === 'random' ? 'Aleatorio' : WEATHER_NAMES[q.weather ?? 'clear'], 'wthr')}
           ${this.stepper('Equipación del visitante', ({ auto: 'Automática (la que más contrasta)', home: 'Titular', away: 'Suplente' } as const)[q.awayKit ?? 'auto'], 'akit')}
@@ -344,8 +347,8 @@ export class App {
       halfNext: () => cycle('half', HALF_OPTIONS.length, 1),
       diffPrev: () => cycle('difficulty', DIFFS.length, -1),
       diffNext: () => cycle('difficulty', DIFFS.length, 1),
-      sidePrev: () => { q.side = (q.side === 0 ? -1 : q.side === 1 ? 0 : 1); s.refresh(render()); },
-      sideNext: () => { q.side = (q.side === 0 ? 1 : q.side === 1 ? -1 : 0); s.refresh(render()); },
+      sidePrev: () => { q.side = SIDES[(SIDES.indexOf(q.side) + SIDES.length - 1) % SIDES.length]; s.refresh(render()); },
+      sideNext: () => { q.side = SIDES[(SIDES.indexOf(q.side) + 1) % SIDES.length]; s.refresh(render()); },
       formPrev: () => { const i = q.formation ? FORMATION_IDS.indexOf(q.formation) : 0; q.formation = i <= 0 ? null : FORMATION_IDS[i - 1]; s.refresh(render()); },
       wthrPrev: () => { q.weather = WEATHER_CYCLE[(WEATHER_CYCLE.indexOf(q.weather ?? 'clear') + WEATHER_CYCLE.length - 1) % WEATHER_CYCLE.length]; s.refresh(render()); },
       wthrNext: () => { q.weather = WEATHER_CYCLE[(WEATHER_CYCLE.indexOf(q.weather ?? 'clear') + 1) % WEATHER_CYCLE.length]; s.refresh(render()); },
@@ -360,10 +363,10 @@ export class App {
         this.settings.difficulty = DIFFS[q.difficulty];
         saveSettings(this.settings);
         const cfg: MatchConfig = {
-          home, away, homeKit: home.home, awayKit: this.quickAwayKit(home, away), humanTeam: q.side,
+          home, away, homeKit: home.home, awayKit: this.quickAwayKit(home, away), humanTeam: q.side === 2 || q.side === 3 ? 0 : q.side, versus: q.side === 2, coop: q.side === 3,
           weather: q.weather === 'random' ? randomWeather(Math.random()) : q.weather ?? 'clear',
           halfLengthSec: HALF_OPTIONS[q.half] * 60, difficulty: DIFFS[q.difficulty], extraTime: false, penalties: false,
-          homeFormation: q.side === 0 && q.formation ? q.formation : undefined,
+          homeFormation: (q.side === 0 || q.side === 2 || q.side === 3) && q.formation ? q.formation : undefined,
           awayFormation: q.side === 1 && q.formation ? q.formation : undefined,
         };
         this.playMatch(cfg, STADIUMS[q.stadium].id, { mode: 'quick' });

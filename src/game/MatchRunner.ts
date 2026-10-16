@@ -3,7 +3,7 @@ import { SIM_DT } from '../config/constants';
 import type { GameSettings } from '../config/Settings';
 import { HumanController } from '../control/HumanController';
 import type { StadiumData } from '../data/types';
-import type { Input } from '../input/Input';
+import { Input, P1_SPLIT, P2_SPLIT, versusDevices, type Bindings } from '../input/Input';
 import { Match, type MatchConfig } from '../sim/Match';
 import { MatchView } from '../render/MatchView';
 import type { MatchEvent } from '../sim/types';
@@ -63,6 +63,10 @@ export class MatchRunner {
   readonly match: Match;
   readonly view: MatchView;
   readonly hud: HUD;
+  /** Jugador 2 en el mismo PC (partido local de dos jugadores). */
+  private input2: Input | null = null;
+  private controller2: HumanController | null = null;
+  private savedInput: { bindings: Bindings; pad: Input['padSource']; keyboard: boolean } | null = null;
   /** Comentarista (rótulos y voz opcional). */
   private commentary: Commentary | null = null;
   readonly controller: HumanController | null;
@@ -143,6 +147,27 @@ export class MatchRunner {
       ? new HumanController(input, basis, controlSettings(settings, wantTouch))
       : null;
     if (this.controller) this.match.controllers[config.humanTeam as 0 | 1] = this.controller;
+    // Dos jugadores en el mismo PC: el 2 controla al visitante (versus) o juega en el mismo equipo (cooperativo),
+    // con su mando o con la mitad derecha del teclado
+    if ((config.versus || config.coop) && !online && this.controller) {
+      const dev = versusDevices();
+      this.savedInput = { bindings: input.bindings, pad: input.padSource, keyboard: input.keyboard };
+      input.padSource = dev.p1Pad;
+      if (dev.mode === 'keys') input.bindings = structuredClone(P1_SPLIT);
+      const i2 = new Input(P2_SPLIT);
+      i2.settings = { ...input.settings };
+      i2.padSource = dev.p2Pad;
+      i2.keyboard = dev.mode === 'keys';
+      this.input2 = i2;
+      // misma base de cámara que el jugador 1 (se actualiza a la vez)
+      this.controller2 = new HumanController(i2, basis, controlSettings(settings, false));
+      if (config.coop) {
+        this.match.controllers2[config.humanTeam as 0 | 1] = this.controller2;
+      } else {
+        this.match.controllers[1] = this.controller2;
+        this.match.autoSubs[1] = settings.autoSubs;
+      }
+    }
     if (online?.role === 'host') {
       // el rival controla el equipo visitante con sus mandos (recibidos por la red)
       const remote = new RemoteInput();
@@ -244,7 +269,8 @@ export class MatchRunner {
       let steps = 0;
       while (this.acc >= SIM_DT && steps < 8 * Math.max(1, this.timeScale)) {
         this.input.poll(SIM_DT);
-        if (this.input.pressed('pause')) {
+        this.input2?.poll(SIM_DT);
+        if (this.input.pressed('pause') || this.input2?.pressed('pause')) {
           this.pause();
           // online sin pausas restantes el partido sigue
           if (!this.online || this.halted) break;
@@ -551,6 +577,13 @@ export class MatchRunner {
     this.audio.stop();
     this.hud.dispose();
     this.commentary?.dispose();
+    this.input2?.dispose();
+    if (this.savedInput) {
+      this.input.bindings = this.savedInput.bindings;
+      this.input.padSource = this.savedInput.pad;
+      this.input.keyboard = this.savedInput.keyboard;
+      this.savedInput = null;
+    }
     this.touch?.dispose();
     document.body.classList.remove('touch');
     this.view.dispose();

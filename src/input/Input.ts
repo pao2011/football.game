@@ -1,7 +1,7 @@
 // Sistema de entrada: teclado + mando (Gamepad API), con asignaciones configurables.
 // Esquema por defecto idéntico al clásico de FIFA para PC (teclado) y al de mando Xbox/PlayStation.
 
-import { activePad, dpad, padButton, rightStick } from './pads';
+import { activePad, dpad, padButton, realPads, rightStick } from './pads';
 
 export type Action =
   | 'up' | 'down' | 'left' | 'right'
@@ -62,6 +62,49 @@ export const WASD_ALT: Bindings = {
   skillSpin: ['KeyR'], pause: ['Escape', 'KeyP'],
 };
 
+/**
+ * Dos jugadores en un mismo teclado (sin mandos): el jugador 1 a la izquierda (WASD) y el 2 a la derecha (flechas).
+ * No comparten ninguna tecla.
+ */
+export const P1_SPLIT: Bindings = {
+  up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'],
+  sprint: ['ShiftLeft'], pass: ['KeyF'], through: ['KeyT'], lob: ['KeyR'], shoot: ['KeyG'],
+  switch: ['KeyQ'], finesse: ['KeyE'], jockey: ['KeyC'],
+  skillUp: ['Digit3'], skillDown: ['Digit2'], skillLeft: ['Digit1'], skillRight: ['Digit4'],
+  skillSpin: ['KeyV'], pause: ['Escape'],
+};
+
+export const P2_SPLIT: Bindings = {
+  up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'],
+  sprint: ['ShiftRight'], pass: ['KeyK'], through: ['KeyI'], lob: ['KeyJ'], shoot: ['KeyL'],
+  switch: ['KeyU'], finesse: ['KeyO'], jockey: ['KeyN'],
+  skillUp: ['Digit8'], skillDown: ['Digit9'], skillLeft: ['Digit7'], skillRight: ['Digit0'],
+  skillSpin: ['KeyB'], pause: ['KeyP'],
+};
+
+/** Reparto de dispositivos para dos jugadores en el mismo PC. */
+export interface VersusDevices {
+  mode: 'pads' | 'keys+pad' | 'keys';
+  /** Mando del jugador 1 (índice en realPads()) o null = solo teclado. */
+  p1Pad: number | null;
+  /** Mando del jugador 2 o null = teclado (distribución P2_SPLIT). */
+  p2Pad: number | null;
+}
+
+export function versusDevices(): VersusDevices {
+  const n = realPads().length;
+  if (n >= 2) return { mode: 'pads', p1Pad: 0, p2Pad: 1 };
+  if (n === 1) return { mode: 'keys+pad', p1Pad: null, p2Pad: 0 };
+  return { mode: 'keys', p1Pad: null, p2Pad: null };
+}
+
+/** Texto para los menús: qué usa cada jugador. */
+export function versusDevicesLabel(d = versusDevices()): string {
+  if (d.mode === 'pads') return 'J1: mando 1 (y teclado) · J2: mando 2';
+  if (d.mode === 'keys+pad') return 'J1: teclado · J2: mando';
+  return 'J1: W A S D + F/G/R/T · J2: flechas + K/L/J/I (conecta mandos para jugar mejor)';
+}
+
 /** Botones del mando estándar (W3C standard mapping). */
 export const PAD_BUTTONS: Partial<Record<Action, number>> = {
   pass: 0, // A / X(PS)
@@ -113,6 +156,10 @@ export interface InputSettings {
 export class Input {
   bindings: Bindings;
   settings: InputSettings = { deadzone: 0.18, sensitivity: 1 };
+  /** Mando que se lee: el "mejor" disponible, uno concreto (índice en realPads()) o ninguno. */
+  padSource: 'active' | number | null = 'active';
+  /** ¿Se lee el teclado? (el jugador 2 con mando no usa el teclado) */
+  keyboard = true;
   protected keys = new Set<string>();
   /** Teclas pulsadas desde el último sondeo (para no perder toques muy breves). */
   protected tapped = new Set<string>();
@@ -226,8 +273,10 @@ export class Input {
     this.time += dt;
     this.prev = this.cur;
     this.cur = new Set();
-    for (const a of ACTIONS) {
-      if (this.bindings[a].some((k) => this.keys.has(k) || this.tapped.has(k))) this.cur.add(a);
+    if (this.keyboard) {
+      for (const a of ACTIONS) {
+        if (this.bindings[a].some((k) => this.keys.has(k) || this.tapped.has(k))) this.cur.add(a);
+      }
     }
     this.tapped.clear();
     for (const a of this.virtualHeld) this.cur.add(a);
@@ -241,7 +290,8 @@ export class Input {
     this.rs.y = 0;
     this.padAxes.x = 0;
     this.padAxes.y = 0;
-    const gp = activePad();
+    const src = this.padSource;
+    const gp = src === 'active' ? activePad() : src === null ? null : realPads()[src] ?? null;
     if (gp) {
       const ax = gp.axes[0] ?? 0;
       const ay = gp.axes[1] ?? 0;

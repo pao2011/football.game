@@ -44,6 +44,10 @@ export interface MatchConfig {
   training?: 'free' | 'penalties' | 'freekicks';
   /** Clima (por defecto despejado). */
   weather?: Weather;
+  /** Dos jugadores en el mismo PC: el humano 1 controla al local y el humano 2 al visitante. */
+  versus?: boolean;
+  /** Dos jugadores en el mismo PC en el mismo equipo (el del humano 1) contra la IA. */
+  coop?: boolean;
 }
 
 export interface Restart {
@@ -127,6 +131,8 @@ export class Match {
   announcedAdded = -1;
   events: MatchEvent[] = [];
   readonly controllers: (TeamController | null)[] = [null, null];
+  /** Segundo humano en el mismo equipo (cooperativo en el mismo PC). */
+  readonly controllers2: (TeamController | null)[] = [null, null];
   readonly replay: ReplayFrame[] = [];
   private replayAcc = 0;
   private tacticsAcc = 0;
@@ -192,7 +198,7 @@ export class Match {
     this.ball.env = weatherEnv(this.weather, config.seed ?? Math.floor(this.rng.next() * 1e6));
     this.teams = [
       new Team(0, config.home, config.homeKit, config.humanTeam === 0, config.homeFormation, config.homeLineup),
-      new Team(1, config.away, config.awayKit, config.humanTeam === 1, config.awayFormation, config.awayLineup),
+      new Team(1, config.away, config.awayKit, config.humanTeam === 1 || !!config.versus, config.awayFormation, config.awayLineup),
     ];
     this.timeScale = (45 * 60) / config.halfLengthSec;
     if (config.training) {
@@ -389,9 +395,20 @@ export class Match {
     for (const t of this.teams) {
       const ctrl = this.controllers[t.index];
       if (ctrl && t.human) ctrl.update(this, t, dt);
+      // cooperativo: el segundo humano del equipo trabaja sobre su propio controlado
+      const ctrl2 = this.controllers2[t.index];
+      if (ctrl2 && t.human) {
+        if (!t.controlled2) t.controlled2 = t.active.filter((q) => !q.isGK && q !== t.controlled).sort((x, y) => dist2D(x.pos, this.ball.pos) - dist2D(y.pos, this.ball.pos))[0] ?? null;
+        t.swapControl();
+        try {
+          ctrl2.update(this, t, dt);
+        } finally {
+          t.swapControl();
+        }
+      }
       for (const p of t.players) {
         if (p.sentOff) continue;
-        if (t.human && p === t.controlled) continue;
+        if (t.human && (p === t.controlled || p === t.controlled2)) continue;
         if (p.isGK) updateGoalkeeperAI(this, p, dt);
         else updateOutfieldAI(this, p, dt);
       }
@@ -624,7 +641,7 @@ export class Match {
     this.emit({ type: 'touch', power: Math.min(1, relSpeed / 18), playerId: p.id, team: p.team });
     if (relSpeed > 5 && p.action.kind === 'none') p.startAction('trap', 'trap', 0.35);
     // El humano pasa a controlar a quien recibe
-    if (team.human && team.controlled !== p && !p.isGK) team.controlled = p;
+    if (team.human && team.controlled !== p && team.controlled2 !== p && !p.isGK) team.giveControl(p);
   }
 
   /**
@@ -658,7 +675,7 @@ export class Match {
       p.startAction('trap', 'trap', chest ? 0.55 : 0.45);
       p.action.variant = chest ? 1 : 2;
     }
-    if (team.human && team.controlled !== p && !p.isGK) team.controlled = p;
+    if (team.human && team.controlled !== p && team.controlled2 !== p && !p.isGK) team.giveControl(p);
   }
 
   /** Volea, tijera o chilena: el jugador se prepara y el pie golpea cuando el balón pasa por su alcance. */
@@ -944,6 +961,7 @@ export class Match {
       this.shotKickTime = this.time;
     }
     this.intendedReceiver = req.targetId ? this.playersAll.find((x) => x.id === req.targetId) ?? null : null;
+    if (team.human) team.lastHumanSlot = p === team.controlled2 ? 2 : p === team.controlled ? 1 : team.lastHumanSlot;
     this.emit({ type: 'kick', power: req.power, playerId: p.id, team: p.team, kind: req.kind });
     if (req.aerial) this.emit({ type: 'skill', kind: req.aerial, text: AERIAL_NAMES[req.aerial], playerId: p.id, team: p.team });
 
@@ -1179,7 +1197,7 @@ export class Match {
         b.vel.set(p.vel.x, 0, p.vel.z);
         this.owner = p;
         this.setLastTouch(p, false, 'tackle');
-        if (team.human && !p.isGK) team.controlled = p;
+        if (team.human && !p.isGK && team.controlled2 !== p) team.giveControl(p);
       } else {
         const sp = slide ? 6 + this.rng.next() * 3 : 3 + this.rng.next() * 2;
         b.vel.set(a.dir.x * sp + (this.rng.next() - 0.5) * 2, 0.3, a.dir.z * sp + (this.rng.next() - 0.5) * 2);

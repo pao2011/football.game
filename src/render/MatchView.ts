@@ -55,6 +55,8 @@ export class MatchView {
   readonly ball = new BallModel();
   private models = new Map<string, PlayerModel>();
   private indicators: ({ group: THREE.Group; arrow: THREE.Mesh; head: THREE.Mesh } | null)[] = [null, null];
+  /** Cooperativo: indicador del segundo humano (verde). */
+  private indicator2: { group: THREE.Group; arrow: THREE.Mesh; head: THREE.Mesh } | null = null;
   private receiverRing: THREE.Mesh;
   private replayFrames: ReplayFrame[] = [];
   private replayStart = 0;
@@ -115,6 +117,10 @@ export class MatchView {
         this.indicators[t.index] = ind;
         this.scene.add(ind.group);
       }
+    }
+    if (match.config.coop) {
+      this.indicator2 = makeIndicator('#4dff7a');
+      this.scene.add(this.indicator2.group);
     }
     this.receiverRing = new THREE.Mesh(
       new THREE.RingGeometry(0.5, 0.62, 32).rotateX(-Math.PI / 2),
@@ -243,6 +249,16 @@ export class MatchView {
         ind.group.position.set(c.pos.x, 0, c.pos.z);
         ind.group.rotation.y = c.facing;
         ind.head.position.y = c.data.height + 0.55 + Math.sin(m.time * 5) * 0.05;
+      }
+    }
+    if (this.indicator2) {
+      const t = m.teams[m.config.humanTeam === 1 ? 1 : 0];
+      const c = t.controlled2;
+      this.indicator2.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay';
+      if (c) {
+        this.indicator2.group.position.set(c.pos.x, 0, c.pos.z);
+        this.indicator2.group.rotation.y = c.facing;
+        this.indicator2.head.position.y = c.data.height + 0.55 + Math.sin(m.time * 5 + 1) * 0.05;
       }
     }
     if (receiverPreview && this.opts.showIndicators) {

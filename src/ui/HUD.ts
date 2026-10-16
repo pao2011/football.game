@@ -394,10 +394,11 @@ export class HUD {
       for (const p of t.active) {
         g.fillStyle = t.kit.shirt;
         g.beginPath();
-        g.arc(sx(p.pos.x), sz(p.pos.z), p === t.controlled ? 4.5 : 3.2, 0, Math.PI * 2);
+        const mine = p === t.controlled || p === t.controlled2;
+        g.arc(sx(p.pos.x), sz(p.pos.z), mine ? 4.5 : 3.2, 0, Math.PI * 2);
         g.fill();
-        g.strokeStyle = p === t.controlled ? '#ffd23f' : 'rgba(0,0,0,0.7)';
-        g.lineWidth = p === t.controlled ? 2 : 1;
+        g.strokeStyle = p === t.controlled2 ? '#4dff7a' : mine ? '#ffd23f' : 'rgba(0,0,0,0.7)';
+        g.lineWidth = mine ? 2 : 1;
         g.stroke();
       }
     }
