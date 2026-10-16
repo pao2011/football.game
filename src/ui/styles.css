@@ -496,3 +496,6 @@ body.touch .lower-third { bottom: 230px; }
 .adv-badge { position: absolute; top: 66px; left: 50%; transform: translateX(-50%); font-family: var(--display); font-size: 14px; letter-spacing: 0.16em; background: rgba(25,230,140,0.92); color: #06281a; padding: 4px 14px; border-radius: 10px; font-weight: 800; animation: screenIn 0.2s; }
 body.touch .adv-badge { top: 46px; }
 .sb-weather { margin-left: 8px; font-size: 16px; line-height: 1; align-self: center; }
+.commentary { position: absolute; left: 50%; bottom: 158px; transform: translateX(-50%); max-width: min(760px, 90vw); background: linear-gradient(90deg, rgba(8,12,22,0.92), rgba(16,26,46,0.92)); border-left: 4px solid #19e68c; padding: 8px 18px; border-radius: 6px; font-size: 17px; font-weight: 600; color: #f2f6ff; text-align: center; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
+.commentary.pop { animation: screenIn 0.25s; }
+body.touch .commentary { bottom: auto; top: 84px; font-size: 14px; padding: 6px 12px; }

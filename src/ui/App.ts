@@ -1269,6 +1269,8 @@ export class App {
           ${this.stepper('Balón', pct(st.ballVolume), 'vball')}
           ${this.stepper('Árbitro (silbato)', pct(st.refereeVolume), 'vref')}
           ${toggle('Vibración (mando y móvil)', 'vibration')}
+          ${toggle('Comentarista (rótulos)', 'commentary')}
+          ${toggle('Voz del comentarista', 'commentaryVoice')}
         </div>
         <div class="panel"><h3>Jugabilidad</h3>
           ${this.stepper('Dificultad por defecto', DIFFICULTY_LABELS[st.difficulty], 'diff')}

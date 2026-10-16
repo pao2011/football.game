@@ -29,6 +29,10 @@ export interface GameSettings {
   refereeVolume: number;
   /** Sonido silenciado (tecla M o botón en la pausa); no cambia los volúmenes guardados. */
   muted: boolean;
+  /** Comentarista: rótulos de transmisión durante el partido. */
+  commentary: boolean;
+  /** Voz del comentarista (síntesis de voz del navegador, si la hay en español). */
+  commentaryVoice: boolean;
   /** Vibración del mando (gamepad) y del móvil en golpeos, entradas y goles. */
   vibration: boolean;
   // Controles
@@ -74,6 +78,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   ballVolume: 1,
   refereeVolume: 1,
   vibration: true,
+  commentary: true,
+  commentaryVoice: false,
   muted: false,
   bindings: structuredClone(FIFA_CLASSIC),
   preset: 'fifa',

@@ -8,6 +8,7 @@ import { Match, type MatchConfig } from '../sim/Match';
 import { MatchView } from '../render/MatchView';
 import type { MatchEvent } from '../sim/types';
 import { HUD } from '../ui/HUD';
+import { Commentary } from '../ui/Commentary';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { MatchAudio } from '../audio/MatchAudio';
 import { activePad } from '../input/pads';
@@ -62,6 +63,8 @@ export class MatchRunner {
   readonly match: Match;
   readonly view: MatchView;
   readonly hud: HUD;
+  /** Comentarista (rótulos y voz opcional). */
+  private commentary: Commentary | null = null;
   readonly controller: HumanController | null;
   readonly audio: MatchAudio;
   /** Controles táctiles (solo en móvil o si se activan en la configuración). */
@@ -161,6 +164,7 @@ export class MatchRunner {
     }
     this.hud.showRadar = settings.showRadar;
     this.hud.popups = settings.popups;
+    this.commentary = settings.commentary !== false && !config.training ? new Commentary(uiRoot, this.match, !!settings.commentaryVoice) : null;
     this.touch = wantTouch && (this.controller || isGuest) ? new TouchControls(uiRoot, input) : null;
     document.body.classList.toggle('touch', !!this.touch);
     if (this.touch) {
@@ -298,6 +302,7 @@ export class MatchRunner {
     }
     this.audio.update(this.view.excitement, this.view.camera);
     this.hud.update(dt);
+    this.commentary?.update();
     if (this.touch && team) {
       const pt = m.possessionTeam;
       // con el balón suelto se mantiene el modo anterior (evita parpadeos de botones)
@@ -319,6 +324,7 @@ export class MatchRunner {
   private handleEvent(e: MatchEvent) {
     const m = this.match;
     this.hud.onEvent(e);
+    this.commentary?.onEvent(e);
     this.audio.onEvent(e);
     if (e.type === 'net' && e.x !== undefined && e.z !== undefined) this.view.netImpact(e.x, e.z, e.power ?? 0.6);
     if (e.type === 'goal' && e.kind !== 'shootout') {
@@ -544,6 +550,7 @@ export class MatchRunner {
     cancelAnimationFrame(this.raf);
     this.audio.stop();
     this.hud.dispose();
+    this.commentary?.dispose();
     this.touch?.dispose();
     document.body.classList.remove('touch');
     this.view.dispose();
