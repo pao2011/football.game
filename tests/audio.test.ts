@@ -81,4 +81,22 @@ describe('Sonidos del partido', () => {
     }
     expect(caught).toBe(true);
   });
+
+  it('la tribuna silba cuando el visitante tiene el balón y para al perderlo', () => {
+    const m = makeMatch();
+    const { audio, calls } = fakeAudio();
+    const ma = new MatchAudio(audio, m);
+    m.phase = 'play';
+    const away = m.teams[1].players[5];
+    const home = m.teams[0].players[5];
+    const run = (secs: number) => { for (let i = 0; i < secs * 60; i++) { m.time += 1 / 60; ma.update(0.3); } };
+    m.owner = away;
+    run(0.8);
+    expect(calls).not.toContain('setWhistling'); // todavía no: hace falta 1,2 s seguidos
+    run(0.8);
+    expect(calls.filter((c) => c === 'setWhistling').length).toBe(1);
+    m.owner = home;
+    run(2);
+    expect(calls.filter((c) => c === 'setWhistling').length).toBe(2); // se apagó
+  });
 });

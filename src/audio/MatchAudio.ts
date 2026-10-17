@@ -14,6 +14,9 @@ export class MatchAudio {
   /** Conducción: momento del último toque del jugador que lleva el balón. */
   private lastDribbleTap = 0;
   private lastTime = -1;
+  /** Silbidos de la tribuna cuando el visitante tiene el balón (con histéresis para que no parpadeen). */
+  private whistling = false;
+  private whistleSince = 0;
 
   constructor(private audio: AudioEngine, private match: Match) {}
 
@@ -24,6 +27,7 @@ export class MatchAudio {
   }
 
   stop() {
+    this.audio.setWhistling(false);
     this.audio.stopRoll();
     this.audio.stopWeather();
     this.audio.clearListener();
@@ -103,6 +107,11 @@ export class MatchAudio {
         a.boo();
         break;
       case 'phase':
+        if (e.kind !== 'play' && this.whistling) {
+          this.whistling = false;
+          this.whistleSince = 0;
+          a.setWhistling(false);
+        }
         if (e.kind === 'fulltime') a.applause();
         break;
     }
@@ -122,6 +131,18 @@ export class MatchAudio {
     const b = m.ball;
     const onGround = !b.held && b.pos.y < BALL_RADIUS + 0.06;
     const hSpeed = Math.hypot(b.vel.x, b.vel.z);
+    // la hinchada local silba cuando el visitante lleva la pelota: tras 1,2 s seguidos y hasta 1 s sin ella
+    const against = running && m.phase === 'play' && !m.config.training && m.possessionTeam === 1;
+    if (against !== this.whistling) {
+      if (this.whistleSince === 0) this.whistleSince = t;
+      if (t - this.whistleSince >= (against ? 1.2 : 1)) {
+        this.whistling = against;
+        this.whistleSince = 0;
+        this.audio.setWhistling(against);
+      }
+    } else {
+      this.whistleSince = 0;
+    }
     // pelota rodando suelta por el césped (el jugador que conduce tapa casi todo el rodar)
     this.audio.setRoll(running ? (m.owner ? hSpeed * 0.35 : hSpeed) : 0, onGround, { x: b.pos.x, z: b.pos.z });
     // toques de conducción: más seguidos cuanto más rápido corre el jugador

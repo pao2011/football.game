@@ -16,6 +16,7 @@
  */
 
 import { StadiumChants, type ChantTrack } from './StadiumChants';
+import { CrowdSamples, type CrowdSampleUrls } from './CrowdSamples';
 import { MenuMusic, STEP } from './MenuMusic';
 
 export interface AudioVolumes {
@@ -154,6 +155,9 @@ export class AudioEngine {
   /** Cánticos grabados: si hay, sustituyen a los cánticos y bombos sintetizados. */
   private chantTracks: ChantTrack[] = [];
   private real: StadiumChants | null = null;
+  /** Gritos de gol y silbidos grabados de la tribuna. */
+  private crowdUrls: CrowdSampleUrls | null = null;
+  private samples: CrowdSamples | null = null;
   private weatherNodes: { out: GainNode; sources: AudioScheduledSourceNode[] } | null = null;
   private roll: { src: AudioBufferSourceNode; bp: BiquadFilterNode; gain: GainNode; pan: StereoPannerNode } | null = null;
   private excitement = 0;
@@ -223,6 +227,15 @@ export class AudioEngine {
     this.chantTracks = tracks.slice();
   }
 
+  setCrowdSamples(urls: CrowdSampleUrls): void {
+    this.crowdUrls = urls;
+  }
+
+  /** La tribuna silba (el visitante tiene el balón). No hace nada si no hay grabación. */
+  setWhistling(on: boolean): void {
+    this.run(() => this.samples?.setWhistling(on));
+  }
+
   setVolumes(v: AudioVolumes): void {
     if (!v) return;
     this.vols = {
@@ -263,6 +276,8 @@ export class AudioEngine {
       this.stopTimers();
       this.real?.stop();
       this.real = null;
+      this.samples?.stop();
+      this.samples = null;
       if (this.amb) for (const s of this.amb.sources) this.tryStop(s);
       if (this.roll) this.tryStop(this.roll.src);
       this.roll = null;
@@ -873,6 +888,7 @@ export class AudioEngine {
 
       this.amb = { out, tone, murmur, babble, swell, sources, timer: null, nextChant: t + 1.5, nextBar: t + 0.6, bar: 0 };
       this.applyExcitement(0.05);
+      if (this.crowdUrls && !this.samples && CrowdSamples.supported(ctx)) this.samples = new CrowdSamples(ctx, g.crowd, g.crowdWet, this.crowdUrls);
       if (this.chantTracks.length && StadiumChants.supported(ctx)) {
         this.real = new StadiumChants(ctx, this.chantTracks, g.crowd, g.crowdWet);
         this.real.setExcitement(this.excitement);
@@ -895,6 +911,8 @@ export class AudioEngine {
       this.amb = null;
       this.real?.stop();
       this.real = null;
+      this.samples?.stop();
+      this.samples = null;
       if (a.timer) clearInterval(a.timer);
       const t = ctx.currentTime;
       a.out.gain.cancelScheduledValues(t);
@@ -913,6 +931,8 @@ export class AudioEngine {
 
   /** Goal roar, intensity 0..1. */
   cheer(intensity: number): void {
+    // grito de gol real (si ya cargó); si no, el sintetizado de abajo
+    if (this.samples?.goal(clamp01(intensity))) return;
     this.run((ctx, g) => {
       const i = clamp01(intensity);
       const t = ctx.currentTime;

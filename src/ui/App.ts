@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { CHANT_TRACKS } from '../audio/chantTracks';
+import { CROWD_SAMPLES } from '../audio/crowdTracks';
 import { getSpeech } from '../audio/Speech';
 import { DIFFICULTY_LABELS } from '../ai/Difficulty';
 import { AutoQuality } from '../game/AutoQuality';
@@ -122,6 +123,7 @@ export class App {
     this.bg = el('div', 'menu-bg', '<div class="pitch-lines"></div>');
     document.body.insertBefore(this.bg, ui);
     this.audio.setChantTracks(CHANT_TRACKS);
+    this.audio.setCrowdSamples(CROWD_SAMPLES);
     registerCustomTeams(); // equipos creados en el editor
     setLang(this.settings.language);
     this.applyAudio();
