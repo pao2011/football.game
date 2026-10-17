@@ -11,6 +11,11 @@ export function getPads(): Gamepad[] {
   }
 }
 
+/** Mandos reales (descarta dispositivos con pocos botones o ejes), en el orden del navegador. */
+export function realPads(): Gamepad[] {
+  return getPads().filter((p) => p.buttons.length >= 4 && p.axes.length >= 2);
+}
+
 /** Mejor mando disponible: prefiere el de mapa estándar y, si no, el que más botones y ejes tenga. */
 export function activePad(): Gamepad | null {
   const pads = getPads().filter((p) => p.buttons.length >= 4 && p.axes.length >= 2);

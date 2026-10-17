@@ -1,4 +1,4 @@
-import type { AudioEngine } from './AudioEngine';
+import type { AudioEngine, XZ } from './AudioEngine';
 import type { Match } from '../sim/Match';
 import type { MatchEvent } from '../sim/types';
 import { BALL_RADIUS } from '../config/constants';
@@ -20,49 +20,55 @@ export class MatchAudio {
   start() {
     this.audio.stopMenuMusic();
     this.audio.startAmbience();
+    if (this.match.weather !== 'clear') this.audio.startWeather(this.match.weather);
   }
 
   stop() {
     this.audio.stopRoll();
+    this.audio.stopWeather();
+    this.audio.clearListener();
     this.audio.stopAmbience();
   }
 
   onEvent(e: MatchEvent) {
     const a = this.audio;
     const t = this.match.time;
+    // dónde suena: el punto del evento o, si no lo trae, donde está el balón
+    const b = this.match.ball.pos;
+    const at: XZ = e.x !== undefined && e.z !== undefined ? { x: e.x, z: e.z } : { x: b.x, z: b.z };
     switch (e.type) {
       case 'kick':
         if (t - this.lastKick > 0.05) {
-          if (e.kind === 'header') a.header(e.power ?? 0.5);
-          else if (e.kind && HAND_KICKS.has(e.kind)) a.touch(0.35);
-          else a.kick(e.power ?? 0.4);
+          if (e.kind === 'header') a.header(e.power ?? 0.5, at);
+          else if (e.kind && HAND_KICKS.has(e.kind)) a.touch(0.35, at);
+          else a.kick(e.power ?? 0.4, at);
         }
         this.lastKick = t;
         this.lastDribbleTap = t;
         break;
       case 'touch':
-        if (t - this.lastTouch > 0.08 && t - this.lastKick > 0.05) a.touch(0.25 + 0.75 * (e.power ?? 0.3));
+        if (t - this.lastTouch > 0.08 && t - this.lastKick > 0.05) a.touch(0.25 + 0.75 * (e.power ?? 0.3), at);
         this.lastTouch = t;
         this.lastDribbleTap = t;
         break;
       case 'catch':
-        a.gloveCatch();
+        a.gloveCatch(at);
         break;
       case 'bounce':
-        if (t - this.lastBounce > 0.08) a.bounce(e.power ?? 0.3);
+        if (t - this.lastBounce > 0.08) a.bounce(e.power ?? 0.3, at);
         this.lastBounce = t;
         break;
       case 'post':
-        a.post();
+        a.post(at);
         a.ooh();
         break;
       case 'net':
-        a.net();
+        a.net(at);
         break;
       case 'out': {
         // balón fuerte que se va fuera: golpe contra las vallas publicitarias
         const sp = this.match.ball.speed;
-        if (sp > 7) setTimeout(() => a.boards(Math.min(1, (sp - 5) / 18)), 120);
+        if (sp > 7) setTimeout(() => a.boards(Math.min(1, (sp - 5) / 18), at), 120);
         break;
       }
       case 'whistle':
@@ -74,19 +80,21 @@ export class MatchAudio {
         break;
       case 'save':
         if (e.kind === 'shot' || e.kind === 'shootout') a.applause();
-        else a.glovePunch(); // desvío con las manos o los puños
+        else a.glovePunch(at); // desvío con las manos o los puños
         break;
       case 'skill':
-        if (e.kind === 'beat') a.ooh();
+        // regate que supera al rival, o chilena / tijera: el público se levanta
+        if (e.kind === 'beat' || e.kind === 'bicycle' || e.kind === 'scissor' || e.kind === 'scorpion') a.ooh();
         break;
       case 'nearMiss':
         a.ooh();
         break;
       case 'foul':
+      case 'handball':
         a.boo();
         break;
       case 'tackle':
-        a.tackle();
+        a.tackle(at);
         break;
       case 'offside':
         a.groan();
@@ -100,8 +108,13 @@ export class MatchAudio {
     }
   }
 
-  update(excitement: number) {
+  /** cam: cámara del partido (para el sonido 3D: paneo y distancia de los sonidos del balón). */
+  update(excitement: number, cam?: { position: { x: number; z: number }; matrixWorld: { elements: ArrayLike<number> } }) {
     this.audio.setExcitement(excitement);
+    if (cam) {
+      const e = cam.matrixWorld.elements; // columna 0 = vector "derecha" de la cámara
+      this.audio.setListener(cam.position.x, cam.position.z, e[0], e[2]);
+    }
     const m = this.match;
     const t = m.time;
     const running = t !== this.lastTime && m.phase !== 'replay';
@@ -110,7 +123,7 @@ export class MatchAudio {
     const onGround = !b.held && b.pos.y < BALL_RADIUS + 0.06;
     const hSpeed = Math.hypot(b.vel.x, b.vel.z);
     // pelota rodando suelta por el césped (el jugador que conduce tapa casi todo el rodar)
-    this.audio.setRoll(running ? (m.owner ? hSpeed * 0.35 : hSpeed) : 0, onGround);
+    this.audio.setRoll(running ? (m.owner ? hSpeed * 0.35 : hSpeed) : 0, onGround, { x: b.pos.x, z: b.pos.z });
     // toques de conducción: más seguidos cuanto más rápido corre el jugador
     const o = m.owner;
     if (running && o && onGround && m.phase === 'play') {
@@ -118,7 +131,7 @@ export class MatchAudio {
       const gap = Math.max(0.26, 0.62 - sp * 0.045);
       if (sp > 1.5 && t - this.lastDribbleTap > gap) {
         this.lastDribbleTap = t;
-        this.audio.touch(0.12 + Math.min(0.25, sp * 0.03));
+        this.audio.touch(0.12 + Math.min(0.25, sp * 0.03), { x: b.pos.x, z: b.pos.z });
       }
     } else if (!o) {
       this.lastDribbleTap = t;

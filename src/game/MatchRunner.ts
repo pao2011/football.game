@@ -1,16 +1,20 @@
 import * as THREE from 'three';
+import { AutoQuality, type QualityStep } from './AutoQuality';
 import { SIM_DT } from '../config/constants';
 import type { GameSettings } from '../config/Settings';
 import { HumanController } from '../control/HumanController';
 import type { StadiumData } from '../data/types';
-import type { Input } from '../input/Input';
+import { Input, P1_SPLIT, P2_SPLIT, versusDevices, type Bindings } from '../input/Input';
 import { Match, type MatchConfig } from '../sim/Match';
 import { MatchView } from '../render/MatchView';
 import type { MatchEvent } from '../sim/types';
 import { HUD } from '../ui/HUD';
+import { Commentary } from '../ui/Commentary';
+import { getLang } from '../i18n';
+import { AchievementTracker } from '../modes/Achievements';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { MatchAudio } from '../audio/MatchAudio';
-import { Commentary } from '../audio/Commentary';
+import { Narrator } from '../audio/Narrator';
 import { getSpeech } from '../audio/Speech';
 import { activePad } from '../input/pads';
 import { TouchControls, isTouchDevice } from '../input/TouchControls';
@@ -26,6 +30,8 @@ export interface OnlineLink {
   send(d: object): void;
   /** Nombre del rival (para los avisos). */
   opponentName?: string;
+  /** Espectador: recibe el partido del anfitrión pero no manda nada ni controla a nadie. */
+  spectator?: boolean;
 }
 
 /** Pausas por jugador en un partido online y duración máxima de cada una. */
@@ -64,10 +70,18 @@ export class MatchRunner {
   readonly match: Match;
   readonly view: MatchView;
   readonly hud: HUD;
+  /** Jugador 2 en el mismo PC (partido local de dos jugadores). */
+  private input2: Input | null = null;
+  private controller2: HumanController | null = null;
+  private savedInput: { bindings: Bindings; pad: Input['padSource']; keyboard: boolean } | null = null;
+  /** Logros del usuario en este partido. */
+  readonly achievements: AchievementTracker | null = null;
+  /** Comentarista (rótulos y voz opcional). */
+  private commentary: Commentary | null = null;
   readonly controller: HumanController | null;
   readonly audio: MatchAudio;
   /** Relator con voz. */
-  readonly commentary: Commentary;
+  readonly narrator: Narrator;
   /** Controles táctiles (solo en móvil o si se activan en la configuración). */
   readonly touch: TouchControls | null;
   private acc = 0;
@@ -90,6 +104,11 @@ export class MatchRunner {
   private pendingTip: string | null = null;
   /** Velocidad de simulación (para pruebas automáticas). */
   timeScale = 1;
+  /** Calidad automática según los FPS (la pone App si está activada). */
+  autoQuality: AutoQuality | null = null;
+  /** Duración real del último fotograma (sin el recorte que usa la simulación). */
+  private realDt = 0;
+  onQualityStep: (s: QualityStep) => void = () => {};
   /** Equipo del jugador local (0 local, 1 visitante, -1 ninguno). */
   readonly localTeam: 0 | 1 | -1;
   /** Partido online: el anfitrión simula; el invitado dibuja lo que recibe. */
@@ -144,6 +163,27 @@ export class MatchRunner {
       ? new HumanController(input, basis, controlSettings(settings, wantTouch))
       : null;
     if (this.controller) this.match.controllers[config.humanTeam as 0 | 1] = this.controller;
+    // Dos jugadores en el mismo PC: el 2 controla al visitante (versus) o juega en el mismo equipo (cooperativo),
+    // con su mando o con la mitad derecha del teclado
+    if ((config.versus || config.coop) && !online && this.controller) {
+      const dev = versusDevices();
+      this.savedInput = { bindings: input.bindings, pad: input.padSource, keyboard: input.keyboard };
+      input.padSource = dev.p1Pad;
+      if (dev.mode === 'keys') input.bindings = structuredClone(P1_SPLIT);
+      const i2 = new Input(P2_SPLIT);
+      i2.settings = { ...input.settings };
+      i2.padSource = dev.p2Pad;
+      i2.keyboard = dev.mode === 'keys';
+      this.input2 = i2;
+      // misma base de cámara que el jugador 1 (se actualiza a la vez)
+      this.controller2 = new HumanController(i2, basis, controlSettings(settings, false));
+      if (config.coop) {
+        this.match.controllers2[config.humanTeam as 0 | 1] = this.controller2;
+      } else {
+        this.match.controllers[1] = this.controller2;
+        this.match.autoSubs[1] = settings.autoSubs;
+      }
+    }
     if (online?.role === 'host') {
       // el rival controla el equipo visitante con sus mandos (recibidos por la red)
       const remote = new RemoteInput();
@@ -165,7 +205,12 @@ export class MatchRunner {
     }
     this.hud.showRadar = settings.showRadar;
     this.hud.popups = settings.popups;
-    this.touch = wantTouch && (this.controller || isGuest) ? new TouchControls(uiRoot, input) : null;
+    if (config.humanTeam >= 0 && !config.training && !config.versus) {
+      this.achievements = new AchievementTracker(this.match, config.humanTeam as 0 | 1);
+      this.achievements.onUnlock = (a) => this.hud.showBanner(`🏆 ${a.icon} ${escapeHtml(a.name)}`, `Logro desbloqueado · ${escapeHtml(a.desc)}`, '#ffd23f', 3.2);
+    }
+    this.commentary = settings.commentary !== false && !config.training ? new Commentary(uiRoot, this.match, getLang() !== 'es' && settings.commentaryVolume > 0) : null;
+    this.touch = wantTouch && (this.controller || (isGuest && !online?.spectator)) ? new TouchControls(uiRoot, input) : null;
     document.body.classList.toggle('touch', !!this.touch);
     if (this.touch) {
       // consejo de uso las primeras partidas
@@ -177,8 +222,9 @@ export class MatchRunner {
     }
     this.audio = new MatchAudio(audioEngine, this.match);
     this.audio.start();
-    this.commentary = new Commentary(getSpeech(), this.match, stadium.name);
-    this.commentary.volume = () => (settings.commentaryVolume ?? 0.9) * settings.masterVolume;
+    this.narrator = new Narrator(getSpeech(), this.match, stadium.name);
+    // el relator con voz habla castellano; en otros idiomas habla el comentarista de texto
+    this.narrator.volume = () => (getLang() !== 'es' ? 0 : (settings.commentaryVolume ?? 0.9) * settings.masterVolume);
     // hinchada: el sonido de cada cohete sale de su explosión
     this.view.stadium.fans.onBurst = (d) => audioEngine.firework(d);
     this.audioEngine = audioEngine;
@@ -211,7 +257,8 @@ export class MatchRunner {
     const loop = (now: number) => {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(loop);
-      const dt = Math.min(0.1, (now - this.last) / 1000);
+      this.realDt = (now - this.last) / 1000;
+      const dt = Math.min(0.1, this.realDt);
       this.last = now;
       this.frame(dt);
     };
@@ -228,7 +275,7 @@ export class MatchRunner {
         // recibimiento: fuegos artificiales, bengalas, papelitos y cántico con bombo
         this.view.stadium.fans.welcome();
         this.audioEngine.chant(1);
-        this.commentary.welcome();
+        this.narrator.welcome();
         this.view.director.startIntro(INTRO_SECONDS);
         this.introEndAt = performance.now() + (INTRO_SECONDS * 1000) / this.timeScale;
       }
@@ -247,7 +294,8 @@ export class MatchRunner {
       let steps = 0;
       while (this.acc >= SIM_DT && steps < 8 * Math.max(1, this.timeScale)) {
         this.input.poll(SIM_DT);
-        if (this.input.pressed('pause')) {
+        this.input2?.poll(SIM_DT);
+        if (this.input.pressed('pause') || this.input2?.pressed('pause')) {
           this.pause();
           // online sin pausas restantes el partido sigue
           if (!this.online || this.halted) break;
@@ -260,6 +308,8 @@ export class MatchRunner {
         }
         // la base de la cámara orienta el stick
         if (this.controller) this.view.director.basis(this.controller.view.right, this.controller.view.forward);
+        // tras marcar el jugador del usuario: el stick derecho (o I/J/K/L, R) elige la celebración
+        if (m.phase === 'goal') this.chooseCelebration();
         if (m.phase === 'replay' && (this.input.pressed('pass') || this.input.pressed('shoot') || !this.settings.replays)) m.skipReplay();
         m.step(SIM_DT);
         for (const e of m.events) this.handleEvent(e);
@@ -303,14 +353,19 @@ export class MatchRunner {
     } else {
       this.hud.powerAnchor = null;
     }
-    this.audio.update(this.view.excitement);
-    if (!this.paused) this.commentary.update(dt);
+    this.audio.update(this.view.excitement, this.view.camera);
+    if (!this.paused) this.narrator.update(dt);
     this.hud.update(dt);
+    this.commentary?.update();
     if (this.touch && team) {
       const pt = m.possessionTeam;
       // con el balón suelto se mantiene el modo anterior (evita parpadeos de botones)
       if (pt !== -1 || m.phase !== 'play') this.touch.setContext(pt === team.index || m.gkHolding?.team === team.index || (m.phase !== 'play' && m.restart?.team === team.index));
       this.touch.setVisible(!this.paused && !this.inIntro && m.phase !== 'replay' && !m.finished);
+    }
+    if (this.autoQuality && !this.paused) {
+      const step = this.autoQuality.sample(this.realDt);
+      if (step) this.onQualityStep(step);
     }
     this.view.render();
 
@@ -327,8 +382,10 @@ export class MatchRunner {
   private handleEvent(e: MatchEvent) {
     const m = this.match;
     this.hud.onEvent(e);
+    this.commentary?.onEvent(e);
+    this.narrator.onEvent(e);
+    this.achievements?.onEvent(e);
     this.audio.onEvent(e);
-    this.commentary.onEvent(e);
     if (e.type === 'net' && e.x !== undefined && e.z !== undefined) this.view.netImpact(e.x, e.z, e.power ?? 0.6);
     if (e.type === 'goal' && e.kind !== 'shootout') {
       this.view.director.addShake(0.25);
@@ -337,6 +394,21 @@ export class MatchRunner {
       setTimeout(() => { if (!this.disposed) this.audioEngine.chant(0.8); }, 3200);
     }
     if (this.settings.vibration !== false) this.vibrate(e);
+  }
+
+  /** Celebración elegida por el usuario: ↑ brazos arriba, ↓ de rodillas, → saltos, ← avión, R silencio, RB+↑ al cielo. */
+  private chooseCelebration() {
+    const sc = this.match.lastGoal?.scorer;
+    if (!sc || sc.action.kind !== 'celebrate' || sc.action.time > 2) return;
+    const i = this.match.teams[sc.team].human ? (sc.team === this.localTeam ? this.input : this.input2) : null;
+    if (!i) return;
+    let v = -1;
+    if (i.pressed('skillUp')) v = i.held('finesse') ? 5 : 0;
+    else if (i.pressed('skillDown')) v = 1;
+    else if (i.pressed('skillRight')) v = 2;
+    else if (i.pressed('skillLeft')) v = 3;
+    else if (i.pressed('skillSpin')) v = 4;
+    if (v >= 0) sc.action.variant = v;
   }
 
   /** Vibración en golpeos propios, entradas, postes y goles: en el móvil y en el mando (si lo admite). */
@@ -378,6 +450,12 @@ export class MatchRunner {
     if (steps >= 8) this.acc = 0;
     if (this.guestFrames.length >= 2) this.online!.send({ k: 'i', f: this.guestFrames.splice(0) });
     for (const e of this.guestSync!.update(performance.now())) this.handleEvent(e);
+    // predicción local de mi jugador (menos sensación de retraso)
+    if (this.localTeam >= 0 && !this.paused) {
+      const mv = this.input.move();
+      const dir = { x: this.guestRight.x * mv.x + this.guestForward.x * mv.y, z: this.guestRight.z * mv.x + this.guestForward.z * mv.y };
+      this.guestSync!.predict(this.localTeam as 0 | 1, dir, dt);
+    }
   }
 
   /** Partido online detenido por una pausa (mía o del rival). */
@@ -464,7 +542,7 @@ export class MatchRunner {
         this.remoteController.settings = {
           autoSwitch: c.autoSwitch !== false,
           passAssist: Math.max(0, Math.min(1, Number(c.passAssist ?? 1))),
-          powerBarTime: Math.max(0.5, Math.min(2, Number(c.powerBarTime ?? 1))),
+          powerBarTime: Math.max(0.3, Math.min(2, Number(c.powerBarTime ?? 0.6))),
           showAimAssist: true,
           assist: !!c.assist,
         };
@@ -506,11 +584,11 @@ export class MatchRunner {
   pause() {
     if (this.match.finished) return;
     this.paused = true;
-    this.commentary.stop();
+    this.narrator.stop();
     if (this.online) {
       this.input.suppressed = true;
-      // la pausa detiene el partido para los dos (un número limitado de veces)
-      if (!this.inIntro && !this.localHalt && this.pausesLeft > 0) {
+      // la pausa detiene el partido para los dos (un número limitado de veces); el espectador solo abre el menú
+      if (!this.online.spectator && !this.inIntro && !this.localHalt && this.pausesLeft > 0) {
         this.pausesLeft--;
         this.localHalt = true;
         this.haltStarted = performance.now();
@@ -553,8 +631,16 @@ export class MatchRunner {
     this.haltEl?.remove();
     cancelAnimationFrame(this.raf);
     this.audio.stop();
-    this.commentary.stop();
+    this.narrator.stop();
     this.hud.dispose();
+    this.commentary?.dispose();
+    this.input2?.dispose();
+    if (this.savedInput) {
+      this.input.bindings = this.savedInput.bindings;
+      this.input.padSource = this.savedInput.pad;
+      this.input.keyboard = this.savedInput.keyboard;
+      this.savedInput = null;
+    }
     this.touch?.dispose();
     document.body.classList.remove('touch');
     this.view.dispose();

@@ -3,16 +3,25 @@ import { AudioEngine } from '../audio/AudioEngine';
 import { CHANT_TRACKS } from '../audio/chantTracks';
 import { getSpeech } from '../audio/Speech';
 import { DIFFICULTY_LABELS } from '../ai/Difficulty';
+import { AutoQuality } from '../game/AutoQuality';
+import { LANG_NAMES, setLang } from '../i18n';
+import { ReplayViewer } from '../game/ReplayViewer';
+import type { MatchView } from '../render/MatchView';
+import { deleteReplay, encodeFrames, lastSeconds, listReplays, MAX_SAVED_REPLAYS, saveReplay, type SavedReplay } from '../modes/SavedReplays';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
 import { STADIUMS, getStadium } from '../data/stadiums';
-import { TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
+import { BUILTIN_TEAM_COUNT, TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
+import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
+import { disciplineOf, isAvailable } from '../modes/Availability';
+import { ACHIEVEMENTS, unlock, unlockedSet, type AchievementDef } from '../modes/Achievements';
+import { deleteCustomTeam, exportTeam, importTeam, isCustom, loadCustomTeams, newCustomTeam, registerCustomTeams, saveCustomTeam, setTeamLevel, shortOf, teamLevel } from '../data/customTeams';
 import type { Difficulty, FormationId, PlayerData, TeamData } from '../data/types';
 import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
-import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, type Action } from '../input/Input';
+import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, versusDevicesLabel, type Action } from '../input/Input';
 import { MAX_SUBS, type MatchConfig } from '../sim/Match';
 import { manOfTheMatch, playerRatings } from '../sim/Ratings';
-import { Career } from '../modes/Career';
+import { Career, SQUAD_MAX, SQUAD_MIN, buyPlayer, marketOffers, playerPrice, sellPlayer } from '../modes/Career';
 import { Tournament } from '../modes/Tournament';
 import type { Fixture, StandingRow } from '../modes/Competition';
 import { crestSVG, kitSVG } from './Crest';
@@ -51,14 +60,23 @@ const TIPS = [
   'En móvil, un toque rápido en PASE o TIRO golpea con potencia automática y elige al mejor compañero o la mejor esquina del arco.',
 ];
 
+const MENTALITY_NAMES = ['Ultradefensiva', 'Defensiva', 'Equilibrada', 'Ofensiva', 'Ultraofensiva'];
+const SIDES: QuickSetup['side'][] = [0, 1, 2, 3, -1];
+const WEATHER_CYCLE: (Weather | 'random')[] = ['clear', 'rain', 'snow', 'wind', 'random'];
+
 interface QuickSetup {
   home: number;
   away: number;
   stadium: number;
   half: number;
   difficulty: number;
-  side: 0 | 1 | -1;
+  /** 0 local, 1 visitante, -1 espectador, 2 = dos jugadores (local contra visitante), 3 = dos jugadores en el local contra la IA. */
+  side: 0 | 1 | -1 | 2 | 3;
   formation: FormationId | null;
+  /** Equipación del visitante: automática (la que más contrasta), titular o suplente. */
+  awayKit?: 'auto' | 'home' | 'away';
+  /** Clima del partido rápido. */
+  weather?: Weather | 'random';
 }
 
 type MatchContext =
@@ -80,6 +98,8 @@ export class App {
   private overlay: Screen | null = null;
   private quick: QuickSetup;
   private lastMatch: { config: MatchConfig; ctx: MatchContext } | null = null;
+  private lastStadiumId = '';
+  private replayViewer: ReplayViewer | null = null;
   tournament: Tournament | null = null;
   career: Career | null = null;
 
@@ -102,6 +122,8 @@ export class App {
     this.bg = el('div', 'menu-bg', '<div class="pitch-lines"></div>');
     document.body.insertBefore(this.bg, ui);
     this.audio.setChantTracks(CHANT_TRACKS);
+    registerCustomTeams(); // equipos creados en el editor
+    setLang(this.settings.language);
     this.applyAudio();
     this.quick = { home: 0, away: 1, stadium: 0, half: HALF_OPTIONS.indexOf(this.settings.halfMinutes), difficulty: DIFFS.indexOf(this.settings.difficulty), side: 0, formation: null };
     if (this.quick.half < 0) this.quick.half = 2;
@@ -111,6 +133,24 @@ export class App {
     const unlock = () => this.audio.unlock();
     window.addEventListener('pointerdown', unlock, { once: false });
     window.addEventListener('keydown', unlock, { once: false });
+    // M: silenciar / activar el sonido en cualquier momento (salvo si la tecla está asignada a otra acción)
+    window.addEventListener('keydown', (e) => {
+      if (e.code !== 'KeyM' || e.repeat || (window as any).__captureKey) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (Object.values(this.settings.bindings).some((ks) => ks.includes('KeyM'))) return;
+      this.toggleMute();
+    });
+  }
+
+  /** Silencia o reactiva todo el sonido y lo indica brevemente en pantalla. */
+  toggleMute() {
+    this.settings.muted = !this.settings.muted;
+    saveSettings(this.settings);
+    this.applyAudio();
+    const t = el('div', 'mute-toast', this.settings.muted ? '🔇 Sonido desactivado <small>(M)</small>' : '🔊 Sonido activado <small>(M)</small>');
+    this.ui.appendChild(t);
+    setTimeout(() => t.remove(), 1400);
   }
 
   private createRenderer() {
@@ -143,7 +183,7 @@ export class App {
 
   private applyAudio() {
     const s = this.settings;
-    this.audio.setVolumes({ master: s.masterVolume, music: s.musicVolume, sfx: s.sfxVolume, crowd: s.crowdVolume });
+    this.audio.setVolumes({ master: s.muted ? 0 : s.masterVolume, music: s.musicVolume, sfx: s.sfxVolume, crowd: s.crowdVolume, ball: s.ballVolume, referee: s.refereeVolume });
   }
 
   private onResize() {
@@ -152,6 +192,7 @@ export class App {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * this.settings.resolutionScale);
     this.renderer.setSize(w, h, false);
     this.runner?.resize(w, h);
+    this.replayViewer?.resize(w, h);
   }
 
   private show(html: string, handlers: Handlers, back: (() => void) | null, cls = '') {
@@ -261,6 +302,9 @@ export class App {
           <button class="menu-item" data-act="career">Carrera<small>Temporadas de liga con tu club</small></button>
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
+          <button class="menu-item" data-act="editor">✏️ Editor de equipos<small>Crea tu equipo · exportar e importar</small></button>
+          <button class="menu-item" data-act="replays">🎬 Repeticiones<small>Tus jugadas guardadas</small></button>
+          <button class="menu-item" data-act="achievements">🏆 Logros<small>${Object.keys(unlockedSet()).length}/${ACHIEVEMENTS.length} desbloqueados</small></button>
           <button class="menu-item" data-act="controls">Controles<small>Teclado y mando · reasignar teclas</small></button>
           ${!isElectron && !isNativeApp() ? '<button class="menu-item apk-item" data-act="apk">📲 Descargar APK<small>Instala el juego en tu Android</small></button>' : ''}
           ${isElectron ? '<button class="menu-item" data-act="quit">Salir</button>' : ''}
@@ -272,12 +316,15 @@ export class App {
       </div>
       <div class="version-tag">v${VERSION} · ${isTouchDevice() ? 'Toca una opción para elegir' : '↑↓ para navegar · Enter/S para elegir · Esc para volver'}</div>`, {
       quick: () => this.quickMatchScreen(),
+      replays: () => this.replaysScreen(),
       online: () => this.onlineMenu(),
       tournament: () => this.tournamentHub(),
       career: () => this.careerHub(),
       training: () => this.trainingScreen(),
       settings: () => this.settingsScreen(() => this.mainMenu()),
       controls: () => this.controlsScreen(() => this.mainMenu()),
+      achievements: () => this.achievementsScreen(),
+      editor: () => this.teamEditorList(),
       quit: () => window.close(),
       apk: () => { window.open(APK_URL, '_blank', 'noopener'); },
     }, () => this.start());
@@ -304,8 +351,8 @@ export class App {
     const render = () => {
       const home = TEAMS[q.home];
       const away = TEAMS[q.away];
-      const awayKit = chooseAwayKit(home, away);
-      const sideLabel = q.side === 0 ? `Local (${home.short})` : q.side === 1 ? `Visitante (${away.short})` : 'Espectador (IA vs IA)';
+      const awayKit = this.quickAwayKit(home, away);
+      const sideLabel = q.side === 0 ? `Local (${home.short})` : q.side === 1 ? `Visitante (${away.short})` : q.side === 2 ? `2 jugadores: J1 ${home.short} · J2 ${away.short}` : q.side === 3 ? `2 jugadores juntos (${home.short}) contra la IA` : 'Espectador (IA vs IA)';
       return `
       <div class="screen-header"><div><div class="crumb">PARTIDO RÁPIDO</div><h2>Configuración del encuentro</h2></div></div>
       <div class="screen-body">
@@ -319,7 +366,10 @@ export class App {
           ${this.stepper('Duración de cada parte', `${HALF_OPTIONS[q.half]} min`, 'half')}
           ${this.stepper('Dificultad', DIFFICULTY_LABELS[DIFFS[q.difficulty]], 'diff')}
           ${this.stepper('Controlas a', sideLabel, 'side')}
+          ${q.side === 2 || q.side === 3 ? `<div class="muted" style="margin:-4px 0 8px;font-size:13px">🎮 ${esc(versusDevicesLabel())}</div>` : ''}
           ${this.stepper('Tu formación', q.formation ?? 'Por defecto del equipo', 'form')}
+          ${this.stepper('Clima', q.weather === 'random' ? 'Aleatorio' : WEATHER_NAMES[q.weather ?? 'clear'], 'wthr')}
+          ${this.stepper('Equipación del visitante', ({ auto: 'Automática (la que más contrasta)', home: 'Titular', away: 'Suplente' } as const)[q.awayKit ?? 'auto'], 'akit')}
         </div>
       </div>
       <div class="screen-footer">
@@ -339,9 +389,13 @@ export class App {
       halfNext: () => cycle('half', HALF_OPTIONS.length, 1),
       diffPrev: () => cycle('difficulty', DIFFS.length, -1),
       diffNext: () => cycle('difficulty', DIFFS.length, 1),
-      sidePrev: () => { q.side = (q.side === 0 ? -1 : q.side === 1 ? 0 : 1); s.refresh(render()); },
-      sideNext: () => { q.side = (q.side === 0 ? 1 : q.side === 1 ? -1 : 0); s.refresh(render()); },
+      sidePrev: () => { q.side = SIDES[(SIDES.indexOf(q.side) + SIDES.length - 1) % SIDES.length]; s.refresh(render()); },
+      sideNext: () => { q.side = SIDES[(SIDES.indexOf(q.side) + 1) % SIDES.length]; s.refresh(render()); },
       formPrev: () => { const i = q.formation ? FORMATION_IDS.indexOf(q.formation) : 0; q.formation = i <= 0 ? null : FORMATION_IDS[i - 1]; s.refresh(render()); },
+      wthrPrev: () => { q.weather = WEATHER_CYCLE[(WEATHER_CYCLE.indexOf(q.weather ?? 'clear') + WEATHER_CYCLE.length - 1) % WEATHER_CYCLE.length]; s.refresh(render()); },
+      wthrNext: () => { q.weather = WEATHER_CYCLE[(WEATHER_CYCLE.indexOf(q.weather ?? 'clear') + 1) % WEATHER_CYCLE.length]; s.refresh(render()); },
+      akitPrev: () => { q.awayKit = ({ auto: 'away', home: 'auto', away: 'home' } as const)[q.awayKit ?? 'auto']; s.refresh(render()); },
+      akitNext: () => { q.awayKit = ({ auto: 'home', home: 'away', away: 'auto' } as const)[q.awayKit ?? 'auto']; s.refresh(render()); },
       formNext: () => { const i = q.formation ? FORMATION_IDS.indexOf(q.formation) : -1; q.formation = FORMATION_IDS[(i + 1) % FORMATION_IDS.length]; s.refresh(render()); },
       back: () => this.mainMenu(),
       play: () => {
@@ -351,15 +405,22 @@ export class App {
         this.settings.difficulty = DIFFS[q.difficulty];
         saveSettings(this.settings);
         const cfg: MatchConfig = {
-          home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: q.side,
+          home, away, homeKit: home.home, awayKit: this.quickAwayKit(home, away), humanTeam: q.side === 2 || q.side === 3 ? 0 : q.side, versus: q.side === 2, coop: q.side === 3,
+          weather: q.weather === 'random' ? randomWeather(Math.random()) : q.weather ?? 'clear',
           halfLengthSec: HALF_OPTIONS[q.half] * 60, difficulty: DIFFS[q.difficulty], extraTime: false, penalties: false,
-          homeFormation: q.side === 0 && q.formation ? q.formation : undefined,
+          homeFormation: (q.side === 0 || q.side === 2 || q.side === 3) && q.formation ? q.formation : undefined,
           awayFormation: q.side === 1 && q.formation ? q.formation : undefined,
         };
         this.playMatch(cfg, STADIUMS[q.stadium].id, { mode: 'quick' });
       },
     };
     const s = this.show(render(), handlers, () => this.mainMenu());
+  }
+
+  /** Equipación del visitante en el partido rápido según lo elegido. */
+  private quickAwayKit(home: TeamData, away: TeamData) {
+    const k = this.quick.awayKit ?? 'auto';
+    return k === 'home' ? away.home : k === 'away' ? away.away : chooseAwayKit(home, away);
   }
 
   private stepper(label: string, value: string, key: string) {
@@ -373,6 +434,7 @@ export class App {
 
   playMatch(config: MatchConfig, stadiumId: string, ctx: MatchContext, online: OnlineLink | null = null) {
     this.lastMatch = { config, ctx };
+    this.lastStadiumId = stadiumId;
     const home = config.home;
     const away = config.away;
     const tip = TIPS[Math.floor(Math.random() * TIPS.length)];
@@ -392,6 +454,7 @@ export class App {
           const runner = new MatchRunner(this.renderer, config, getStadium(stadiumId), this.settings, this.input, this.audio, this.ui, online);
           this.runner = runner;
           runner.resize(window.innerWidth, window.innerHeight);
+          if (this.settings.autoQuality) this.attachAutoQuality(runner);
           // precompilar shaders
           this.renderer.compile(runner.view.scene, runner.view.camera);
           bar.style.width = '100%';
@@ -430,6 +493,188 @@ export class App {
       <button class="btn" data-act="menu">Menú principal</button></div>`, { menu: () => this.mainMenu() }, () => this.mainMenu());
   }
 
+  /** Modo foto: el partido queda congelado y la cámara se mueve libre (arrastrar, rueda/pellizco, teclas). */
+  private photoMode(target?: { view: MatchView; onExit: () => void }) {
+    const r = this.runner;
+    if (!target && !r) return;
+    const view = target?.view ?? r!.view;
+    const onExit = target?.onExit ?? (() => this.pauseMenu());
+    view.startPhoto();
+    const hudRoot = target ? null : r!.hud.root;
+    if (hudRoot) hudRoot.style.visibility = 'hidden';
+    const savedInd = view.opts.showIndicators;
+    view.opts.showIndicators = false;
+    const root = el('div', 'photo-mode', `
+      <div class="pm-surface"></div>
+      <div class="pm-bar">
+        <button class="btn primary" data-act="shot">📷 Capturar</button>
+        <button class="btn" data-act="exit">Salir</button>
+      </div>
+      <div class="pm-hint">${isTouchDevice() ? 'Arrastra para girar · dos dedos: acercar y mover' : 'Arrastra para girar · rueda: acercar · WASD / flechas: mover · Q/E: subir y bajar · F: capturar'}</div>`);
+    this.ui.appendChild(root);
+    const surface = root.querySelector('.pm-surface') as HTMLElement;
+    const pts = new Map<number, { x: number; y: number }>();
+    let pinch = 0;
+    let mid = { x: 0, y: 0 };
+    surface.addEventListener('pointerdown', (e) => { surface.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); pinch = 0; });
+    surface.addEventListener('pointermove', (e) => {
+      const prev = pts.get(e.pointerId);
+      if (!prev) return;
+      const cur = { x: e.clientX, y: e.clientY };
+      if (pts.size === 1) {
+        view.photoMove(-(cur.x - prev.x) * 0.006, (cur.y - prev.y) * 0.005);
+      }
+      pts.set(e.pointerId, cur);
+      if (pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        if (pinch > 0) view.photoMove(0, 0, pinch / d, -(m.x - mid.x) * 0.05, (m.y - mid.y) * 0.05);
+        pinch = d;
+        mid = m;
+      }
+    });
+    const up = (e: PointerEvent) => { pts.delete(e.pointerId); pinch = 0; };
+    surface.addEventListener('pointerup', up);
+    surface.addEventListener('pointercancel', up);
+    surface.addEventListener('wheel', (e) => { e.preventDefault(); view.photoMove(0, 0, Math.exp(e.deltaY * 0.001)); }, { passive: false });
+    const held = new Set<string>();
+    const key = (e: KeyboardEvent) => {
+      if (e.type === 'keydown') held.add(e.code); else held.delete(e.code);
+      if (e.type === 'keydown' && e.code === 'KeyF') shot();
+      if (e.type === 'keydown' && e.code === 'Escape') exit();
+      e.stopPropagation();
+    };
+    window.addEventListener('keydown', key, true);
+    window.addEventListener('keyup', key, true);
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const k = (c: string, c2: string) => (held.has(c) || held.has(c2) ? 1 : 0);
+      const s = 0.35;
+      const pr = k('KeyD', 'ArrowRight') - k('KeyA', 'ArrowLeft');
+      const pf = k('KeyW', 'ArrowUp') - k('KeyS', 'ArrowDown');
+      const pz = k('KeyQ', 'PageUp') - k('KeyE', 'PageDown');
+      if (pr || pf || pz) view.photoMove(0, pz * 0.02, 1, pr * s, pf * s);
+    };
+    raf = requestAnimationFrame(tick);
+    const shot = () => {
+      const url = view.capture();
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `football-elite-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      root.classList.remove('flash');
+      void root.offsetWidth;
+      root.classList.add('flash');
+      this.audio.uiClick();
+    };
+    const exit = () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('keydown', key, true);
+      window.removeEventListener('keyup', key, true);
+      root.remove();
+      view.stopPhoto();
+      view.opts.showIndicators = savedInd;
+      if (hudRoot) hudRoot.style.visibility = '';
+      onExit();
+    };
+    root.querySelector('[data-act=shot]')!.addEventListener('click', shot);
+    root.querySelector('[data-act=exit]')!.addEventListener('click', exit);
+  }
+
+  /** Guarda los últimos 8 s del partido en curso como repetición. */
+  private saveLastPlay(): boolean {
+    const r = this.runner;
+    if (!r) return false;
+    const m = r.match;
+    const frames = lastSeconds(m.replay, 8);
+    if (frames.length < 2) return false;
+    const end = frames[frames.length - 1];
+    const [a, b] = m.teams;
+    return saveReplay({
+      id: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`,
+      date: Date.now(),
+      title: `${a.data.short} - ${b.data.short}`,
+      clock: m.clockText,
+      score: `${a.stats.goals} - ${b.stats.goals}`,
+      stadiumId: this.lastStadiumId,
+      goalSide: end.ball[0] >= 0 ? 1 : -1,
+      home: m.config.home, away: m.config.away, homeKit: m.config.homeKit, awayKit: m.config.awayKit,
+      weather: m.weather,
+      data: encodeFrames(frames),
+    });
+  }
+
+  /** Lista de repeticiones guardadas. */
+  replaysScreen() {
+    this.setMenuMode(true);
+    const list = listReplays();
+    const date = (t: number) => new Date(t).toLocaleString(undefined, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const s = this.show(`
+      <div class="screen-header"><div><div class="crumb">GALERÍA</div><h2>Repeticiones</h2></div></div>
+      <div class="screen-body">
+        ${list.length ? `<div class="replay-list">${list.map((r) => `<div class="panel replay-item">
+          <div class="ri-teams">${crestSVG(r.home, 34)}<div><b>${esc(r.title)}</b> <span class="muted">${esc(r.score)} · ${esc(r.clock)}</span><small class="muted">${esc(getStadium(r.stadiumId).name)} · ${date(r.date)}</small></div>${crestSVG(r.away, 34)}</div>
+          <div class="ri-actions"><button class="btn primary" data-act="watch" data-id="${r.id}">▶ Ver</button><button class="btn" data-act="del" data-id="${r.id}">🗑</button></div>
+        </div>`).join('')}</div>` : '<div class="panel muted">Todavía no guardaste ninguna jugada. Durante un partido, pausa y elige <b>💾 Guardar jugada</b> para conservar los últimos 8 segundos (hasta ' + MAX_SAVED_REPLAYS + ').</div>'}
+      </div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, {
+      watch: (b) => { const r = list.find((x) => x.id === b.dataset.id); if (r) this.watchReplay(r); },
+      del: (b) => { deleteReplay(b.dataset.id!); this.replaysScreen(); },
+      back: () => this.mainMenu(),
+    }, () => this.mainMenu());
+    void s;
+  }
+
+  private watchReplay(saved: SavedReplay) {
+    this.screen?.dispose();
+    this.screen = null;
+    this.audio.stopMenuMusic();
+    let viewer: ReplayViewer;
+    try {
+      viewer = new ReplayViewer(this.renderer, saved, getStadium(saved.stadiumId), this.settings);
+    } catch (e) {
+      console.error(e);
+      this.replaysScreen();
+      return;
+    }
+    this.setMenuMode(false);
+    this.canvas.classList.remove('hidden');
+    this.bg.classList.add('hidden');
+    viewer.resize(window.innerWidth, window.innerHeight);
+    this.replayViewer = viewer;
+    viewer.start();
+    const controls = () => {
+      const s = this.show(`
+        <div class="replay-bar">
+          <div class="rb-title">${crestSVG(saved.home, 26)} <b>${esc(saved.title)}</b> <span class="muted">${esc(saved.score)} · ${esc(saved.clock)}</span></div>
+          <div class="rb-btns">
+            <button class="btn" data-act="toggle">${viewer.paused ? '▶' : '❚❚'}</button>
+            <button class="btn" data-act="restart">⏮</button>
+            <button class="btn" data-act="speed">${viewer.speed === 1 ? '1x' : viewer.speed < 1 ? '½x' : '2x'}</button>
+            <button class="btn" data-act="photo">📷</button>
+            <button class="btn" data-act="back">Salir</button>
+          </div>
+        </div>`, {
+        toggle: () => { viewer.paused = !viewer.paused; controls(); },
+        restart: () => { viewer.restart(); viewer.paused = false; controls(); },
+        speed: () => { viewer.speed = viewer.speed === 1 ? 0.5 : viewer.speed < 1 ? 2 : 1; controls(); },
+        photo: () => {
+          viewer.paused = true;
+          this.screen?.dispose();
+          this.screen = null;
+          this.photoMode({ view: viewer.view, onExit: () => controls() });
+        },
+        back: () => { viewer.dispose(); this.replayViewer = null; this.replaysScreen(); },
+      }, () => { viewer.dispose(); this.replayViewer = null; this.replaysScreen(); }, 'replay-screen');
+      void s;
+    };
+    controls();
+  }
+
   private pauseMenu() {
     const r = this.runner;
     if (!r) return;
@@ -440,11 +685,16 @@ export class App {
       <h2>Pausa</h2>
       <div class="muted" style="margin-bottom:14px">${esc(m.teams[0].data.name)} ${m.teams[0].stats.goals} - ${m.teams[1].stats.goals} ${esc(m.teams[1].data.name)} · ${m.clockText}</div>
       <div class="menu-list">
-        ${r.online ? `<div class="muted online-pause-note" style="margin:-6px 0 10px">${r.pauseSecondsLeft >= 0 ? `Partido pausado para los dos · se reanuda solo en <b class="ps-left">${r.pauseSecondsLeft}</b> s · te quedan ${r.pausesLeft} pausas` : 'Ya no te quedan pausas: el partido sigue en juego'}</div>` : ''}
+        ${r.online?.spectator ? '<div class="muted" style="margin:-6px 0 10px">👁 Estás mirando como espectador: el partido sigue.</div>' : ''}
+        ${r.online && !r.online.spectator ? `<div class="muted online-pause-note" style="margin:-6px 0 10px">${r.pauseSecondsLeft >= 0 ? `Partido pausado para los dos · se reanuda solo en <b class="ps-left">${r.pauseSecondsLeft}</b> s · te quedan ${r.pausesLeft} pausas` : 'Ya no te quedan pausas: el partido sigue en juego'}</div>` : ''}
         <button class="menu-item" data-act="resume">Reanudar</button>
-        ${r.online ? '<button class="menu-item" data-act="chat">Mensajes rápidos<small>Para tu rival</small></button>' : '<button class="menu-item" data-act="restart">Reiniciar partido</button>'}
+        ${r.online?.spectator ? '' : r.online ? '<button class="menu-item" data-act="chat">Mensajes rápidos<small>Para tu rival</small></button>' : '<button class="menu-item" data-act="restart">Reiniciar partido</button>'}
+        ${r.localTeam >= 0 && !m.config.training && !r.online ? `<button class="menu-item" data-act="tactics">Tácticas<small>${esc(m.teams[r.localTeam as 0 | 1].formation)} · ${MENTALITY_NAMES[m.teams[r.localTeam as 0 | 1].mentality + 2]}</small></button>` : ''}
         ${r.localTeam >= 0 && !m.config.training ? `<button class="menu-item" data-act="subs">Cambios<small>${m.teams[r.localTeam as 0 | 1].subsUsed}/${MAX_SUBS} realizados</small></button>` : ''}
         <button class="menu-item" data-act="stats">Estadísticas</button>
+        ${!r.online ? '<button class="menu-item" data-act="photo">📷 Modo foto<small>Cámara libre y captura</small></button>' : ''}
+        ${m.replay.length > 30 && !m.config.training ? '<button class="menu-item" data-act="savePlay">💾 Guardar jugada<small>Los últimos 8 segundos</small></button>' : ''}
+        <button class="menu-item" data-act="mute">${this.settings.muted ? '🔊 Activar sonido' : '🔇 Silenciar'}<small>Tecla M</small></button>
         <button class="menu-item" data-act="settings">Configuración</button>
         <button class="menu-item" data-act="controls">Controles</button>
         <button class="menu-item" data-act="quit">Abandonar partido${r.online && this.lastMatch?.ctx.mode === 'online' && this.lastMatch.ctx.start.mode === 'rivals' ? '<small>Cuenta como derrota en Division Rivals</small>' : ''}</button>
@@ -453,7 +703,14 @@ export class App {
     this.overlay = new Screen(this.ui, html, {
       resume,
       restart: () => { close(); this.restartMatch(); },
+      mute: () => { this.toggleMute(); close(); this.pauseMenu(); },
       subs: () => { close(); this.subsMenu(); },
+      tactics: () => { close(); this.tacticsMenu(); },
+      photo: () => { close(); this.photoMode(); },
+      savePlay: (b) => {
+        const ok = this.saveLastPlay();
+        b.innerHTML = ok ? '✅ Jugada guardada<small>Menú principal → Repeticiones</small>' : '⚠ No hay espacio para guardarla';
+      },
       chat: () => {
         close();
         const items = QUICK_CHAT.map((t, i) => `<button class="menu-item" data-act="say" data-i="${i}">${esc(t)}</button>`).join('');
@@ -485,6 +742,170 @@ export class App {
   }
 
   /** Cambios: elige quién sale (en el campo) y quién entra (suplentes). */
+  // ==================================================================
+  // Editor de equipos
+  // ==================================================================
+
+  /** Lista de equipos propios: crear, editar, exportar, importar y borrar. */
+  teamEditorList(msg = '') {
+    const list = loadCustomTeams();
+    const rows = list.length
+      ? list.map((t) => `<div class="row editor-row"><span class="crest-mini">${crestSVG(t, 40)}</span><span><b>${esc(t.name)}</b> <span class="muted">${esc(t.short)} · ${t.formation} · nivel ${teamLevel(t)}</span></span>
+          <span><button class="btn" data-act="edit" data-id="${t.id}">Editar</button><button class="btn" data-act="export" data-id="${t.id}">Exportar</button><button class="btn danger" data-act="del" data-id="${t.id}">Borrar</button></span></div>`).join('')
+      : '<p class="muted">Todavía no has creado ningún equipo. Crea uno o importa un archivo .json exportado desde el juego.</p>';
+    const s = this.show(`
+      <div class="screen-header"><div><div class="crumb">EDITOR</div><h2>Mis equipos</h2></div></div>
+      <div class="screen-body"><div class="panel">${msg ? `<div class="editor-msg">${esc(msg)}</div>` : ''}${rows}
+        <p class="muted" style="margin-top:12px;font-size:13px">Tus equipos aparecen en el partido rápido, el torneo y la carrera (no en el online, porque tu rival no los tiene).</p></div></div>
+      <div class="screen-footer">
+        <button class="btn" data-act="back">Volver</button>
+        <button class="btn" data-act="import">Importar…</button>
+        <button class="btn primary" data-act="create">Crear equipo</button>
+      </div>`, {
+      back: () => this.mainMenu(),
+      create: () => this.teamEditor(newCustomTeam(), true),
+      edit: (el) => { const t = list.find((x) => x.id === el.dataset.id); if (t) this.teamEditor(structuredClone(t), false); },
+      del: (el) => {
+        const t = list.find((x) => x.id === el.dataset.id);
+        if (t && window.confirm(`¿Borrar ${t.name}?`)) { deleteCustomTeam(t.id); this.teamEditorList(`${t.name} borrado`); }
+      },
+      export: (el) => {
+        const t = list.find((x) => x.id === el.dataset.id);
+        if (!t) return;
+        const blob = new Blob([exportTeam(t)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${t.name.replace(/[^\w\- ]+/g, '').trim() || 'equipo'}.json`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      },
+      import: () => {
+        const inp = document.createElement('input');
+        inp.type = 'file';
+        inp.accept = '.json,application/json';
+        inp.onchange = () => {
+          const f = inp.files?.[0];
+          if (!f) return;
+          f.text().then((txt) => {
+            try { const t = importTeam(txt); this.teamEditorList(`Importado: ${t.name}`); } catch (e) { this.teamEditorList(String((e as Error).message)); }
+          });
+        };
+        inp.click();
+      },
+    }, () => this.mainMenu());
+    void s;
+  }
+
+  /** Edición de un equipo propio: nombre, escudo, equipaciones, formación, nivel y nombres de los jugadores. */
+  private teamEditor(t: import('../data/types').TeamData, isNew: boolean) {
+    const SHAPES = ['shield', 'circle', 'diamond'] as const;
+    const SYMBOLS = ['star', 'ball', 'lion', 'wave', 'bolt', 'crown', 'tower', 'eagle'] as const;
+    const SYMBOL_NAMES: Record<string, string> = { star: 'Estrella', ball: 'Balón', lion: 'León', wave: 'Ola', bolt: 'Rayo', crown: 'Corona', tower: 'Torre', eagle: 'Águila' };
+    const PATTERNS = ['solid', 'gradient', 'stripes', 'hoops', 'sash'] as const;
+    const PATTERN_NAMES: Record<string, string> = { solid: 'Lisa', gradient: 'Degradado', stripes: 'Rayas', hoops: 'Aros', sash: 'Banda' };
+    const POS = { GK: 'POR', DEF: 'DEF', MID: 'MED', FWD: 'DEL' } as const;
+    const cyc = <T,>(arr: readonly T[], cur: T, d: number) => arr[(arr.indexOf(cur) + d + arr.length) % arr.length];
+    const color = (label: string, field: string, value: string) => `<label class="color-field"><input type="color" data-field="${field}" value="${value}"> ${label}</label>`;
+    const kitPanel = (title: string, k: 'home' | 'away') => `<div class="kit-edit"><div class="crumb">${title}</div><div class="kits">${kitSVG(t[k], 64)}</div>
+      ${color('Camiseta', `${k}.shirt`, t[k].shirt)}${color('Detalle', `${k}.shirt2`, t[k].shirt2)}${color('Pantalón', `${k}.shorts`, t[k].shorts)}${color('Medias', `${k}.socks`, t[k].socks)}${color('Dorsal', `${k}.number`, t[k].number)}
+      ${this.stepper('Diseño', PATTERN_NAMES[t[k].pattern], `${k}Pat`)}</div>`;
+    const html = () => `
+      <div class="screen-header"><div><div class="crumb">EDITOR</div><h2>${isNew ? 'Nuevo equipo' : esc(t.name)}</h2></div></div>
+      <div class="screen-body"><div class="grid3">
+        <div class="panel"><h3>Club</h3>
+          <div class="crest-preview">${crestSVG(t, 110)}</div>
+          <label class="text-field">Nombre <input type="text" maxlength="24" data-field="name" value="${esc(t.name)}"></label>
+          <label class="text-field">Abreviatura <input type="text" maxlength="3" data-field="short" value="${esc(t.short)}"></label>
+          <label class="text-field">Ciudad <input type="text" maxlength="24" data-field="city" value="${esc(t.city)}"></label>
+          ${this.stepper('Escudo', ({ shield: 'Escudo', circle: 'Círculo', diamond: 'Rombo' } as const)[t.crest.shape], 'shape')}
+          ${this.stepper('Símbolo', SYMBOL_NAMES[t.crest.symbol], 'sym')}
+          ${color('Color principal', 'crest.primary', t.crest.primary)}${color('Color secundario', 'crest.secondary', t.crest.secondary)}
+        </div>
+        <div class="panel"><h3>Equipaciones</h3>${kitPanel('TITULAR', 'home')}${kitPanel('SUPLENTE', 'away')}</div>
+        <div class="panel"><h3>Plantilla</h3>
+          ${this.stepper('Formación', t.formation, 'form')}
+          ${this.stepper('Nivel del equipo', String(teamLevel(t)), 'lvl')}
+          <div class="squad-edit">${t.players.map((p, i) => `<div class="row"><span class="pos ${p.position}">${POS[p.position]}</span><input type="text" maxlength="22" data-field="player.${i}" value="${esc(p.name)}"><span class="ovr">${playerOverall(p)}</span>${i === 10 ? '' : ''}</div>${i === 10 ? '<div class="crumb" style="margin:6px 0">SUPLENTES</div>' : ''}`).join('')}</div>
+        </div>
+      </div></div>
+      <div class="screen-footer"><button class="btn" data-act="cancel">Cancelar</button><button class="btn primary" data-act="save">Guardar</button></div>`;
+    // pasa lo escrito en los campos al modelo
+    const sync = () => {
+      const autoShort = t.short === shortOf(t.name);
+      const oldShort = t.short;
+      for (const el of Array.from(sc.root.querySelectorAll<HTMLInputElement>('[data-field]'))) {
+        const f = el.dataset.field!;
+        const v = el.value;
+        if (f === 'name') t.name = v.trim() || t.name;
+        else if (f === 'short') t.short = (v.trim() || shortOf(t.name)).toUpperCase().slice(0, 3);
+        else if (f === 'city') t.city = v.trim();
+        else if (f.startsWith('player.')) { const p = t.players[+f.slice(7)]; if (p && v.trim()) p.name = v.trim(); }
+        else if (f.startsWith('crest.')) (t.crest as any)[f.slice(6)] = v;
+        else if (f.startsWith('home.') || f.startsWith('away.')) (t[f.slice(0, 4) as 'home' | 'away'] as any)[f.slice(5)] = v;
+      }
+      // la abreviatura sigue al nombre mientras no se cambie a mano
+      const shortField = sc.root.querySelector<HTMLInputElement>('[data-field="short"]');
+      if (autoShort && shortField && shortField.value.trim().toUpperCase() === oldShort) t.short = shortOf(t.name);
+    };
+    const refresh = () => { sync(); sc.refresh(html()); };
+    const sc = this.show(html(), {
+      shapePrev: () => { sync(); t.crest.shape = cyc(SHAPES, t.crest.shape, -1); sc.refresh(html()); },
+      shapeNext: () => { sync(); t.crest.shape = cyc(SHAPES, t.crest.shape, 1); sc.refresh(html()); },
+      symPrev: () => { sync(); t.crest.symbol = cyc(SYMBOLS, t.crest.symbol, -1); sc.refresh(html()); },
+      symNext: () => { sync(); t.crest.symbol = cyc(SYMBOLS, t.crest.symbol, 1); sc.refresh(html()); },
+      homePatPrev: () => { sync(); t.home.pattern = cyc(PATTERNS, t.home.pattern, -1); sc.refresh(html()); },
+      homePatNext: () => { sync(); t.home.pattern = cyc(PATTERNS, t.home.pattern, 1); sc.refresh(html()); },
+      awayPatPrev: () => { sync(); t.away.pattern = cyc(PATTERNS, t.away.pattern, -1); sc.refresh(html()); },
+      awayPatNext: () => { sync(); t.away.pattern = cyc(PATTERNS, t.away.pattern, 1); sc.refresh(html()); },
+      formPrev: () => { sync(); t.formation = cyc(FORMATION_IDS, t.formation, -1); sc.refresh(html()); },
+      formNext: () => { sync(); t.formation = cyc(FORMATION_IDS, t.formation, 1); sc.refresh(html()); },
+      lvlPrev: () => { sync(); setTeamLevel(t, Math.max(50, teamLevel(t) - 2)); sc.refresh(html()); },
+      lvlNext: () => { sync(); setTeamLevel(t, Math.min(95, teamLevel(t) + 2)); sc.refresh(html()); },
+      cancel: () => this.teamEditorList(),
+      save: () => { sync(); saveCustomTeam(t); this.teamEditorList(`${t.name} guardado`); },
+    }, () => this.teamEditorList());
+    // los colores actualizan la vista previa al soltarlos
+    sc.root.addEventListener('change', (e) => { if ((e.target as HTMLInputElement).type === 'color') refresh(); });
+  }
+
+  /** Pantalla de logros: desbloqueados y pendientes. */
+  achievementsScreen() {
+    const u = unlockedSet();
+    const done = ACHIEVEMENTS.filter((a) => u[a.id]).length;
+    const rows = ACHIEVEMENTS.map((a) => `<div class="ach ${u[a.id] ? 'on' : ''}"><span class="ic">${u[a.id] ? a.icon : '🔒'}</span><div><b>${esc(a.name)}</b><small>${esc(a.desc)}${u[a.id] ? ` · ${new Date(u[a.id]).toLocaleDateString()}` : ''}</small></div></div>`).join('');
+    this.show(`
+      <div class="screen-header"><div><div class="crumb">DESAFÍOS</div><h2>Logros · ${done}/${ACHIEVEMENTS.length}</h2></div></div>
+      <div class="screen-body"><div class="ach-grid">${rows}</div></div>
+      <div class="screen-footer"><button class="btn primary" data-act="back">Volver</button></div>`, { back: () => this.mainMenu() }, () => this.mainMenu());
+  }
+
+  /** Tácticas en pleno partido: formación y mentalidad del equipo del usuario. */
+  private tacticsMenu() {
+    const r = this.runner;
+    if (!r || r.localTeam < 0) return;
+    const t = r.match.teams[r.localTeam as 0 | 1];
+    const close = () => { this.overlay?.dispose(); this.overlay = null; };
+    const back = () => { close(); this.pauseMenu(); };
+    const html = () => `<div class="overlay"><div class="panel modal">
+      <h2>Tácticas</h2>
+      <div class="muted" style="margin-bottom:10px">Los cambios se aplican al instante.</div>
+      ${this.stepper('Formación', t.formation, 'tf')}
+      ${this.stepper('Mentalidad', MENTALITY_NAMES[t.mentality + 2], 'tm')}
+      <div class="muted" style="margin:8px 0 12px;font-size:13px">Más ofensiva: la línea sube y más jugadores llegan al área. Más defensiva: el bloque se repliega. (En el mando también con la cruceta ← →.)</div>
+      <div class="screen-footer"><button class="btn primary" data-act="back">Volver</button></div>
+    </div></div>`;
+    const refresh = () => this.overlay?.refresh(html());
+    const cycleF = (d: number) => { t.setFormation(FORMATION_IDS[(FORMATION_IDS.indexOf(t.formation) + d + FORMATION_IDS.length) % FORMATION_IDS.length]); refresh(); };
+    this.overlay?.dispose();
+    this.overlay = new Screen(this.ui, html(), {
+      tfPrev: () => cycleF(-1), tfNext: () => cycleF(1),
+      tmPrev: () => { t.mentality = Math.max(-2, t.mentality - 1); refresh(); },
+      tmNext: () => { t.mentality = Math.min(2, t.mentality + 1); refresh(); },
+      back,
+    }, this.audio);
+    this.overlay.onBack = back;
+  }
+
   private subsMenu() {
     const r = this.runner;
     if (!r || r.localTeam < 0) return;
@@ -538,6 +959,25 @@ export class App {
     // al refrescar la lista no se repite la animación de entrada
     setTimeout(() => screen.root.classList.add('no-anim'), 250);
     this.overlay = screen;
+  }
+
+  /** Calidad automática: si los FPS no llegan, baja la resolución y luego las sombras (y lo guarda). */
+  private attachAutoQuality(runner: MatchRunner) {
+    const aq = new AutoQuality({ resolutionScale: this.settings.resolutionScale, shadows: this.settings.shadows });
+    runner.autoQuality = aq;
+    runner.onQualityStep = (step) => {
+      if (step === 'resolution') {
+        this.settings.resolutionScale = aq.resolutionScale;
+        this.onResize();
+      } else {
+        this.settings.shadows = false;
+        runner.view.setShadows(false);
+      }
+      saveSettings(this.settings);
+      const t = el('div', 'mute-toast', `⚙ Calidad ajustada para ir más fluido <small>(${step === 'resolution' ? `resolución ${Math.round(aq.resolutionScale * 100)}%` : 'sin sombras'})</small>`);
+      this.ui.appendChild(t);
+      setTimeout(() => t.remove(), 2200);
+    };
   }
 
   private applyLiveSettings() {
@@ -631,16 +1071,29 @@ export class App {
     const m = r.match;
     const [h, a] = m.teams;
     // Registrar en el modo correspondiente
+    // logros: los del resultado y los de los modos (copa, liga, Division Rivals)
+    const newAch: AchievementDef[] = [...(this.runner?.achievements?.unlockedNow ?? [])];
+    this.runner?.achievements?.finish(r.winner, !!r.penalties);
+    if (this.runner?.achievements) for (const a of this.runner.achievements.unlockedNow) if (!newAch.includes(a)) newAch.push(a);
+    const addAch = (id: string) => { const a = unlock(id); if (a) newAch.push(a); };
+    // bajas (lesiones, rojas y amarillas acumuladas) para el próximo partido del usuario
+    let availabilityMsgs: string[] = [];
     if (ctx.mode === 'tournament' && this.tournament) {
-      this.tournament.recordUserResult(ctx.fixture, r.home, r.away, r.penalties ?? undefined);
+      const userIdx = ctx.fixture.home === this.tournament.state.userTeam ? 0 : 1;
+      const d = disciplineOf([...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff]);
+      availabilityMsgs = this.tournament.recordUserResult(ctx.fixture, r.home, r.away, r.penalties ?? undefined, d);
+      if (this.tournament.state.champion === this.tournament.state.userTeam) addAch('cup');
     } else if (ctx.mode === 'career' && this.career) {
       const userIdx = ctx.fixture.home === this.career.state.userTeam ? 0 : 1;
       const scorers = [...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff].filter((p) => p.goals > 0).flatMap((p) => Array(p.goals).fill(p.id));
-      this.career.recordUserResult(ctx.fixture, r.home, r.away, scorers);
+      const d = disciplineOf([...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff]);
+      availabilityMsgs = this.career.recordUserResult(ctx.fixture, r.home, r.away, scorers, d);
+      if (this.career.state.seasonOver && this.career.standings()[0]?.team === this.career.state.userTeam) addAch('league');
     }
     if (ctx.mode === 'online') {
       window.clearInterval(this.onlineWatch);
       this.net?.send({ t: 'result', home: r.home, away: r.away, pens: r.penalties ? r.winner : -1 });
+      if (ctx.start.mode === 'rivals' && r.winner === m.config.humanTeam) addAch('rivals');
     }
     this.runner?.dispose();
     this.runner = null;
@@ -656,6 +1109,8 @@ export class App {
           ${pens}
           <div class="scorers"><div style="text-align:right">${scorers(h)}</div><div>${scorers(a)}</div></div>
           ${ctx.mode === 'training' ? '' : this.ratingsHTML(m)}
+          ${newAch.length ? `<div class="ach-msgs"><div class="crumb">LOGROS DESBLOQUEADOS</div>${newAch.map((a) => `<div>${a.icon} <b>${esc(a.name)}</b> <span class="muted">${esc(a.desc)}</span></div>`).join('')}</div>` : ''}
+          ${availabilityMsgs.length ? `<div class="avail-msgs"><div class="crumb">PARTE MÉDICO Y SANCIONES</div>${availabilityMsgs.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}
         </div>
         <div class="panel">${ctx.mode === 'online' && ctx.start.mode === 'rivals' ? '<div class="rivals-change"><div class="net-status"><span class="spinner"></span>Calculando puntos de Division Rivals…</div></div>' : ''}${this.statsHTML(m)}</div>
       </div></div>
@@ -792,8 +1247,8 @@ export class App {
       create: () => this.onlineRoom(),
       join: () => this.onlineJoin(),
       board: () => this.onlineBoard(),
-      teamPrev: () => { this.onlineTeam = (this.onlineTeam + TEAMS.length - 1) % TEAMS.length; sc.refresh(html()); },
-      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % TEAMS.length; sc.refresh(html()); },
+      teamPrev: () => { this.onlineTeam = (this.onlineTeam + BUILTIN_TEAM_COUNT - 1) % BUILTIN_TEAM_COUNT; sc.refresh(html()); },
+      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % BUILTIN_TEAM_COUNT; sc.refresh(html()); },
       back: () => this.mainMenu(),
       disconnect: () => { this.netOff?.(); this.netOff = null; net.close(); this.net = null; this.mainMenu(); },
     }, () => this.mainMenu());
@@ -820,8 +1275,8 @@ export class App {
     const cancel = () => { window.clearInterval(timer); net.send({ t: 'cancel' }); this.onlineHub(); };
     const sc = this.show(html(), {
       cancel,
-      teamPrev: () => { this.onlineTeam = (this.onlineTeam + TEAMS.length - 1) % TEAMS.length; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
-      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % TEAMS.length; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
+      teamPrev: () => { this.onlineTeam = (this.onlineTeam + BUILTIN_TEAM_COUNT - 1) % BUILTIN_TEAM_COUNT; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
+      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % BUILTIN_TEAM_COUNT; net.send({ t: 'queue', mode, team: TEAMS[this.onlineTeam].id }); sc.refresh(html()); },
     }, cancel);
     const timer = window.setInterval(() => {
       if (this.screen !== sc) { window.clearInterval(timer); return; }
@@ -850,15 +1305,21 @@ export class App {
       <input class="text-in code-in" id="on-code" maxlength="5" autocomplete="off" autocapitalize="characters" placeholder="ABCDE" data-enter="go">
       ${error ? `<div class="sub-msg" style="margin-top:10px">${esc(error)}</div>` : ''}
       <div style="margin-top:12px">${this.onlineTeamStepper()}</div>
-      <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn primary" data-act="go">Unirse</button></div></div>`, {
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn" data-act="watch">👁 Mirar</button><button class="btn primary" data-act="go">Unirse</button></div>
+      <div class="muted" style="font-size:12px;margin-top:8px">Con <b>Mirar</b> ves como espectador un partido de sala privada que ya empezó.</div></div>`, {
       go: () => {
         const code = ((sc.root.querySelector('#on-code') as HTMLInputElement)?.value ?? '').trim().toUpperCase();
         if (code.length < 4) return;
         net.send({ t: 'join', code, team: TEAMS[this.onlineTeam].id });
       },
+      watch: () => {
+        const code = ((sc.root.querySelector('#on-code') as HTMLInputElement)?.value ?? '').trim().toUpperCase();
+        if (code.length < 4) return;
+        net.send({ t: 'watch', code });
+      },
       back: () => this.onlineHub(),
-      teamPrev: () => { this.onlineTeam = (this.onlineTeam + TEAMS.length - 1) % TEAMS.length; this.onlineJoin(error); },
-      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % TEAMS.length; this.onlineJoin(error); },
+      teamPrev: () => { this.onlineTeam = (this.onlineTeam + BUILTIN_TEAM_COUNT - 1) % BUILTIN_TEAM_COUNT; this.onlineJoin(error); },
+      teamNext: () => { this.onlineTeam = (this.onlineTeam + 1) % BUILTIN_TEAM_COUNT; this.onlineJoin(error); },
     }, () => this.onlineHub());
     setTimeout(() => (sc.root.querySelector('#on-code') as HTMLInputElement | null)?.focus(), 50);
   }
@@ -915,6 +1376,25 @@ export class App {
           this.onlineNotice('Tu rival se fue', 'Tu rival abandonó el partido: ganas 3-0.', true);
         }
         break;
+      case 'spectators': {
+        const n = Number((m as unknown as { n: number }).n) || 0;
+        if (runner?.online) {
+          const t = el('div', 'mute-toast', n > 0 ? `👁 ${n} ${n === 1 ? 'espectador' : 'espectadores'} mirando` : '👁 Sin espectadores');
+          this.ui.appendChild(t);
+          setTimeout(() => t.remove(), 2000);
+        }
+        break;
+      }
+      case 'watchEnd':
+        if (runner?.online?.spectator && !runner.match.finished) {
+          runner.dispose();
+          this.runner = null;
+          this.overlay?.dispose();
+          this.overlay = null;
+          window.clearInterval(this.onlineWatch);
+          this.onlineNotice('Fin de la transmisión', (m as unknown as { forfeit: boolean }).forfeit ? 'Uno de los jugadores abandonó el partido.' : 'El partido terminó.');
+        }
+        break;
       case 'final':
         this.onlineFinal = m as unknown as FinalMsg;
         this.showOnlineFinal();
@@ -950,18 +1430,29 @@ export class App {
     const away = teamOf(st.away);
     const cfg: MatchConfig = {
       home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away),
-      humanTeam: st.role === 'host' ? 0 : 1,
+      humanTeam: st.role === 'host' ? 0 : st.role === 'guest' ? 1 : -1,
       halfLengthSec: Math.max(2, Math.min(10, st.half)) * 60,
       difficulty: 'pro', extraTime: false, penalties: false, seed: st.seed,
+      // el mismo clima para los dos (sale de la semilla del partido)
+      weather: randomWeather(((st.seed * 7919) % 1000) / 1000),
     };
     const ctx: MatchContext = { mode: 'online', start: st };
     const opp = st.role === 'host' ? st.away : st.home;
-    const link: OnlineLink = { role: st.role, send: (d) => net.relay(d), opponentName: opp.name };
+    const link: OnlineLink = st.role === 'spectator'
+      ? { role: 'guest', spectator: true, send: () => {}, opponentName: `${st.home.name} - ${st.away.name}` }
+      : { role: st.role, send: (d) => net.relay(d), opponentName: opp.name };
     this.playMatch(cfg, this.stadiumForCtx(ctx), ctx, link);
     // el invitado comprueba que siguen llegando datos del anfitrión
     window.clearInterval(this.onlineWatch);
+    let lastTick = performance.now();
     this.onlineWatch = window.setInterval(() => {
       const r = this.runner;
+      const now = performance.now();
+      // si la propia página estuvo congelada (cargando la escena, en segundo plano…), los datos que llegaron
+      // mientras tanto aún no se procesaron: no cuenta como silencio del rival
+      const frozen = now - lastTick > 2500;
+      lastTick = now;
+      if (r?.guestSync && frozen) r.guestSync.lastRecv = Math.max(r.guestSync.lastRecv, now);
       if (!r || !r.guestSync || r.inIntro || r.match.finished || r.halted) return;
       if (r.guestSync.received > 0 && performance.now() - r.guestSync.lastRecv > 12000) {
         window.clearInterval(this.onlineWatch);
@@ -1052,7 +1543,9 @@ export class App {
         this.playMatch({
           home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: side,
           halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty,
-          extraTime: next.knockout, penalties: next.knockout,
+          extraTime: next.knockout, penalties: next.knockout, weather: randomWeather(Math.random()),
+          homeLineup: side === 0 ? st.availability && this.tournament?.matchLineup() : undefined,
+          awayLineup: side === 1 ? st.availability && this.tournament?.matchLineup() : undefined,
         }, this.stadiumForCtx({ mode: 'tournament', fixture: next }), { mode: 'tournament', fixture: next });
       },
     }, () => this.mainMenu());
@@ -1079,11 +1572,14 @@ export class App {
     const roundFx = next ? st.fixtures.filter((f) => f.round === next.round) : [];
     const history = st.history.map((h) => `<div class="row"><span>Temporada ${h.season}</span><span>Campeón: ${esc(lookup(h.champion).name)} · Tu posición: ${h.userPosition}.º</span></div>`).join('');
     this.show(`
-      <div class="screen-header"><div><div class="crumb">CARRERA · TEMPORADA ${st.season} · ${esc(c.user.name)}</div><h2>Liga Élite</h2></div></div>
+      <div class="screen-header"><div><div class="crumb">CARRERA · TEMPORADA ${st.season} · ${esc(c.user.name)} · PRESUPUESTO ${(st.budget ?? 0).toFixed(1)} M</div><h2>${c.division === 1 ? 'Primera División' : 'Segunda División'}</h2></div></div>
       <div class="screen-body">
         ${st.seasonOver ? `<div class="panel" style="margin-bottom:16px"><b>¡Temporada terminada!</b> Campeón: ${esc(lookup(table[0].team).name)}. Tu equipo terminó ${myPos}.º.</div>` : ''}
         <div class="grid2">
-          <div class="panel"><h3>Clasificación</h3>${this.tableHTML(table, st.userTeam, lookup)}</div>
+          <div><div class="panel"><h3>Clasificación</h3>${this.tableHTML(table, st.userTeam, lookup)}<div class="muted" style="font-size:12px;margin-top:6px">${c.division === 1 ? 'Los 2 últimos descienden a Segunda.' : 'Los 2 primeros ascienden a Primera.'}</div></div>
+            ${st.divisions ? `<details class="panel" style="margin-top:16px"><summary>${c.division === 1 ? 'Segunda División' : 'Primera División'}${st.otherTable ? ' · temporada anterior' : ''}</summary>${st.otherTable ? this.tableHTML(st.otherTable, st.userTeam, lookup) : c.divisionTeams(c.division === 1 ? 2 : 1).map((id) => `<div class="row"><span>${esc(lookup(id).name)}</span><span class="muted">${lookup(id).rating}</span></div>`).join('')}</details>` : ''}
+            ${st.news?.length ? `<div class="panel" style="margin-top:16px"><h3>Noticias</h3>${st.news.slice(0, 6).map((n) => `<div class="muted" style="font-size:13px;margin-bottom:4px">${esc(n)}</div>`).join('')}</div>` : ''}
+          </div>
           <div>
             ${next ? `<div class="panel" style="margin-bottom:16px"><div class="crumb">${esc(next.stage)} DE ${c.totalRounds}</div>${this.fixtureHTML(next, st.userTeam, lookup)}<div class="muted" style="margin-top:8px">Resto de la jornada:</div>${roundFx.filter((f) => f !== next).map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('')}</div>` : ''}
             <div class="panel"><h3>Últimos resultados</h3>${recent.map((f) => `<div class="muted" style="font-size:11px">${esc(f.stage)}</div>${this.fixtureHTML(f, st.userTeam, lookup)}`).join('') || '<span class="muted">Aún no se jugó ningún partido.</span>'}</div>
@@ -1095,16 +1591,19 @@ export class App {
         <button class="btn" data-act="back">Menú</button>
         <button class="btn danger" data-act="abandon">Abandonar carrera</button>
         <button class="btn" data-act="squad">Plantilla y alineación</button>
+        <button class="btn" data-act="market">Mercado</button>
         ${st.seasonOver ? '<button class="btn primary" data-act="nextSeason">Nueva temporada</button>' : next ? '<button class="btn primary" data-act="play">Jugar partido</button>' : ''}
       </div>`, {
       back: () => this.mainMenu(),
       abandon: () => { Career.clear(); this.career = null; this.careerHub(); },
       squad: () => this.squadScreen(),
+      market: () => this.marketScreen(),
       nextSeason: () => {
         const res = c.startNextSeason();
+        const moveMsg = res.userMove === 'up' ? '<p style="color:var(--accent)"><b>¡Ascenso! El año que viene juegas en Primera.</b></p>' : res.userMove === 'down' ? '<p style="color:var(--danger)"><b>Descenso: el año que viene juegas en Segunda.</b></p>' : '';
         const ch = res.changes.slice(0, 12).map((x) => `<div class="row"><span>${esc(x.name)}</span><span style="color:${x.delta > 0 ? 'var(--accent)' : 'var(--danger)'}">${x.delta > 0 ? '+' : ''}${x.delta}</span></div>`).join('');
         this.show(`<div class="screen-header"><div><div class="crumb">FIN DE TEMPORADA</div><h2>Temporada ${st.season}</h2></div></div>
-          <div class="screen-body"><div class="grid2"><div class="panel"><p>Campeón: <b>${esc(lookup(res.champion).name)}</b></p><p>Tu posición final: <b>${res.position}.º</b></p></div>
+          <div class="screen-body"><div class="grid2"><div class="panel"><p>Campeón: <b>${esc(lookup(res.champion).name)}</b></p><p>Tu posición final: <b>${res.position}.º</b></p>${moveMsg}<p>Suben a Primera: ${res.promoted.map((id) => esc(lookup(id).name)).join(', ')}</p><p>Bajan a Segunda: ${res.relegated.map((id) => esc(lookup(id).name)).join(', ')}</p><p>Ingresos de la temporada: <b>+${res.income} M</b> (presupuesto: ${(st.budget ?? 0).toFixed(1)} M)</p></div>
           <div class="panel"><h3>Evolución de tu plantilla</h3>${ch || '<span class="muted">Sin cambios</span>'}</div></div></div>
           <div class="screen-footer"><button class="btn primary" data-act="ok">Continuar</button></div>`, { ok: () => this.careerHub() }, () => this.careerHub());
       },
@@ -1117,10 +1616,48 @@ export class App {
           home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: side,
           halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty, extraTime: false, penalties: false,
           homeFormation: side === 0 ? st.formation : undefined, awayFormation: side === 1 ? st.formation : undefined,
-          homeLineup: side === 0 ? st.lineup : undefined, awayLineup: side === 1 ? st.lineup : undefined,
+          homeLineup: side === 0 ? this.career?.matchLineup() ?? st.lineup : undefined, awayLineup: side === 1 ? this.career?.matchLineup() ?? st.lineup : undefined,
+          weather: randomWeather(Math.random()),
         }, this.stadiumForCtx({ mode: 'career', fixture: next }), { mode: 'career', fixture: next });
       },
     }, () => this.mainMenu());
+  }
+
+  /** Mercado de fichajes del modo carrera: comprar a otros clubes y vender jugadores propios. */
+  private marketScreen(msg = '', tab: 'buy' | 'sell' = 'buy', pos: 'ALL' | 'GK' | 'DEF' | 'MID' | 'FWD' = 'ALL') {
+    const c = this.career;
+    if (!c) return;
+    const st = c.state;
+    const POS = ['ALL', 'GK', 'DEF', 'MID', 'FWD'] as const;
+    const POSN = { ALL: 'Todos', GK: 'Arqueros', DEF: 'Defensas', MID: 'Medios', FWD: 'Delanteros' } as const;
+    const posLabel = (p: PlayerData) => (p.position === 'GK' ? 'POR' : p.position === 'DEF' ? 'DEF' : p.position === 'MID' ? 'MED' : 'DEL');
+    const budget = st.budget ?? 0;
+    let rows = '';
+    if (tab === 'buy') {
+      rows = marketOffers(c).filter((o) => pos === 'ALL' || o.player.position === pos).slice(0, 40).map((o) => `<div class="row market-row ${o.price > budget ? 'expensive' : ''}"><span><span class="pos ${o.player.position}">${posLabel(o.player)}</span> ${esc(o.player.name)} <span class="muted">${o.age} años · ${esc(o.team.short)}</span></span><span class="ovr">${playerOverall(o.player)}</span><span class="price">${o.price.toFixed(1)} M</span><button class="btn" data-act="buy" data-id="${o.player.id}">Fichar</button></div>`).join('');
+    } else {
+      rows = c.user.players.filter((p) => pos === 'ALL' || p.position === pos).map((p) => {
+        const age = st.ages[p.id] ?? 25;
+        return `<div class="row market-row"><span><span class="pos ${p.position}">${posLabel(p)}</span> ${esc(p.name)} <span class="muted">${age} años${st.lineup.includes(p.id) ? ' · titular' : ''}</span></span><span class="ovr">${playerOverall(p)}</span><span class="price">${(playerPrice(p, age) * 0.9).toFixed(1)} M</span><button class="btn danger" data-act="sell" data-id="${p.id}">Vender</button></div>`;
+      }).join('');
+    }
+    this.show(`
+      <div class="screen-header"><div><div class="crumb">MERCADO · ${esc(c.user.name)} · ${c.user.players.length}/${SQUAD_MAX} jugadores</div><h2>Presupuesto: ${budget.toFixed(1)} M</h2></div></div>
+      <div class="screen-body"><div class="panel">
+        ${msg ? `<div class="editor-msg">${esc(msg)}</div>` : ''}
+        ${this.stepper('Ver', tab === 'buy' ? 'Comprar (otros clubes)' : 'Vender (tu plantilla)', 'tab')}
+        ${this.stepper('Puesto', POSN[pos], 'pos')}
+        <div class="market-list">${rows || '<span class="muted">No hay jugadores.</span>'}</div>
+        <p class="muted" style="font-size:12px;margin-top:8px">Los precios dependen de la media y la edad. Al vender recibes el 90 %. La plantilla debe tener entre ${SQUAD_MIN} y ${SQUAD_MAX} jugadores. Cada temporada ingresas dinero según tu posición (más en Primera).</p>
+      </div></div>
+      <div class="screen-footer"><button class="btn primary" data-act="back">Volver</button></div>`, {
+      tabPrev: () => this.marketScreen('', tab === 'buy' ? 'sell' : 'buy', pos), tabNext: () => this.marketScreen('', tab === 'buy' ? 'sell' : 'buy', pos),
+      posPrev: () => this.marketScreen('', tab, POS[(POS.indexOf(pos) + POS.length - 1) % POS.length]),
+      posNext: () => this.marketScreen('', tab, POS[(POS.indexOf(pos) + 1) % POS.length]),
+      buy: (el) => { const err = buyPlayer(c, el.dataset.id!); this.marketScreen(err ?? 'Fichaje cerrado', tab, pos); },
+      sell: (el) => { const err = sellPlayer(c, el.dataset.id!); this.marketScreen(err ?? 'Venta cerrada', tab, pos); },
+      back: () => this.careerHub(),
+    }, () => this.careerHub());
   }
 
   private squadScreen() {
@@ -1141,7 +1678,10 @@ export class App {
       }).join('');
       const list = team.players.map((p) => {
         const starter = lineup.indexOf(p.id);
-        return `<div class="row ${starter >= 0 ? 'starter' : ''}" data-act="pick" data-id="${p.id}"><span><span class="pos ${p.position}">${p.position === 'GK' ? 'POR' : p.position === 'DEF' ? 'DEF' : p.position === 'MID' ? 'MED' : 'DEL'}</span> ${p.number}. ${esc(p.name)} <span class="muted">${c.state.ages[p.id] ?? ''} años</span></span><span class="ovr">${playerOverall(p)}</span></div>`;
+        const av = c.state.availability;
+        const outInfo = av?.out[p.id];
+        const badge = outInfo ? `<span class="out-badge" title="${outInfo.reason === 'injury' ? 'Lesionado' : 'Sancionado'}">${outInfo.reason === 'injury' ? '🚑' : '🟥'} ${outInfo.games}</span>` : (av?.yellows[p.id] ? `<span class="muted" title="Amarillas acumuladas">🟨${av.yellows[p.id]}</span>` : '');
+        return `<div class="row ${starter >= 0 ? 'starter' : ''} ${isAvailable(av, p.id) ? '' : 'unavailable'}" data-act="pick" data-id="${p.id}"><span><span class="pos ${p.position}">${p.position === 'GK' ? 'POR' : p.position === 'DEF' ? 'DEF' : p.position === 'MID' ? 'MED' : 'DEL'}</span> ${p.number}. ${esc(p.name)} <span class="muted">${c.state.ages[p.id] ?? ''} años</span> ${badge}</span><span class="ovr">${playerOverall(p)}</span></div>`;
       }).join('');
       return `
       <div class="screen-header"><div><div class="crumb">PLANTILLA · ${esc(team.name)}</div><h2>Alineación</h2></div></div>
@@ -1219,6 +1759,7 @@ export class App {
   settingsScreen(back: () => void, inMatch = false) {
     const st = this.settings;
     const Q = ['low', 'medium', 'high'] as const;
+    const LANGS = ['es', 'en', 'pt'] as const;
     const QL = { low: 'Baja', medium: 'Media', high: 'Alta' };
     const CAMS = ['broadcast', 'tele', 'wide'] as const;
     const CL = { broadcast: 'Transmisión', tele: 'Tele', wide: 'Panorámica' };
@@ -1228,10 +1769,12 @@ export class App {
       <div class="screen-header"><div><div class="crumb">CONFIGURACIÓN</div><h2>Opciones</h2></div></div>
       <div class="screen-body"><div class="grid3">
         <div class="panel"><h3>Gráficos</h3>
+          ${this.stepper('Idioma / Language', LANG_NAMES[st.language], 'lang')}
           ${this.stepper('Calidad', QL[st.quality] + (inMatch ? ' (próximo partido)' : ''), 'qual')}
           ${toggle('Sombras', 'shadows')}
           ${this.stepper('Escala de resolución', pct(st.resolutionScale), 'res')}
           ${toggle('Antialiasing (reiniciar)', 'antialias')}
+          ${toggle('Calidad automática (según FPS)', 'autoQuality')}
           ${this.stepper('Cámara', CL[st.cameraStyle], 'cam')}
           ${this.stepper('Zoom de cámara', st.cameraZoom.toFixed(1) + 'x', 'zoom')}
           ${toggle('Radar', 'showRadar')}
@@ -1246,7 +1789,10 @@ export class App {
           ${this.stepper('Efectos', pct(st.sfxVolume), 'vsfx')}
           ${this.stepper('Público y cánticos', pct(st.crowdVolume), 'vcrowd')}
           ${this.stepper('Narrador', st.commentaryVolume > 0 ? pct(st.commentaryVolume) : 'Sin voz', 'vcomm')}
+          ${this.stepper('Balón', pct(st.ballVolume), 'vball')}
+          ${this.stepper('Árbitro (silbato)', pct(st.refereeVolume), 'vref')}
           ${toggle('Vibración (mando y móvil)', 'vibration')}
+          ${toggle('Comentarista (rótulos)', 'commentary')}
         </div>
         <div class="panel"><h3>Jugabilidad</h3>
           ${this.stepper('Dificultad por defecto', DIFFICULTY_LABELS[st.difficulty], 'diff')}
@@ -1275,6 +1821,8 @@ export class App {
     };
     const h: Handlers = {
       tog: (t) => { const k = t.dataset.key as keyof GameSettings; (st as any)[k] = !st[k]; apply(); },
+      langPrev: () => { st.language = cycleArr(LANGS, st.language, -1); setLang(st.language); apply(); },
+      langNext: () => { st.language = cycleArr(LANGS, st.language, 1); setLang(st.language); apply(); },
       qualPrev: () => { st.quality = cycleArr(Q, st.quality, -1); apply(); },
       qualNext: () => { st.quality = cycleArr(Q, st.quality, 1); apply(); },
       resPrev: () => step('resolutionScale', -1, 0.5, 1, 0.1), resNext: () => step('resolutionScale', 1, 0.5, 1, 0.1),
@@ -1289,6 +1837,8 @@ export class App {
       vcrowdPrev: () => step('crowdVolume', -1, 0, 1, 0.1), vcrowdNext: () => step('crowdVolume', 1, 0, 1, 0.1),
       vcommPrev: () => { step('commentaryVolume', -1, 0, 1, 0.1); this.sampleCommentary(); },
       vcommNext: () => { step('commentaryVolume', 1, 0, 1, 0.1); this.sampleCommentary(); },
+      vballPrev: () => step('ballVolume', -1, 0, 1, 0.1), vballNext: () => step('ballVolume', 1, 0, 1, 0.1),
+      vrefPrev: () => step('refereeVolume', -1, 0, 1, 0.1), vrefNext: () => step('refereeVolume', 1, 0, 1, 0.1),
       diffPrev: () => { st.difficulty = cycleArr(DIFFS, st.difficulty, -1); apply(); },
       diffNext: () => { st.difficulty = cycleArr(DIFFS, st.difficulty, 1); apply(); },
       halfPrev: () => { st.halfMinutes = cycleArr(HALF_OPTIONS, st.halfMinutes, -1); apply(); },
@@ -1297,7 +1847,7 @@ export class App {
       assistAllNext: () => { st.assist = cycleArr(['auto', 'on', 'off'] as const, st.assist, 1); apply(); },
       assistPrev: () => { st.passAssist = st.passAssist >= 0.5 ? 0 : 1; apply(); },
       assistNext: () => { st.passAssist = st.passAssist >= 0.5 ? 0 : 1; apply(); },
-      pbarPrev: () => step('powerBarTime', -1, 0.6, 1.6, 0.1), pbarNext: () => step('powerBarTime', 1, 0.6, 1.6, 0.1),
+      pbarPrev: () => step('powerBarTime', -1, 0.3, 1.6, 0.1), pbarNext: () => step('powerBarTime', 1, 0.3, 1.6, 0.1),
       dzPrev: () => step('deadzone', -1, 0.05, 0.4, 0.05), dzNext: () => step('deadzone', 1, 0.05, 0.4, 0.05),
       sensPrev: () => step('sensitivity', -1, 0.5, 1.5, 0.1), sensNext: () => step('sensitivity', 1, 0.5, 1.5, 0.1),
       reset: () => { const b = st.bindings; Object.assign(st, structuredClone(DEFAULT_SETTINGS)); st.bindings = b; apply(); },

@@ -1,0 +1,11 @@
+#!/bin/sh
+# Regenera jugar.html (el juego en un solo archivo que se abre con doble clic tras descargar el ZIP)
+# cuando el commit cambia el código del juego, para que nunca quede desactualizado.
+# Se activa solo con `npm install` (script "prepare"). Para saltarlo: SKIP_JUGAR=1 git commit ...
+[ -n "$SKIP_JUGAR" ] && exit 0
+if git diff --cached --name-only | grep -qE '^(src/|public/|index\.html|vite\.config\.ts|package\.json)'; then
+  echo "pre-commit: regenerando jugar.html..."
+  npm run build --silent >/dev/null 2>&1 || { echo "pre-commit: la compilación falló (npm run build)"; exit 1; }
+  git add jugar.html
+fi
+exit 0

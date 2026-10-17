@@ -21,7 +21,7 @@ export interface MatchStart {
   t: 'match';
   id: string;
   mode: 'friendly' | 'rivals';
-  role: 'host' | 'guest';
+  role: 'host' | 'guest' | 'spectator';
   seed: number;
   half: number;
   home: OnlineProfile;

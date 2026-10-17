@@ -22,7 +22,9 @@
     "art": "npm run build && node scripts/make-art.mjs all",
     "server": "node server/index.mjs",
     "test:e2e:online": "node scripts/e2e-online.mjs",
-    "test:e2e:file": "node scripts/e2e-file.mjs index.html"
+    "test:e2e:file": "node scripts/e2e-file.mjs index.html",
+    "test:audio": "node scripts/e2e-audio.mjs",
+    "prepare": "node scripts/hooks.mjs"
   },
   "dependencies": {
     "@capacitor-community/text-to-speech": "^4.1.1",

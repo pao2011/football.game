@@ -23,7 +23,7 @@ const pick = <T>(a: readonly T[]): T => a[Math.floor(Math.random() * a.length)];
  * Relator del partido (estilo rioplatense): convierte los eventos en frases y las dice con la voz
  * del dispositivo. Habla poco en las jugadas normales y se desgañita en los goles.
  */
-export class Commentary {
+export class Narrator {
   /** Volumen de la voz 0..1 (se consulta en cada frase: sigue a la configuración). */
   volume: () => number = () => 0.9;
   private current: Pri = 0 as Pri;

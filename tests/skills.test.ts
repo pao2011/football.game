@@ -106,7 +106,7 @@ describe('Regates', () => {
     return d;
   }
 
-  it('los seis regates se ejecutan con su animación y mantienen o liberan el balón según el gesto', () => {
+  it('todos los regates se ejecutan con su animación y mantienen o liberan el balón según el gesto', () => {
     for (const kind of SKILL_KINDS) {
       const { m, p } = setupShooter(40);
       expect(m.requestSkill(p, kind, 1)).toBe(true);
@@ -114,8 +114,8 @@ describe('Regates', () => {
       for (let i = 0; i < 20; i++) { m.step(); m.events.length = 0; }
       expect(p.anim.state).toBe('skill');
       for (let i = 0; i < 60 && p.action.kind === 'skill'; i++) { m.step(); m.events.length = 0; }
-      if (kind === 'rainbow') {
-        // el sombrero eleva el balón hacia delante
+      if (kind === 'rainbow' || kind === 'nutmeg') {
+        // el sombrero eleva el balón y el caño lo adelanta: sale hacia delante
         expect(m.ball.pos.x).toBeGreaterThan(p.pos.x - 1);
       } else {
         expect(m.owner).toBe(p);
