@@ -15,6 +15,7 @@ import { AchievementTracker } from '../modes/Achievements';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { MatchAudio } from '../audio/MatchAudio';
 import { Narrator } from '../audio/Narrator';
+import { chantsForStadium } from '../audio/chantTracks';
 import { getSpeech } from '../audio/Speech';
 import { activePad } from '../input/pads';
 import { TouchControls, isTouchDevice } from '../input/TouchControls';
@@ -220,6 +221,9 @@ export class MatchRunner {
         this.pendingTip = '<b>TOCA</b> PASE o TIRO = automático · <b>MANTÉN</b> = potencia · <b>ROSCA / VASELINA / RASO / POTENTE</b> = tipo de tiro (mantén uno y toca otro para combinar)';
       }
     }
+    // cada estadio tiene sus cánticos (los de Belgrano solo suenan en su cancha)
+    const chants = chantsForStadium(stadium.id);
+    audioEngine.setChantTracks(chants.tracks, chants.special);
     this.audio = new MatchAudio(audioEngine, this.match);
     this.audio.start();
     this.narrator = new Narrator(getSpeech(), this.match, stadium.name);

@@ -10,6 +10,7 @@ const SYMBOLS: Record<TeamData['crest']['symbol'], string> = {
   bolt: 'M54 20 L34 54 L48 54 L42 80 L66 42 L52 42 L60 20 Z',
   crown: 'M28 64 L28 38 L40 50 L50 32 L60 50 L72 38 L72 64 Z M28 68 L72 68 L72 74 L28 74 Z',
   tower: 'M38 74 L38 40 L34 40 L34 30 L40 30 L40 34 L46 34 L46 30 L54 30 L54 34 L60 34 L60 30 L66 30 L66 40 L62 40 L62 74 Z M46 74 L46 60 a4 4 0 0 1 8 0 L54 74 Z',
+  none: '',
   eagle: 'M50 30 L56 40 L76 34 L64 50 L72 52 L58 58 L54 72 L50 64 L46 72 L42 58 L28 52 L36 50 L24 34 L44 40 Z',
 };
 
@@ -23,9 +24,14 @@ export function crestSVG(t: TeamData, size = 100): string {
   return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
     <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c.primary}"/><stop offset="1" stop-color="${shade(c.primary, -0.35)}"/></linearGradient></defs>
     <path d="${shape}" fill="${c.secondary}"/>
-    <path d="${shape}" fill="url(#${id})" transform="translate(50 50) scale(0.88) translate(-50 -50)"/>
+    ${c.stripes
+      ? `<pattern id="${id}s" width="16" height="100" patternUnits="userSpaceOnUse"><rect width="8" height="100" fill="${c.primary}"/><rect x="8" width="8" height="100" fill="${c.secondary}"/></pattern>
+    <path d="${shape}" fill="url(#${id}s)" transform="translate(50 50) scale(0.88) translate(-50 -50)"/>`
+      : `<path d="${shape}" fill="url(#${id})" transform="translate(50 50) scale(0.88) translate(-50 -50)"/>`}
     <path d="${SYMBOLS[c.symbol]}" fill="${c.secondary}" fill-rule="evenodd" transform="translate(50 52) scale(0.62) translate(-50 -50)"/>
-    <text x="50" y="${c.shape === 'diamond' ? 80 : 86}" font-family="Rajdhani, Arial" font-weight="700" font-size="12" text-anchor="middle" fill="${c.secondary}">${t.short}</text>
+    ${c.stripes
+      ? `<text x="50" y="62" font-family="Rajdhani, Arial" font-weight="800" font-size="30" text-anchor="middle" fill="#0b3d6b" stroke="#ffffff" stroke-width="3" paint-order="stroke">${t.short}</text>`
+      : `<text x="50" y="${c.shape === 'diamond' ? 80 : 86}" font-family="Rajdhani, Arial" font-weight="700" font-size="12" text-anchor="middle" fill="${c.secondary}">${t.short}</text>`}
   </svg>`;
 }
 

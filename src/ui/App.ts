@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
-import { CHANT_TRACKS } from '../audio/chantTracks';
 import { CROWD_SAMPLES } from '../audio/crowdTracks';
 import { getSpeech } from '../audio/Speech';
 import { DIFFICULTY_LABELS } from '../ai/Difficulty';
@@ -11,7 +10,7 @@ import type { MatchView } from '../render/MatchView';
 import { deleteReplay, encodeFrames, lastSeconds, listReplays, MAX_SAVED_REPLAYS, saveReplay, type SavedReplay } from '../modes/SavedReplays';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
-import { STADIUMS, getStadium } from '../data/stadiums';
+import { GENERIC_STADIUMS, STADIUMS, getStadium, stadiumForHome } from '../data/stadiums';
 import { BUILTIN_TEAM_COUNT, TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
 import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
 import { disciplineOf, isAvailable } from '../modes/Availability';
@@ -122,7 +121,6 @@ export class App {
     this.renderer = this.createRenderer();
     this.bg = el('div', 'menu-bg', '<div class="pitch-lines"></div>');
     document.body.insertBefore(this.bg, ui);
-    this.audio.setChantTracks(CHANT_TRACKS);
     this.audio.setCrowdSamples(CROWD_SAMPLES);
     registerCustomTeams(); // equipos creados en el editor
     setLang(this.settings.language);
@@ -380,9 +378,14 @@ export class App {
       </div>`;
     };
     const cycle = (key: keyof QuickSetup, n: number, d: number) => { (q as any)[key] = ((q[key] as number) + d + n) % n; s.refresh(render()); };
+    // al elegir como local un equipo con estadio propio (Belgrano) se pone su cancha
+    const ownGround = () => {
+      const i = STADIUMS.findIndex((s) => s.homeTeam === TEAMS[q.home].id);
+      if (i >= 0 && q.stadium !== i) { q.stadium = i; s.refresh(render()); }
+    };
     const handlers: Handlers = {
-      homePrev: () => { cycle('home', TEAMS.length, -1); if (q.home === q.away) cycle('home', TEAMS.length, -1); },
-      homeNext: () => { cycle('home', TEAMS.length, 1); if (q.home === q.away) cycle('home', TEAMS.length, 1); },
+      homePrev: () => { cycle('home', TEAMS.length, -1); if (q.home === q.away) cycle('home', TEAMS.length, -1); ownGround(); },
+      homeNext: () => { cycle('home', TEAMS.length, 1); if (q.home === q.away) cycle('home', TEAMS.length, 1); ownGround(); },
       awayPrev: () => { cycle('away', TEAMS.length, -1); if (q.home === q.away) cycle('away', TEAMS.length, -1); },
       awayNext: () => { cycle('away', TEAMS.length, 1); if (q.home === q.away) cycle('away', TEAMS.length, 1); },
       stadPrev: () => cycle('stadium', STADIUMS.length, -1),
@@ -1012,9 +1015,9 @@ export class App {
   private stadiumForCtx(ctx: MatchContext): string {
     if (ctx.mode === 'quick') return STADIUMS[this.quick.stadium].id;
     if (ctx.mode === 'training') return STADIUMS[2].id;
-    if (ctx.mode === 'online') return STADIUMS[ctx.start.seed % STADIUMS.length].id;
+    if (ctx.mode === 'online') return GENERIC_STADIUMS[ctx.start.seed % GENERIC_STADIUMS.length].id;
     const home = ctx.fixture.home;
-    return STADIUMS[TEAMS.findIndex((t) => t.id === home) % STADIUMS.length].id;
+    return stadiumForHome(home, TEAMS.findIndex((t) => t.id === home)).id;
   }
 
   private leaveMatch() {
