@@ -16,6 +16,8 @@ export class MatchAudio {
   private lastTime = -1;
   /** Silbidos de la tribuna cuando el visitante tiene el balón (con histéresis para que no parpadeen). */
   private whistling = false;
+  /** Tema especial del estadio (Belgrano, minuto 68): ya sonó en este partido. */
+  private specialDone = false;
   private whistleSince = 0;
 
   constructor(private audio: AudioEngine, private match: Match) {}
@@ -131,6 +133,11 @@ export class MatchAudio {
     const b = m.ball;
     const onGround = !b.held && b.pos.y < BALL_RADIUS + 0.06;
     const hSpeed = Math.hypot(b.vel.x, b.vel.z);
+    const sm = this.audio.specialChantMinute;
+    if (sm !== null && !this.specialDone && !m.config.training && m.phase === 'play' && m.minute >= sm) {
+      this.specialDone = true;
+      this.audio.playSpecialChant();
+    }
     // la hinchada local silba cuando el visitante lleva la pelota: tras 1,2 s seguidos y hasta 1 s sin ella
     const against = running && m.phase === 'play' && !m.config.training && m.possessionTeam === 1;
     if (against !== this.whistling) {

@@ -44,6 +44,8 @@ export class StadiumChants {
     private tracks: ChantTrack[],
     private crowdBus: AudioNode,
     private crowdWet: AudioNode,
+    /** Tema fuera de la rotación: solo suena cuando se llama a playSpecial(). */
+    private special: ChantTrack | null = null,
   ) {}
 
   /** ¿Puede sonar en este entorno? */
@@ -118,6 +120,7 @@ export class StadiumChants {
     if (!this.running) return;
     this.boostAmt = Math.max(0, Math.min(1, amount));
     this.boostUntil = this.ctx.currentTime + 25;
+    if (this.specialBusy) return;
     if (!this.playing) {
       if (this.gapTimer) clearTimeout(this.gapTimer);
       this.gapTimer = null;
@@ -226,6 +229,7 @@ export class StadiumChants {
 
   private onEnded(): void {
     if (!this.running) return;
+    this.specialBusy = false;
     const t = this.ctx.currentTime;
     this.level?.gain.setTargetAtTime(FLOOR, t, 0.4);
     // breve pausa de murmullo entre canción y canción (más corta con el partido caliente)
@@ -245,16 +249,57 @@ export class StadiumChants {
     if (!this.running || !this.input) return;
     const i = this.nextIndex();
     this.current = i;
+    this.playTrack(this.tracks[i], true);
+  }
+
+  private specialPlayed = false;
+  /** El tema especial está por sonar o sonando: nada lo pisa. */
+  private specialBusy = false;
+
+  /** Corta lo que suene con un fundido rápido y empieza el tema especial desde el principio (una vez). */
+  playSpecial(): void {
+    if (!this.running || !this.special || this.specialPlayed) return;
+    this.specialPlayed = true;
+    if (this.gapTimer) clearTimeout(this.gapTimer);
+    this.gapTimer = null;
+    const old = this.source;
+    const t = this.ctx.currentTime;
+    if (old && this.level) {
+      // el cántico en curso se apaga y no encadena con el siguiente
+      old.onended = null;
+      this.source = null;
+      this.isPlaying = false;
+      this.level.gain.cancelScheduledValues(t);
+      this.level.gain.setValueAtTime(Math.max(FLOOR, this.level.gain.value), t);
+      this.level.gain.exponentialRampToValueAtTime(FLOOR, t + 0.5);
+      setTimeout(() => {
+        try {
+          old.stop();
+        } catch {
+          /* ya parado */
+        }
+      }, 600);
+    }
+    // la hinchada se enciende: el tema entra fuerte
+    this.boostAmt = 1;
+    this.boostUntil = t + 60;
+    this.specialBusy = true;
+    setTimeout(() => this.playTrack(this.special!, false), old ? 450 : 0);
+  }
+
+  private playTrack(track: ChantTrack, randomStart: boolean): void {
     const ctx = this.ctx;
     if (ctx.state !== 'running') ctx.resume().catch(() => undefined);
-    this.decode(this.tracks[i].url)
+    this.decode(track.url)
       .then((buf) => {
         if (!this.running || !this.input || !this.level) return;
+        // un tema nuevo no pisa al especial mientras suena
+        if (this.isPlaying || (this.specialBusy && track !== this.special)) return;
         const src = ctx.createBufferSource();
         src.buffer = buf;
         src.connect(this.input);
         // empezar en un punto al azar de la canción, como si ya la estuvieran cantando
-        const offset = buf.duration > 40 && Math.random() < 0.5 ? Math.random() * buf.duration * 0.4 : 0;
+        const offset = randomStart && buf.duration > 40 && Math.random() < 0.5 ? Math.random() * buf.duration * 0.4 : 0;
         src.onended = () => {
           if (this.source !== src) return;
           this.isPlaying = false;
@@ -273,7 +318,8 @@ export class StadiumChants {
         this.tone?.frequency.setTargetAtTime(2600 + 3200 * this.excitement, t, 1);
       })
       .catch((e) => {
-        if (typeof console !== 'undefined') console.warn('[StadiumChants]', this.tracks[i].name, e);
+        if (track === this.special) this.specialBusy = false;
+        if (typeof console !== 'undefined') console.warn('[StadiumChants]', track.name, e);
         this.queue(6);
       });
   }

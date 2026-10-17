@@ -270,8 +270,8 @@ describe('Control humano (teclado estilo FIFA)', () => {
 });
 
 describe('Datos', () => {
-  it('8 equipos con 18 jugadores, dorsales únicos y un arquero titular', () => {
-    expect(TEAMS.length).toBe(8);
+  it('9 equipos con 18 jugadores, dorsales únicos y un arquero titular', () => {
+    expect(TEAMS.length).toBe(9);
     for (const t of TEAMS) {
       expect(t.players.length).toBe(18);
       const nums = new Set(t.players.map((p) => p.number));

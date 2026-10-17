@@ -155,6 +155,7 @@ export class AudioEngine {
   /** Cánticos grabados: si hay, sustituyen a los cánticos y bombos sintetizados. */
   private chantTracks: ChantTrack[] = [];
   private real: StadiumChants | null = null;
+  private specialChant: { minute: number; track: ChantTrack } | null = null;
   /** Gritos de gol y silbidos grabados de la tribuna. */
   private crowdUrls: CrowdSampleUrls | null = null;
   private samples: CrowdSamples | null = null;
@@ -223,8 +224,19 @@ export class AudioEngine {
   }
 
   /** Grabaciones de cánticos de cancha que suenan en las tribunas durante los partidos. */
-  setChantTracks(tracks: ChantTrack[]): void {
+  setChantTracks(tracks: ChantTrack[], special?: { minute: number; track: ChantTrack }): void {
     this.chantTracks = tracks.slice();
+    this.specialChant = special ?? null;
+  }
+
+  /** Minuto en que suena el tema especial del estadio (null si no tiene). */
+  get specialChantMinute(): number | null {
+    return this.specialChant?.minute ?? null;
+  }
+
+  /** Corta el cántico en curso y hace sonar el tema especial (una sola vez por partido). */
+  playSpecialChant(): void {
+    this.run(() => this.real?.playSpecial());
   }
 
   setCrowdSamples(urls: CrowdSampleUrls): void {
@@ -890,7 +902,7 @@ export class AudioEngine {
       this.applyExcitement(0.05);
       if (this.crowdUrls && !this.samples && CrowdSamples.supported(ctx)) this.samples = new CrowdSamples(ctx, g.crowd, g.crowdWet, this.crowdUrls);
       if (this.chantTracks.length && StadiumChants.supported(ctx)) {
-        this.real = new StadiumChants(ctx, this.chantTracks, g.crowd, g.crowdWet);
+        this.real = new StadiumChants(ctx, this.chantTracks, g.crowd, g.crowdWet, this.specialChant?.track ?? null);
         this.real.setExcitement(this.excitement);
         this.real.start(1.5);
       } else {

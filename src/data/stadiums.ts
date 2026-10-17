@@ -7,7 +7,17 @@ export const STADIUMS: StadiumData[] = [
   { id: 'barrio', name: 'Cancha del Barrio', capacity: 9000, timeOfDay: 'day', standColor: '#5a4c40', roofColor: '#9aa0a8', grassHue: 0.25, small: true },
   { id: 'puerto', name: 'Estadio del Puerto', capacity: 41000, timeOfDay: 'night', standColor: '#1d2a30', roofColor: '#8d9aa3', grassHue: 0.31, fog: true },
   { id: 'monumental', name: 'Gran Monumental', capacity: 95000, timeOfDay: 'sunset', standColor: '#2b3550', roofColor: '#dfe4ec', grassHue: 0.29 },
+  // El Gigante de Alberdi (Córdoba): tribunas celestes, techo en las plateas laterales
+  { id: 'villagra', name: 'Julio César Villagra (El Gigante de Alberdi)', capacity: 28000, timeOfDay: 'day', standColor: '#4aa6dc', roofColor: '#cfd6de', grassHue: 0.28, homeTeam: 'belgrano' },
 ];
+
+/** Estadios genéricos (sin club propio): los que se reparten entre los demás equipos. */
+export const GENERIC_STADIUMS = STADIUMS.filter((s) => !s.homeTeam);
+
+/** Estadio donde juega de local un equipo (el suyo si lo tiene; si no, uno genérico por su posición en la lista). */
+export function stadiumForHome(teamId: string, teamIndex: number): StadiumData {
+  return STADIUMS.find((s) => s.homeTeam === teamId) ?? GENERIC_STADIUMS[Math.abs(teamIndex) % GENERIC_STADIUMS.length];
+}
 
 export function getStadium(id: string): StadiumData {
   return STADIUMS.find((s) => s.id === id) ?? STADIUMS[0];

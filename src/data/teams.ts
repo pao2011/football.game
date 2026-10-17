@@ -1,7 +1,7 @@
 import { Rng } from '../util/math';
 import type { FormationId, KitData, PlayerData, Position, TeamData } from './types';
 
-// Equipos 100% ficticios. Nombres, escudos y equipaciones originales.
+// Equipos ficticios (nombres, escudos y equipaciones originales) y Belgrano de Córdoba, con su plantilla real.
 
 const FIRST = [
   'Mateo', 'Lucas', 'Thiago', 'Bruno', 'Iker', 'Dante', 'Joaquín', 'Nico', 'Álvaro', 'Enzo', 'Gael', 'Santi',
@@ -30,6 +30,15 @@ export interface TeamSeed {
   formation: FormationId;
   rating: number;
   seed: number;
+  /** Plantilla real: 11 titulares en el orden de la formación + 7 suplentes (portero, 2 def, 2 med, 2 del). Sus atributos se generan. */
+  roster?: RosterEntry[];
+}
+
+export interface RosterEntry {
+  name: string;
+  number: number;
+  /** Ajuste del nivel del jugador respecto a la media del equipo. */
+  bonus?: number;
 }
 
 const SEEDS: TeamSeed[] = [
@@ -97,6 +106,36 @@ const SEEDS: TeamSeed[] = [
     gkKit: { shirt: '#b6ff2e', shirt2: '#78b80c', pattern: 'solid', shorts: '#203000', socks: '#b6ff2e', number: '#203000' },
     formation: '4-3-3', rating: 81, seed: 88,
   },
+  {
+    // Belgrano de Córdoba ("los Piratas"). Camiseta celeste; plantilla del plantel profesional 2026 (Apertura campeón).
+    id: 'belgrano', name: 'Belgrano de Córdoba', short: 'CAB', city: 'Córdoba',
+    crest: { shape: 'shield', primary: '#5db8e8', secondary: '#ffffff', symbol: 'none', stripes: true },
+    home: { shirt: '#5db8e8', shirt2: '#ffffff', pattern: 'solid', shorts: '#ffffff', socks: '#5db8e8', number: '#ffffff' },
+    away: { shirt: '#161616', shirt2: '#5db8e8', pattern: 'solid', shorts: '#161616', socks: '#161616', number: '#5db8e8' },
+    gkKit: { shirt: '#e8ff3a', shirt2: '#a8c800', pattern: 'solid', shorts: '#1a1a1a', socks: '#e8ff3a', number: '#1a1a1a' },
+    formation: '4-4-2', rating: 80, seed: 99,
+    roster: [
+      { name: 'Matías Daniele', number: 1, bonus: 2 },
+      { name: 'Alexis Maldonado', number: 2 },
+      { name: 'Agustín Griguol', number: 4 },
+      { name: 'Álvaro Ocampo', number: 13 },
+      { name: 'Federico Ricca', number: 16, bonus: 3 },
+      { name: 'Emiliano Rigoni', number: 24, bonus: 4 },
+      { name: 'Santiago Longo', number: 5 },
+      { name: 'Adrián Sánchez', number: 21, bonus: 3 },
+      { name: 'Lucas Zelarayán', number: 10, bonus: 5 },
+      { name: 'Gonzalo Zelarayán', number: 9, bonus: 2 },
+      { name: 'Nicolás Fernández', number: 7 },
+      // suplentes
+      { name: 'Manuel Vicentini', number: 12 },
+      { name: 'Adrián Spörle', number: 3 },
+      { name: 'Alcides Benítez', number: 26 },
+      { name: 'Julián Mavilla', number: 32 },
+      { name: 'Francisco González Metilli', number: 11, bonus: 2 },
+      { name: 'L. Passerini', number: 20 },
+      { name: 'Lautaro Gutiérrez', number: 18 },
+    ],
+  },
 ];
 
 // Puestos de la plantilla: 11 titulares en el orden de la formación + 7 suplentes.
@@ -114,14 +153,14 @@ const START_NUMBERS: Record<FormationId, number[]> = {
   '3-5-2': [1, 4, 5, 6, 3, 8, 10, 14, 2, 9, 11],
 };
 
-function makePlayer(rng: Rng, teamId: string, idx: number, pos: Position, number: number, rating: number, usedNames: Set<string>): PlayerData {
-  let name = '';
-  for (let tries = 0; tries < 50; tries++) {
+function makePlayer(rng: Rng, teamId: string, idx: number, pos: Position, number: number, rating: number, usedNames: Set<string>, real?: RosterEntry): PlayerData {
+  let name = real?.name ?? '';
+  for (let tries = 0; !real && tries < 50; tries++) {
     name = `${rng.pick(FIRST)} ${rng.pick(LAST)}`;
     if (!usedNames.has(name)) break;
   }
   usedNames.add(name);
-  const base = rating + rng.range(-7, 5) - (idx >= 11 ? 4 : 0);
+  const base = rating + rng.range(-7, 5) - (idx >= 11 ? 4 : 0) + (real?.bonus ?? 0);
   const r = (bias: number) => Math.round(Math.max(30, Math.min(97, base + bias + rng.range(-6, 6))));
   const attrs = {
     GK: { speed: r(-25), acceleration: r(-20), passing: r(-15), shooting: r(-40), control: r(-20), defending: r(-20), stamina: r(-10), goalkeeping: r(6) },
@@ -147,16 +186,21 @@ export function buildTeam(s: TeamSeed): TeamData {
   const used = new Set<string>();
   const players: PlayerData[] = [];
   const starters = SQUAD_POSITIONS[s.formation];
-  const nums = START_NUMBERS[s.formation];
-  starters.forEach((p, i) => players.push(makePlayer(rng, s.id, i, p, nums[i], s.rating, used)));
+  const { roster, ...data } = s;
+  const nums = roster ? roster.slice(0, 11).map((r) => r.number) : START_NUMBERS[s.formation];
+  starters.forEach((p, i) => players.push(makePlayer(rng, s.id, i, p, nums[i], s.rating, used, roster?.[i])));
   const usedNums = new Set(nums);
   let n = 12;
   BENCH.forEach((p, i) => {
-    while (usedNums.has(n)) n++;
-    usedNums.add(n);
-    players.push(makePlayer(rng, s.id, 11 + i, p, n, s.rating, used));
+    const real = roster?.[11 + i];
+    if (real) usedNums.add(real.number);
+    else {
+      while (usedNums.has(n)) n++;
+      usedNums.add(n);
+    }
+    players.push(makePlayer(rng, s.id, 11 + i, p, real?.number ?? n, s.rating, used, real));
   });
-  return { ...s, players };
+  return { ...data, players };
 }
 
 export const TEAMS: TeamData[] = SEEDS.map(buildTeam);

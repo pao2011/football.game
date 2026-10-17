@@ -81,7 +81,13 @@ export class Career {
 
   static create(userTeam: string, seed = Date.now() % 100000): Career {
     const rng = new Rng(seed);
+    // la Primera División tiene 8 equipos: si hay más, queda fuera el de menor nivel (nunca el del usuario)
     const first: TeamData[] = structuredClone(TEAMS);
+    while (first.length > 8) {
+      let worst = -1;
+      first.forEach((t, i) => { if (t.id !== userTeam && (worst < 0 || t.rating < first[worst].rating)) worst = i; });
+      first.splice(worst, 1);
+    }
     const second = secondDivisionTeams();
     const teams = [...first, ...second];
     const ages: Record<string, number> = {};

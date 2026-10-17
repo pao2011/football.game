@@ -37,7 +37,9 @@ export interface TeamData {
   name: string;
   short: string; // abreviatura de 3 letras
   city: string;
-  crest: { shape: 'shield' | 'circle' | 'diamond'; primary: string; secondary: string; symbol: 'star' | 'ball' | 'lion' | 'wave' | 'bolt' | 'crown' | 'tower' | 'eagle' };
+  crest: { shape: 'shield' | 'circle' | 'diamond'; primary: string; secondary: string; symbol: 'star' | 'ball' | 'lion' | 'wave' | 'bolt' | 'crown' | 'tower' | 'eagle' | 'none';
+    /** Rayas verticales (primario/secundario) en vez del degradado, con las siglas en azul oscuro. */
+    stripes?: boolean };
   home: KitData;
   away: KitData;
   gkKit: KitData;
@@ -58,6 +60,8 @@ export interface StadiumData {
   standColor: string;
   roofColor: string;
   grassHue: number;
+  /** Estadio propio de un club: el torneo y la carrera lo usan cuando ese equipo juega de local. */
+  homeTeam?: string;
   /** Estadio pequeño (sin grada alta ni techo, con torres de luz). */
   small?: boolean;
   /** Niebla densa (puerto de noche). */
