@@ -17,6 +17,8 @@ export interface FanFxOptions {
   /** Nombres de los equipos (para los trapos). */
   homeName?: string;
   awayName?: string;
+  /** Cancha con espectáculo especial (el "minuto 68" de Belgrano): láseres, luces de colores y más humo y fuegos. */
+  show?: boolean;
 }
 
 type Style = 0 | 1 | 2; // 0 humo (suave), 1 luz aditiva (chispas, bengalas), 2 papelitos (cuadrados)
@@ -187,6 +189,8 @@ interface Emitter {
   color: THREE.Color;
   until: number;
   acc: number;
+  /** Bengala del espectáculo: humo más espeso y grande. */
+  show?: boolean;
 }
 
 interface Rocket {
@@ -200,6 +204,8 @@ interface Rocket {
   color2: THREE.Color;
   delay: number;
   big: boolean;
+  /** Cohete del espectáculo: estalla en más chispas y de colores del club. */
+  show?: boolean;
 }
 
 const LIMITS = {
@@ -215,6 +221,18 @@ export class FanEffects {
   private smoke: Particles;
   private sparks: Particles;
   private confetti: Particles;
+  // ---- espectáculo (solo en canchas con `show`)
+  private readonly showOn: boolean;
+  private readonly quality: 'low' | 'medium' | 'high';
+  private showSmoke: Particles | null = null;
+  private showSparks: Particles | null = null;
+  private lasers: { mesh: THREE.Mesh; glow: THREE.Mesh; origin: THREE.Vector3; phase: number }[] = [];
+  private washes: THREE.DirectionalLight[] = [];
+  /** Intensidad del espectáculo 0..1 (la manda la línea de tiempo del partido). */
+  private spec = 0;
+  private specTime = 0;
+  private rocketAcc = 0;
+  private lightAcc = 0;
   readonly flags: FanFlags;
   private emitters: Emitter[] = [];
   private rockets: Rocket[] = [];
@@ -238,6 +256,8 @@ export class FanEffects {
   constructor(private spots: FanSpot[], o: FanFxOptions) {
     this.rand = mulberry32(o.seed ^ 0x7f4a11);
     const r = this.rand;
+    this.showOn = !!o.show;
+    this.quality = o.quality;
     const lim = LIMITS[o.quality] ?? LIMITS.medium;
     this.home = new THREE.Color(o.homeColor);
     this.away = new THREE.Color(o.awayColor);
@@ -267,6 +287,129 @@ export class FanEffects {
       flags: lim.flags, trapos: lim.trapos, drums: lim.drums, rand: r,
     });
     this.group.add(this.flags.group);
+    if (this.showOn) this.buildShowRig(lim.flags > 60 ? 8 : 5);
+  }
+
+  /** Láseres y luces de colores (se crean apagados al principio: así el motor no recompila shaders al encenderlos). */
+  private buildShowRig(nLasers: number) {
+    const colors = ['#5db8e8', '#38ff8a', '#ffffff', '#5db8e8', '#ff4d6d', '#38ff8a', '#ffffff', '#b26bff'];
+    const beam = new THREE.CylinderGeometry(0.018, 0.018, 1, 5, 1, true);
+    beam.translate(0, 0.5, 0);
+    const halo = new THREE.CylinderGeometry(0.07, 0.07, 1, 6, 1, true);
+    halo.translate(0, 0.5, 0);
+    const pool = this.topSpots.length ? this.topSpots : this.spots;
+    for (let i = 0; i < nLasers; i++) {
+      const c = new THREE.Color(colors[i % colors.length]);
+      const mk = (g: THREE.BufferGeometry) =>
+        new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide }));
+      const mesh = mk(beam);
+      const glow = mk(halo);
+      mesh.frustumCulled = glow.frustumCulled = false;
+      mesh.visible = glow.visible = false;
+      mesh.renderOrder = glow.renderOrder = 6;
+      const s = pool[Math.floor((i / nLasers) * pool.length + this.rand() * 4) % pool.length];
+      this.lasers.push({ mesh, glow, origin: new THREE.Vector3(s.x, s.y + 3, s.z), phase: this.rand() * 6.28 });
+      this.group.add(mesh, glow);
+    }
+    // luces de colores sobre la cancha: celeste, blanca y roja, que palpitan
+    for (const [col, x, z] of [['#5db8e8', 0, 60], ['#ffffff', 70, -30], ['#ff3b4a', -70, -30]] as const) {
+      const l = new THREE.DirectionalLight(new THREE.Color(col), 0);
+      l.position.set(x, 40, z);
+      this.washes.push(l);
+      this.group.add(l);
+    }
+  }
+
+  /** Intensidad del espectáculo 0..1 (humo, bengalas, fuegos, láseres y luces). */
+  setSpectacle(v: number) {
+    this.spec = this.showOn ? Math.max(0, Math.min(1, v)) : 0;
+  }
+
+  /** El estallido del minuto 68: bandera gigante, tanda de fuegos, bengalas por toda la cancha y papelitos. */
+  spectacleBurst() {
+    if (!this.showOn) return;
+    this.ensureShowParticles();
+    this.flags.showGiant(40);
+    const cel = new THREE.Color('#7fd0ff');
+    const wh = new THREE.Color('#ffffff');
+    for (let i = 0; i < 44; i++) this.rocket(0.1 + i * 0.16 + this.rand() * 0.12, i % 5 === 0, i % 3 === 0 ? wh : cel, true);
+    const n = this.quality === 'low' ? 12 : this.quality === 'medium' ? 20 : 28;
+    for (let i = 0; i < n; i++) this.showFlare();
+    this.queueConfetti(this.homeSpots, cel, this.quality === 'low' ? 500 : 1400);
+    this.queueConfetti(this.farSpots, wh, this.quality === 'low' ? 200 : 600);
+  }
+
+  private ensureShowParticles() {
+    if (this.showSmoke) return;
+    const big = this.quality === 'high' ? 1 : this.quality === 'medium' ? 0.7 : 0.4;
+    this.showSmoke = new Particles(Math.round(2200 * big), 0);
+    this.showSparks = new Particles(Math.round(4200 * big), 1);
+    this.group.add(this.showSmoke.points, this.showSparks.points);
+  }
+
+  /** Bengala del espectáculo: celeste, blanca o roja, en la barra, la tribuna local o la de enfrente. */
+  private showFlare() {
+    const r = this.rand();
+    const spot = this.pick(r < 0.2 ? this.barraSpots : r < 0.8 ? this.farSpots : this.homeSpots);
+    const pal = ['#5db8e8', '#ffffff', '#ff3b3b', '#7fd0ff', '#ffffff'];
+    const c = new THREE.Color(pal[Math.floor(this.rand() * pal.length)]);
+    this.emitters.push({ x: spot.x - spot.nx * 0.4, y: spot.y + 1.2, z: spot.z - spot.nz * 0.4, nx: spot.nx, nz: spot.nz, color: c, until: this.time + 7 + this.rand() * 6, acc: 0, show: true });
+  }
+
+  private updateShow(d: number) {
+    const v = this.spec;
+    this.specTime += d;
+    const r = this.rand;
+    const tm = this.specTime;
+    const on = v > 0.02;
+    // luces de colores palpitantes
+    for (let i = 0; i < this.washes.length; i++) {
+      const p = 0.5 + 0.5 * Math.sin(tm * (7 + i * 2.3) + i * 2);
+      this.washes[i].intensity = on ? v * (0.3 + 1.5 * p * p) : 0;
+    }
+    // láseres que barren la cancha
+    this.lasers.forEach((L, k) => {
+      const vis = on && v > 0.12;
+      L.mesh.visible = L.glow.visible = vis;
+      if (!vis) return;
+      const a = tm * (0.7 + (k % 3) * 0.25) + L.phase;
+      const tx = Math.cos(a) * 40 + Math.sin(a * 0.37) * 18;
+      const ty = 5 + 14 * (0.5 + 0.5 * Math.sin(tm * 1.6 + k));
+      const tz = Math.sin(a * 1.2) * 26;
+      const dir = new THREE.Vector3(tx - L.origin.x, ty - L.origin.y, tz - L.origin.z).normalize();
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      for (const m of [L.mesh, L.glow]) {
+        m.position.copy(L.origin);
+        m.quaternion.copy(q);
+        m.scale.set(1, 110, 1);
+      }
+      const flick = 0.75 + 0.25 * Math.sin(tm * 23 + k * 5);
+      (L.mesh.material as THREE.MeshBasicMaterial).opacity = Math.min(1, v * 1.4) * 0.85 * flick;
+      (L.glow.material as THREE.MeshBasicMaterial).opacity = Math.min(1, v * 1.4) * 0.12 * flick;
+    });
+    if (!on) return;
+    this.ensureShowParticles();
+    // bengalas encendidas: cuantas más, más intenso
+    const maxF = this.quality === 'low' ? 14 : this.quality === 'medium' ? 30 : 46;
+    const want = Math.round(maxF * v);
+    let cur = 0;
+    for (const e of this.emitters) if (e.show) cur++;
+    for (; cur < want; cur++) this.showFlare();
+    // fuegos artificiales sostenidos
+    this.rocketAcc += d * (0.8 + 4.2 * v);
+    while (this.rocketAcc >= 1) {
+      this.rocketAcc -= 1;
+      this.rocket(0, r() < 0.25, r() < 0.55 ? new THREE.Color('#7fd0ff') : null, true);
+    }
+    // luces de celulares y destellos en las tribunas
+    this.lightAcc += d * (30 + 190 * v);
+    const sp = this.showSparks!;
+    while (this.lightAcc >= 1) {
+      this.lightAcc -= 1;
+      const s = this.pick(r() < 0.6 ? this.homeSpots : this.spots);
+      this.tmpC.setRGB(1, 0.95 - r() * 0.2, 0.8 + r() * 0.2);
+      sp.spawn(s.x - s.nx * 0.2, s.y + 1.5 + r() * 0.6, s.z - s.nz * 0.2, 0, 0, 0, this.tmpC, 0.7 + r() * 1.3, 0.45, 0.25, 0.9, 0, 0);
+    }
   }
 
   private pick(list: FanSpot[]) {
@@ -288,7 +431,7 @@ export class FanEffects {
   }
 
   /** Cohete lanzado desde lo alto de la grada; estalla en el aire. */
-  private rocket(delay: number, big = false, team: THREE.Color | null = null) {
+  private rocket(delay: number, big = false, team: THREE.Color | null = null, show = false) {
     const r = this.rand;
     // casi todos desde las primeras filas de enfrente (se ven con la cámara de transmisión); algunos desde arriba
     const s = this.pick(r() < 0.75 ? this.farSpots : this.topSpots);
@@ -297,7 +440,7 @@ export class FanEffects {
     this.rockets.push({
       x: s.x - s.nx * 2, y: s.y + 2, z: s.z - s.nz * 2,
       vx: -s.nx * (2 + r() * 3) + (r() - 0.5) * 3, vy: 16 + r() * 5, vz: -s.nz * (2 + r() * 3) + (r() - 0.5) * 3,
-      color: c, color2: palette[Math.floor(r() * palette.length)], delay, big,
+      color: c, color2: palette[Math.floor(r() * palette.length)], delay, big, show,
     });
   }
 
@@ -346,7 +489,10 @@ export class FanEffects {
     this.smoke.uniforms.uScale.value = scale;
     this.sparks.uniforms.uScale.value = scale;
     this.confetti.uniforms.uScale.value = scale;
+    if (this.showSmoke) this.showSmoke.uniforms.uScale.value = scale;
+    if (this.showSparks) this.showSparks.uniforms.uScale.value = scale;
     this.flags.update(d, excitement);
+    if (this.showOn) this.updateShow(d);
     camera.getWorldPosition(this.camPos);
 
     // bengalas espontáneas de vez en cuando (más si el partido está caliente)
@@ -369,11 +515,20 @@ export class FanEffects {
         this.emitters.splice(i, 1);
         continue;
       }
-      e.acc += d * 15;
+      const smokeSet = e.show && this.showSmoke ? this.showSmoke : this.smoke;
+      const sparkSet = e.show && this.showSparks ? this.showSparks : this.sparks;
+      e.acc += d * (e.show ? 24 : 15);
       while (e.acc >= 1) {
         e.acc -= 1;
         const shade = 0.85 + r() * 0.3;
         this.tmpC.copy(e.color).multiplyScalar(shade);
+        if (e.show) {
+          // humo espeso y enorme que cubre la tribuna
+          smokeSet.spawn(e.x + (r() - 0.5) * 0.6, e.y, e.z + (r() - 0.5) * 0.6,
+            (r() - 0.5) * 0.9 - e.nx * 0.6, 1.5 + r() * 1.6, (r() - 0.5) * 0.9 - e.nz * 0.6,
+            this.tmpC, 7 + r() * 4, 2.6, 16 + r() * 9, 0.85, -0.05, 0.3);
+          continue;
+        }
         this.smoke.spawn(e.x + (r() - 0.5) * 0.4, e.y, e.z + (r() - 0.5) * 0.4,
           (r() - 0.5) * 0.6 - e.nx * 0.5, 1.4 + r() * 1.2, (r() - 0.5) * 0.6 - e.nz * 0.5,
           this.tmpC, 5 + r() * 3, 1.8, 10 + r() * 4, 0.7, -0.05, 0.35);
@@ -381,7 +536,7 @@ export class FanEffects {
       // resplandor de la bengala
       if (r() < 0.85) {
         this.tmpC.setRGB(1, 0.35 + r() * 0.25, 0.15);
-        this.sparks.spawn(e.x, e.y + 0.2, e.z, (r() - 0.5) * 0.6, 0.6 + r(), (r() - 0.5) * 0.6, this.tmpC, 0.18 + r() * 0.12, 0.9 + r() * 0.5, 0.3, 0.9, 0, 0);
+        sparkSet.spawn(e.x, e.y + 0.2, e.z, (r() - 0.5) * 0.6, 0.6 + r(), (r() - 0.5) * 0.6, this.tmpC, 0.18 + r() * 0.12, 0.9 + r() * 0.5, 0.3, 0.9, 0, 0);
       }
     }
 
@@ -396,11 +551,13 @@ export class FanEffects {
       k.x += k.vx * d;
       k.y += k.vy * d;
       k.z += k.vz * d;
+      const spk = k.show && this.showSparks ? this.showSparks : this.sparks;
+      const smk = k.show && this.showSmoke ? this.showSmoke : this.smoke;
       this.tmpC.setRGB(1, 0.75, 0.4);
-      this.sparks.spawn(k.x, k.y, k.z, (r() - 0.5) * 0.8, -1 - r(), (r() - 0.5) * 0.8, this.tmpC, 0.5, 0.35, 0.1, 0.8, 2, 0.5);
+      spk.spawn(k.x, k.y, k.z, (r() - 0.5) * 0.8, -1 - r(), (r() - 0.5) * 0.8, this.tmpC, 0.5, 0.35, 0.1, 0.8, 2, 0.5);
       if (k.vy < 3) {
         this.rockets.splice(i, 1);
-        const n = k.big ? 150 : 90;
+        const n = k.show ? (k.big ? 210 : 130) : k.big ? 150 : 90;
         const sp = k.big ? 15 : 11;
         for (let j = 0; j < n; j++) {
           // dirección uniforme en la esfera
@@ -409,11 +566,11 @@ export class FanEffects {
           const s = Math.sqrt(1 - u * u);
           const v = sp * (0.75 + r() * 0.3);
           const c = j % 5 === 0 ? k.color2 : k.color;
-          this.sparks.spawn(k.x, k.y, k.z, s * Math.cos(th) * v, u * v, s * Math.sin(th) * v, c, 1.5 + r() * 0.9, 0.55, 0.3, 1, 3.5, 1.4);
+          spk.spawn(k.x, k.y, k.z, s * Math.cos(th) * v, u * v, s * Math.sin(th) * v, c, 1.5 + r() * 0.9, k.show ? 0.8 : 0.55, 0.3, 1, 3.5, 1.4);
         }
         // humo tenue de la explosión
         this.tmpC.setRGB(0.55, 0.55, 0.58);
-        for (let j = 0; j < 6; j++) this.smoke.spawn(k.x + (r() - 0.5) * 3, k.y + (r() - 0.5) * 3, k.z + (r() - 0.5) * 3, 0, 0.2, 0, this.tmpC, 4 + r() * 2, 3, 9, 0.18, 0, 0.2);
+        for (let j = 0; j < 6; j++) smk.spawn(k.x + (r() - 0.5) * 3, k.y + (r() - 0.5) * 3, k.z + (r() - 0.5) * 3, 0, 0.2, 0, this.tmpC, 4 + r() * 2, 3, 9, 0.18, 0, 0.2);
         this.onBurst?.(this.camPos.distanceTo(new THREE.Vector3(k.x, k.y, k.z)));
       }
     }
@@ -431,11 +588,13 @@ export class FanEffects {
     this.smoke.update(d, wx, wz, this.time);
     this.sparks.update(d, wx, wz, this.time);
     this.confetti.update(d, wx, wz, this.time);
+    this.showSmoke?.update(d, wx, wz, this.time);
+    this.showSparks?.update(d, wx, wz, this.time);
   }
 
   /** Hay efectos en marcha (para pruebas). */
   get busy() {
-    return this.emitters.length > 0 || this.rockets.length > 0 || this.smoke.active || this.sparks.active || this.confetti.active;
+    return this.emitters.length > 0 || this.rockets.length > 0 || this.smoke.active || this.sparks.active || this.confetti.active || !!this.showSmoke?.active || !!this.showSparks?.active;
   }
 
   get flagCount() {
@@ -446,6 +605,15 @@ export class FanEffects {
     this.smoke.dispose();
     this.sparks.dispose();
     this.confetti.dispose();
+    this.showSmoke?.dispose();
+    this.showSparks?.dispose();
+    for (const L of this.lasers) {
+      L.mesh.geometry.dispose();
+      L.glow.geometry.dispose();
+      (L.mesh.material as THREE.Material).dispose();
+      (L.glow.material as THREE.Material).dispose();
+    }
+    for (const l of this.washes) l.dispose();
     this.flags.dispose();
   }
 }

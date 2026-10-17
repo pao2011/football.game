@@ -55,17 +55,17 @@ CLUB_CHANTS.boca = [...(CLUB_CHANTS.boca ?? []), ...GENERIC_CHANTS];
 
 export interface StadiumChantSet {
   tracks: ChantTrack[];
-  /** Tema que no está en la rotación: suena una sola vez, justo al llegar al minuto indicado. */
-  special?: { minute: number; track: ChantTrack };
+  /** Tema que no está en la rotación: suena una sola vez, en bucle, siguiendo la línea de tiempo del partido (ShowTimeline). */
+  special?: { track: ChantTrack };
 }
 
 /**
  * Cánticos de un estadio: los de la hinchada del club dueño de la cancha (solo suenan ahí); los estadios
- * neutrales y los clubes sin grabaciones usan los genéricos. Belgrano tiene además su tema del minuto 68.
+ * neutrales y los clubes sin grabaciones usan los genéricos. Belgrano tiene además su tema del minuto 68 (y el espectáculo que lo acompaña).
  */
 export function chantsForStadium(stadium: { id: string; homeTeam?: string }): StadiumChantSet {
   const club = stadium.homeTeam ? CLUB_CHANTS[stadium.homeTeam] : undefined;
   const set: StadiumChantSet = { tracks: club?.length ? club : GENERIC_CHANTS };
-  if (stadium.homeTeam === 'belgrano') set.special = { minute: 68, track: { name: 'Belgrano minuto 68', url: belgranoMinuto68 } };
+  if (stadium.homeTeam === 'belgrano') set.special = { track: { name: 'Belgrano minuto 68', url: belgranoMinuto68 } };
   return set;
 }

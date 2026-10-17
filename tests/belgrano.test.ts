@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makeMatch } from './helpers';
 import { MatchAudio } from '../src/audio/MatchAudio';
+import { showLevels, type ShowLevels } from '../src/audio/ShowTimeline';
 import { BELGRANO_CHANTS, CLUB_CHANTS, GENERIC_CHANTS, chantsForStadium } from '../src/audio/chantTracks';
 import { TEAMS } from '../src/data/teams';
 import { getTeam } from '../src/data/teams';
@@ -33,7 +34,7 @@ describe('Belgrano de Córdoba', () => {
     const v = chantsForStadium(STADIUMS.find((s) => s.id === 'villagra')!);
     expect(v.tracks.slice(0, BELGRANO_CHANTS.length)).toEqual(BELGRANO_CHANTS);
     expect(v.tracks.length).toBe(BELGRANO_CHANTS.length + 4);
-    expect(v.special?.minute).toBe(68);
+    expect(v.special).toBeDefined();
     for (const s of STADIUMS.filter((s) => s.id !== 'villagra')) {
       const c = chantsForStadium(s);
       expect(c.special).toBeUndefined();
@@ -52,20 +53,59 @@ describe('Belgrano de Córdoba', () => {
     expect(v.tracks.some((x) => x.url === v.special!.track.url)).toBe(false);
   });
 
-  it('el tema del minuto 68 suena una sola vez y justo en ese minuto', () => {
+  it('la línea de tiempo del minuto 68: audio desde el 66, a todo volumen del 68 al 70 y se apaga; espectáculo del 67 al 71', () => {
+    const at = (min: number) => showLevels(min);
+    // antes del 66:00 no suena nada ni hay espectáculo
+    expect(at(64.9)).toMatchObject({ audio: 0, visual: 0, audioOn: false });
+    // entra de a poco desde el 66 (minuto 65 transcurrido)
+    expect(at(65.01).audioOn).toBe(true);
+    expect(at(66)).toSatisfy((l: ShowLevels) => l.audio > 0.3 && l.audio < 0.7);
+    // a todo volumen en el 68 y se mantiene hasta el 70
+    for (const t of [67, 67.5, 68, 68.99]) expect(at(t).audio).toBeCloseTo(1, 1);
+    // después baja de a poco hasta apagarse
+    expect(at(70)).toSatisfy((l: ShowLevels) => l.audio < 1 && l.audio > 0.6);
+    expect(at(71)).toSatisfy((l: ShowLevels) => l.audio > 0 && l.audio < 0.4);
+    expect(at(72.01)).toMatchObject({ audio: 0, audioOn: false });
+    // el espectáculo se gesta desde el 67, estalla en el 68 y se apaga hacia el 71
+    expect(at(65.9).visual).toBe(0);
+    expect(at(66.5).visual).toSatisfy((v: number) => v > 0.2 && v < 0.8);
+    expect(at(67)).toMatchObject({ visual: 1 });
+    expect(at(68)).toMatchObject({ visual: 1 });
+    expect(at(70).visual).toSatisfy((v: number) => v > 0 && v < 0.7);
+    expect(at(71.01).visual).toBe(0);
+    // sube y baja sin saltos
+    let prev = 0;
+    for (let t = 64; t < 73; t += 0.05) {
+      const l = showLevels(t);
+      expect(Math.abs(l.audio - prev)).toBeLessThan(0.08);
+      prev = l.audio;
+    }
+  });
+
+  it('MatchAudio arranca el tema una sola vez en el 66, le sigue el volumen y lo apaga en el 72', () => {
     const m = makeMatch();
-    const calls: string[] = [];
-    const audio = new Proxy({}, { get: (_t, name) => name === 'specialChantMinute' ? 68 : () => calls.push(String(name)) }) as unknown as AudioEngine;
+    const calls: [string, ...unknown[]][] = [];
+    const audio = new Proxy({}, {
+      get: (_t, name) => name === 'hasSpecialChant' ? true : (...args: unknown[]) => calls.push([String(name), ...args]),
+    }) as unknown as AudioEngine;
     const ma = new MatchAudio(audio, m);
     m.phase = 'play';
-    m.matchSeconds = 67 * 60 - 5; // minuto 67
-    m.time += 1; ma.update(0.3);
-    expect(calls).not.toContain('playSpecialChant');
-    m.matchSeconds = 67 * 60 + 1; // minuto 68
-    expect(m.minute).toBe(68);
-    m.time += 1; ma.update(0.3);
-    expect(calls.filter((c) => c === 'playSpecialChant').length).toBe(1);
-    for (let i = 0; i < 5; i++) { m.matchSeconds += 60; m.time += 1; ma.update(0.3); }
-    expect(calls.filter((c) => c === 'playSpecialChant').length).toBe(1);
+    const step = (sec: number) => { m.matchSeconds = sec; m.time += 1; ma.update(0.3); };
+    step(64 * 60); // minuto 65: nada
+    expect(calls.some((c) => c[0] === 'playSpecialChant')).toBe(false);
+    step(65 * 60 + 1); // minuto 66
+    expect(calls.filter((c) => c[0] === 'playSpecialChant').length).toBe(1);
+    step(66 * 60);
+    step(67 * 60 + 30); // minuto 68: a todo volumen
+    const levels = calls.filter((c) => c[0] === 'setSpecialChantLevel').map((c) => c[1] as number);
+    expect(levels[0]).toBeLessThan(0.1);
+    expect(levels[levels.length - 1]).toBeCloseTo(1, 1);
+    expect(calls.filter((c) => c[0] === 'playSpecialChant').length).toBe(1);
+    expect(calls.some((c) => c[0] === 'endSpecialChant')).toBe(false);
+    step(72 * 60 + 5); // fin del momento
+    expect(calls.filter((c) => c[0] === 'endSpecialChant').length).toBe(1);
+    step(80 * 60);
+    expect(calls.filter((c) => c[0] === 'endSpecialChant').length).toBe(1);
+    expect(calls.filter((c) => c[0] === 'playSpecialChant').length).toBe(1);
   });
 });

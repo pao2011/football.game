@@ -212,7 +212,7 @@ export class Stadium {
     this.textures.push(this.crowd.atlas);
     this.materials.push(this.crowd.material);
     this.group.add(...this.crowd.meshes);
-    this.fans = new FanEffects(this.crowd.spots, { homeColor, awayColor, seed, quality, homeName: names[0], awayName: names[1] });
+    this.fans = new FanEffects(this.crowd.spots, { homeColor, awayColor, seed, quality, homeName: names[0], awayName: names[1], show: data.show });
     this.group.add(this.fans.group);
 
     // ---- sky

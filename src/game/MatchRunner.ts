@@ -16,6 +16,7 @@ import type { AudioEngine } from '../audio/AudioEngine';
 import { MatchAudio } from '../audio/MatchAudio';
 import { Narrator } from '../audio/Narrator';
 import { chantsForStadium } from '../audio/chantTracks';
+import { SHOW, showLevels } from '../audio/ShowTimeline';
 import { getSpeech } from '../audio/Speech';
 import { activePad } from '../input/pads';
 import { TouchControls, isTouchDevice } from '../input/TouchControls';
@@ -95,6 +96,9 @@ export class MatchRunner {
   onFinished: (r: MatchResultInfo) => void = () => {};
   private disposed = false;
   private audioEngine: AudioEngine;
+  /** La cancha tiene el espectáculo del minuto 68 y ya estalló en este partido. */
+  private stadiumShow = false;
+  private showBurst = false;
   private lastPowerShot = -10;
   private readonly anchorV = new THREE.Vector3();
   /** Presentación inicial en curso (la simulación espera mientras dura). */
@@ -224,6 +228,7 @@ export class MatchRunner {
     // cada cancha tiene los cánticos de su hinchada (solo suenan ahí)
     const chants = chantsForStadium(stadium);
     audioEngine.setChantTracks(chants.tracks, chants.special);
+    this.stadiumShow = !!stadium.show;
     this.audio = new MatchAudio(audioEngine, this.match);
     this.audio.start();
     this.narrator = new Narrator(getSpeech(), this.match, stadium.name);
@@ -357,7 +362,20 @@ export class MatchRunner {
     } else {
       this.hud.powerAnchor = null;
     }
-    this.audio.update(this.view.excitement, this.view.camera);
+    // el minuto 68 de Belgrano: espectáculo en las tribunas siguiendo el reloj del partido
+    let show = 0;
+    if (this.stadiumShow && !m.config.training) {
+      const t = m.matchSeconds / 60;
+      show = showLevels(t).visual;
+      this.view.stadium.fans.setSpectacle(show);
+      if (!this.showBurst && t >= SHOW.visPeak && t < SHOW.visEnd) {
+        this.showBurst = true;
+        this.view.stadium.fans.spectacleBurst();
+        this.view.director.addShake(0.35);
+        this.audioEngine.cheer(1);
+      }
+    }
+    this.audio.update(Math.max(this.view.excitement, show), this.view.camera);
     if (!this.paused) this.narrator.update(dt);
     this.hud.update(dt);
     this.commentary?.update();
