@@ -225,6 +225,9 @@ export class FanEffects {
   private readonly showOn: boolean;
   private readonly quality: 'low' | 'medium' | 'high';
   private showSmoke: Particles | null = null;
+  /** Bruma celeste que cubre toda la cancha (grada y campo). */
+  private hazeSmoke: Particles | null = null;
+  private hazeAcc = 0;
   private showSparks: Particles | null = null;
   private lasers: { mesh: THREE.Mesh; glow: THREE.Mesh; origin: THREE.Vector3; phase: number }[] = [];
   private washes: THREE.DirectionalLight[] = [];
@@ -320,6 +323,12 @@ export class FanEffects {
     }
   }
 
+  /** Nivel de bruma 0..1 (sigue la intensidad del espectáculo, pero sube y baja más despacio). */
+  get hazeLevel() {
+    return this.haze;
+  }
+  private haze = 0;
+
   /** Intensidad del espectáculo 0..1 (humo, bengalas, fuegos, láseres y luces). */
   setSpectacle(v: number) {
     this.spec = this.showOn ? Math.max(0, Math.min(1, v)) : 0;
@@ -344,14 +353,16 @@ export class FanEffects {
     const big = this.quality === 'high' ? 1 : this.quality === 'medium' ? 0.7 : 0.4;
     this.showSmoke = new Particles(Math.round(2200 * big), 0);
     this.showSparks = new Particles(Math.round(4200 * big), 1);
-    this.group.add(this.showSmoke.points, this.showSparks.points);
+    this.hazeSmoke = new Particles(Math.round(1100 * big), 0);
+    this.group.add(this.hazeSmoke.points, this.showSmoke.points, this.showSparks.points);
   }
 
   /** Bengala del espectáculo: celeste, blanca o roja, en la barra, la tribuna local o la de enfrente. */
   private showFlare() {
     const r = this.rand();
     const spot = this.pick(r < 0.2 ? this.barraSpots : r < 0.8 ? this.farSpots : this.homeSpots);
-    const pal = ['#5db8e8', '#ffffff', '#ff3b3b', '#7fd0ff', '#ffffff'];
+    // humo solo celeste (varios tonos)
+    const pal = ['#5db8e8', '#7fd0ff', '#9adcff', '#6cc4f5', '#b4e4ff'];
     const c = new THREE.Color(pal[Math.floor(this.rand() * pal.length)]);
     this.emitters.push({ x: spot.x - spot.nx * 0.4, y: spot.y + 1.2, z: spot.z - spot.nz * 0.4, nx: spot.nx, nz: spot.nz, color: c, until: this.time + 7 + this.rand() * 6, acc: 0, show: true });
   }
@@ -387,14 +398,29 @@ export class FanEffects {
       (L.mesh.material as THREE.MeshBasicMaterial).opacity = Math.min(1, v * 1.4) * 0.85 * flick;
       (L.glow.material as THREE.MeshBasicMaterial).opacity = Math.min(1, v * 1.4) * 0.12 * flick;
     });
+    // la bruma sube y baja más despacio que el resto del espectáculo
+    this.haze += (v - this.haze) * Math.min(1, d * 0.9);
+    if (this.haze < 0.002) this.haze = 0;
     if (!on) return;
     this.ensureShowParticles();
     // bengalas encendidas: cuantas más, más intenso
-    const maxF = this.quality === 'low' ? 14 : this.quality === 'medium' ? 30 : 46;
+    const maxF = this.quality === 'low' ? 8 : this.quality === 'medium' ? 14 : 22;
     const want = Math.round(maxF * v);
     let cur = 0;
     for (const e of this.emitters) if (e.show) cur++;
     for (; cur < want; cur++) this.showFlare();
+    // bruma celeste por todo el estadio, campo de juego incluido: nubes grandes y blandas a distintas alturas
+    const hz = this.hazeSmoke!;
+    const cap = hz.max;
+    this.hazeAcc += d * (cap * 1.2 / 11) * Math.min(1, this.haze * 1.8);
+    while (this.hazeAcc >= 1) {
+      this.hazeAcc -= 1;
+      const hx = (r() * 2 - 1) * 66;
+      const hzz = (r() * 2 - 1) * 46;
+      const hy = 0.5 + Math.pow(r(), 1.8) * 10;
+      this.tmpC.set(['#7fd0ff', '#9adcff', '#b4e4ff', '#8fd8ff'][Math.floor(r() * 4)]);
+      hz.spawn(hx, hy, hzz, (r() - 0.5) * 0.8, (r() - 0.3) * 0.25, (r() - 0.5) * 0.8, this.tmpC, 9 + r() * 5, 9 + r() * 4, 20 + r() * 12, 0.55, 0, 0.1);
+    }
     // fuegos artificiales sostenidos
     this.rocketAcc += d * (0.8 + 4.2 * v);
     while (this.rocketAcc >= 1) {
@@ -490,6 +516,7 @@ export class FanEffects {
     this.sparks.uniforms.uScale.value = scale;
     this.confetti.uniforms.uScale.value = scale;
     if (this.showSmoke) this.showSmoke.uniforms.uScale.value = scale;
+    if (this.hazeSmoke) this.hazeSmoke.uniforms.uScale.value = scale;
     if (this.showSparks) this.showSparks.uniforms.uScale.value = scale;
     this.flags.update(d, excitement);
     if (this.showOn) this.updateShow(d);
@@ -517,7 +544,7 @@ export class FanEffects {
       }
       const smokeSet = e.show && this.showSmoke ? this.showSmoke : this.smoke;
       const sparkSet = e.show && this.showSparks ? this.showSparks : this.sparks;
-      e.acc += d * (e.show ? 24 : 15);
+      e.acc += d * (e.show ? 7 : 15);
       while (e.acc >= 1) {
         e.acc -= 1;
         const shade = 0.85 + r() * 0.3;
@@ -525,8 +552,8 @@ export class FanEffects {
         if (e.show) {
           // humo espeso y enorme que cubre la tribuna
           smokeSet.spawn(e.x + (r() - 0.5) * 0.6, e.y, e.z + (r() - 0.5) * 0.6,
-            (r() - 0.5) * 0.9 - e.nx * 0.6, 1.5 + r() * 1.6, (r() - 0.5) * 0.9 - e.nz * 0.6,
-            this.tmpC, 7 + r() * 4, 2.6, 16 + r() * 9, 0.85, -0.05, 0.3);
+            (r() - 0.5) * 0.9 - e.nx * 2.6, 0.9 + r() * 1.1, (r() - 0.5) * 0.9 - e.nz * 2.6,
+            this.tmpC, 8 + r() * 5, 2.6, 14 + r() * 8, 0.5, -0.02, 0.35);
           continue;
         }
         this.smoke.spawn(e.x + (r() - 0.5) * 0.4, e.y, e.z + (r() - 0.5) * 0.4,
@@ -535,7 +562,8 @@ export class FanEffects {
       }
       // resplandor de la bengala
       if (r() < 0.85) {
-        this.tmpC.setRGB(1, 0.35 + r() * 0.25, 0.15);
+        if (e.show) this.tmpC.setRGB(0.55 + r() * 0.2, 0.85, 1);
+        else this.tmpC.setRGB(1, 0.35 + r() * 0.25, 0.15);
         sparkSet.spawn(e.x, e.y + 0.2, e.z, (r() - 0.5) * 0.6, 0.6 + r(), (r() - 0.5) * 0.6, this.tmpC, 0.18 + r() * 0.12, 0.9 + r() * 0.5, 0.3, 0.9, 0, 0);
       }
     }
@@ -589,12 +617,13 @@ export class FanEffects {
     this.sparks.update(d, wx, wz, this.time);
     this.confetti.update(d, wx, wz, this.time);
     this.showSmoke?.update(d, wx, wz, this.time);
+    this.hazeSmoke?.update(d, wx, wz, this.time);
     this.showSparks?.update(d, wx, wz, this.time);
   }
 
   /** Hay efectos en marcha (para pruebas). */
   get busy() {
-    return this.emitters.length > 0 || this.rockets.length > 0 || this.smoke.active || this.sparks.active || this.confetti.active || !!this.showSmoke?.active || !!this.showSparks?.active;
+    return this.emitters.length > 0 || this.rockets.length > 0 || this.smoke.active || this.sparks.active || this.confetti.active || !!this.showSmoke?.active || !!this.hazeSmoke?.active || !!this.showSparks?.active;
   }
 
   get flagCount() {
@@ -606,6 +635,7 @@ export class FanEffects {
     this.sparks.dispose();
     this.confetti.dispose();
     this.showSmoke?.dispose();
+    this.hazeSmoke?.dispose();
     this.showSparks?.dispose();
     for (const L of this.lasers) {
       L.mesh.geometry.dispose();
