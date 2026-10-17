@@ -22,7 +22,9 @@ export interface ChantTrack {
 }
 
 export class StadiumChants {
-  private el: HTMLAudioElement | null = null;
+  private input: GainNode | null = null;
+  private source: AudioBufferSourceNode | null = null;
+  private isPlaying = false;
   private level: GainNode | null = null;
   private tone: BiquadFilterNode | null = null;
   private nodes: AudioNode[] = [];
@@ -30,7 +32,6 @@ export class StadiumChants {
   private order: number[] = [];
   private current = -1;
   private gapTimer: ReturnType<typeof setTimeout> | null = null;
-  private blobs = new Map<string, Promise<string>>();
   private excitement = 0;
   private boostUntil = 0;
   private boostAmt = 0;
@@ -47,11 +48,11 @@ export class StadiumChants {
 
   /** ¿Puede sonar en este entorno? */
   static supported(ctx: BaseAudioContext | null): ctx is AudioContext {
-    return !!ctx && typeof (ctx as AudioContext).createMediaElementSource === 'function' && typeof Audio === 'function';
+    return !!ctx && typeof (ctx as AudioContext).decodeAudioData === 'function' && typeof fetch === 'function' && typeof (ctx as AudioContext).resume === 'function';
   }
 
   get playing(): boolean {
-    return !!this.el && !this.el.paused;
+    return this.isPlaying;
   }
 
   start(delay = 1.2): void {
@@ -68,7 +69,7 @@ export class StadiumChants {
     if (this.gapTimer) clearTimeout(this.gapTimer);
     this.gapTimer = null;
     const t = this.ctx.currentTime;
-    const el = this.el;
+    const srcNode = this.source;
     const lv = this.level;
     if (lv) {
       lv.gain.cancelScheduledValues(t);
@@ -77,16 +78,21 @@ export class StadiumChants {
     }
     const nodes = this.nodes;
     const lfos = this.lfos;
-    this.el = null;
+    this.source = null;
+    this.input = null;
+    this.isPlaying = false;
     this.level = null;
     this.tone = null;
     this.nodes = [];
     this.lfos = [];
     setTimeout(() => {
-      if (el) {
-        el.pause();
-        el.removeAttribute('src');
-        el.load();
+      if (srcNode) {
+        srcNode.onended = null;
+        try {
+          srcNode.stop();
+        } catch {
+          /* ya parado */
+        }
       }
       for (const o of lfos) {
         try {
@@ -140,12 +146,6 @@ export class StadiumChants {
 
   private build(): void {
     const ctx = this.ctx;
-    const el = new Audio();
-    el.preload = 'auto';
-    el.crossOrigin = 'anonymous';
-    el.addEventListener('ended', () => this.onEnded());
-    el.addEventListener('error', () => this.onEnded());
-    this.el = el;
     const n = <T extends AudioNode>(node: T): T => {
       this.nodes.push(node);
       return node;
@@ -182,7 +182,8 @@ export class StadiumChants {
       this.lfos.push(o);
     };
 
-    const src = n(ctx.createMediaElementSource(el));
+    const src = gain(1);
+    this.input = src;
     // micrófono de ambiente lejano: sin graves de estudio, voces algo apagadas
     const hp = filter('highpass', 140, 0.6);
     const body = filter('peaking', 380, 0.8, 2.5);
@@ -241,48 +242,53 @@ export class StadiumChants {
   }
 
   private next(): void {
-    const el = this.el;
-    if (!this.running || !el) return;
+    if (!this.running || !this.input) return;
     const i = this.nextIndex();
     this.current = i;
-    this.blobUrl(this.tracks[i].url)
-      .then((url) => {
-        if (!this.running || this.el !== el) return;
-        el.src = url;
+    const ctx = this.ctx;
+    if (ctx.state !== 'running') ctx.resume().catch(() => undefined);
+    this.decode(this.tracks[i].url)
+      .then((buf) => {
+        if (!this.running || !this.input || !this.level) return;
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(this.input);
         // empezar en un punto al azar de la canción, como si ya la estuvieran cantando
-        const begin = () => {
-          if (Number.isFinite(el.duration) && el.duration > 40 && Math.random() < 0.5) el.currentTime = Math.random() * (el.duration * 0.4);
+        const offset = buf.duration > 40 && Math.random() < 0.5 ? Math.random() * buf.duration * 0.4 : 0;
+        src.onended = () => {
+          if (this.source !== src) return;
+          this.isPlaying = false;
+          this.source = null;
+          this.onEnded();
         };
-        if (el.readyState >= 1) begin();
-        else el.addEventListener('loadedmetadata', begin, { once: true });
-        const p = el.play();
-        if (p && typeof p.catch === 'function') p.catch(() => this.queue(4));
-        const t = this.ctx.currentTime;
-        const lv = this.level!;
+        this.source = src;
+        this.isPlaying = true;
+        src.start(0, offset);
+        const t = ctx.currentTime;
+        const lv = this.level;
         lv.gain.cancelScheduledValues(t);
         lv.gain.setValueAtTime(Math.max(FLOOR, lv.gain.value), t);
         lv.gain.exponentialRampToValueAtTime(this.targetLevel(), t + 2.5);
+        this.appliedExcitement = -1;
         this.tone?.frequency.setTargetAtTime(2600 + 3200 * this.excitement, t, 1);
       })
-      .catch(() => this.queue(6));
+      .catch((e) => {
+        if (typeof console !== 'undefined') console.warn('[StadiumChants]', this.tracks[i].name, e);
+        this.queue(6);
+      });
   }
 
   /**
-   * El audio se carga como blob local: así sirve igual desde un servidor, un data: URI (juego
-   * en un solo archivo) o la app de Android, y la Web Audio API puede procesarlo sin restricciones.
+   * Se descarga (archivo, data: URI del juego en un solo archivo o recurso de la app de Android) y se
+   * decodifica a un buffer: así no hay reproductor <audio> ni reglas de autoplay de por medio, y
+   * suena igual en cualquier navegador. Solo se guarda la canción en curso.
    */
-  private blobUrl(url: string): Promise<string> {
-    let p = this.blobs.get(url);
-    if (!p) {
-      p = fetch(url)
-        .then((r) => {
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          return r.blob();
-        })
-        .then((b) => URL.createObjectURL(b));
-      p.catch(() => this.blobs.delete(url));
-      this.blobs.set(url, p);
-    }
-    return p;
+  private decode(url: string): Promise<AudioBuffer> {
+    return fetch(url)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.arrayBuffer();
+      })
+      .then((ab) => this.ctx.decodeAudioData(ab));
   }
 }
