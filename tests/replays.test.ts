@@ -4,7 +4,8 @@ import { decodeFrames, encodeFrames, lastSeconds, listReplays, saveReplay, delet
 
 describe('Repeticiones guardadas', () => {
   it('la codificación compacta conserva los fotogramas (redondeados)', () => {
-    const m = makeMatch({ seed: 4 });
+    // semilla con juego corrido en los últimos 6 s (el buffer de repetición se corta en las detenciones)
+    const m = makeMatch({ seed: 3 });
     m.simulate(12);
     const frames = lastSeconds(m.replay, 6);
     expect(frames.length).toBeGreaterThan(100);

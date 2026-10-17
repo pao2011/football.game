@@ -125,7 +125,7 @@ export class App {
     registerCustomTeams(); // equipos creados en el editor
     setLang(this.settings.language);
     this.applyAudio();
-    this.quick = { home: 0, away: 1, stadium: 0, half: HALF_OPTIONS.indexOf(this.settings.halfMinutes), difficulty: DIFFS.indexOf(this.settings.difficulty), side: 0, formation: null };
+    this.quick = { home: 0, away: 1, stadium: Math.max(0, STADIUMS.findIndex((x) => x.homeTeam === TEAMS[0].id)), half: HALF_OPTIONS.indexOf(this.settings.halfMinutes), difficulty: DIFFS.indexOf(this.settings.difficulty), side: 0, formation: null };
     if (this.quick.half < 0) this.quick.half = 2;
     if (this.quick.difficulty < 0) this.quick.difficulty = 1;
     window.addEventListener('resize', () => this.onResize());

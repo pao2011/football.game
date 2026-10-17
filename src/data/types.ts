@@ -55,6 +55,19 @@ export type FormationId = '4-3-3' | '4-4-2' | '4-2-3-1' | '3-5-2';
 
 export type Difficulty = 'amateur' | 'pro' | 'world' | 'legend';
 
+export interface StadiumLook {
+  /** Techo: anillo completo, solo sobre las plateas laterales o ninguno (torres de luz). */
+  roof?: 'ring' | 'sides' | 'none';
+  /** Bandeja alta: en los dos laterales, solo en el de enfrente de la cámara, solo en el de la cámara o ninguna. */
+  upper?: 'both' | 'far' | 'near' | 'none';
+  /** Colores de las butacas: se alternan por sectores alrededor de la cancha. */
+  seats?: string[];
+  /** Pista de atletismo alrededor del campo (color del tartán). */
+  track?: string;
+  /** Lateral recto y vertical de palcos (La Bombonera), del lado de la cámara principal. */
+  palcos?: boolean;
+}
+
 export interface StadiumData {
   id: string;
   name: string;
@@ -63,6 +76,8 @@ export interface StadiumData {
   standColor: string;
   roofColor: string;
   grassHue: number;
+  /** Rasgos de la cancha real (si falta, el estadio estándar con techo y dos bandejas altas). */
+  look?: StadiumLook;
   /** Estadio propio de un club: el torneo y la carrera lo usan cuando ese equipo juega de local. */
   homeTeam?: string;
   /** Estadio pequeño (sin grada alta ni techo, con torres de luz). */

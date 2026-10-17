@@ -174,7 +174,7 @@ function profWorld(s: PSample, p: ProfPt, yOff?: YOff): V3 {
   return [s.cx + s.nx * r, p.y + (p.o ?? 0) * (yOff ? yOff(s) : 0), s.cz + s.nz * r];
 }
 
-export function loftInto(gb: GeoBuilder, samples: PSample[], closed: boolean, segs: ProfSeg[], yOff?: YOff, uvLen = 1) {
+export function loftInto(gb: GeoBuilder, samples: PSample[], closed: boolean, segs: ProfSeg[], yOff?: YOff, uvLen = 1, colorAt?: (s: PSample, x: number, z: number, base: THREE.Color) => THREE.Color) {
   const n = samples.length;
   const count = closed ? n : n - 1;
   for (const seg of segs) {
@@ -197,8 +197,9 @@ export function loftInto(gb: GeoBuilder, samples: PSample[], closed: boolean, se
       const u0 = u;
       const u1 = u + l / uvLen;
       u = u1;
-      gb.tri(a0, b0, a1, n0, n0, n1, seg.color, [u0, 0], [u0, 1], [u1, 0]);
-      gb.tri(a1, b0, b1, n1, n0, n1, seg.color, [u1, 0], [u0, 1], [u1, 1]);
+      const col = colorAt ? colorAt(s0, (a0[0] + a1[0]) / 2, (a0[2] + a1[2]) / 2, seg.color) : seg.color;
+      gb.tri(a0, b0, a1, n0, n0, n1, col, [u0, 0], [u0, 1], [u1, 0]);
+      gb.tri(a1, b0, b1, n1, n0, n1, col, [u1, 0], [u0, 1], [u1, 1]);
     }
   }
 }
