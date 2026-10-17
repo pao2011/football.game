@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { makeMatch } from './helpers';
 import { MatchAudio } from '../src/audio/MatchAudio';
-import { BELGRANO_CHANTS, GENERIC_CHANTS, chantsForStadium } from '../src/audio/chantTracks';
+import { BELGRANO_CHANTS, CLUB_CHANTS, GENERIC_CHANTS, chantsForStadium } from '../src/audio/chantTracks';
+import { TEAMS } from '../src/data/teams';
 import { getTeam } from '../src/data/teams';
 import { STADIUMS, stadiumForHome, GENERIC_STADIUMS } from '../src/data/stadiums';
 import type { AudioEngine } from '../src/audio/AudioEngine';
@@ -22,20 +23,24 @@ describe('Belgrano de Córdoba', () => {
 
   it('juega de local en el Villagra; el resto de equipos sigue con los estadios genéricos', () => {
     expect(stadiumForHome('belgrano', 8).id).toBe('villagra');
-    expect(stadiumForHome('aurora', 0).homeTeam).toBeUndefined();
+    expect(stadiumForHome('boca', 0).id).toBe('bombonera');
     for (let i = 0; i < 20; i++) expect(GENERIC_STADIUMS).toContain(stadiumForHome('x', i));
-    expect(STADIUMS.filter((s) => s.homeTeam).length).toBe(1);
+    // cada club tiene su cancha
+    for (const t of TEAMS) expect(STADIUMS.filter((s) => s.homeTeam === t.id).length).toBe(1);
   });
 
   it('los cánticos de Belgrano solo existen en su cancha', () => {
-    const v = chantsForStadium('villagra');
-    expect(v.tracks).toEqual(BELGRANO_CHANTS);
+    const v = chantsForStadium(STADIUMS.find((s) => s.id === 'villagra')!);
+    expect(v.tracks.slice(0, BELGRANO_CHANTS.length)).toEqual(BELGRANO_CHANTS);
+    expect(v.tracks.length).toBe(BELGRANO_CHANTS.length + 4);
     expect(v.special?.minute).toBe(68);
     for (const s of STADIUMS.filter((s) => s.id !== 'villagra')) {
-      const c = chantsForStadium(s.id);
-      expect(c.tracks).toEqual(GENERIC_CHANTS);
+      const c = chantsForStadium(s);
       expect(c.special).toBeUndefined();
-      expect(c.tracks.some((x) => BELGRANO_CHANTS.includes(x))).toBe(false);
+      expect(c.tracks.some((x) => CLUB_CHANTS.belgrano.includes(x))).toBe(false);
+      // la hinchada de cada club suena en su cancha; las neutrales, los genéricos
+      if (s.homeTeam && CLUB_CHANTS[s.homeTeam]) expect(c.tracks).toEqual(CLUB_CHANTS[s.homeTeam]);
+      else expect(c.tracks).toEqual(GENERIC_CHANTS);
     }
     // el tema del minuto 68 no está en la rotación normal
     expect(v.tracks.some((x) => x.url === v.special!.track.url)).toBe(false);

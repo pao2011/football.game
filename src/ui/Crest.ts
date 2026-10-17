@@ -16,6 +16,7 @@ const SYMBOLS: Record<TeamData['crest']['symbol'], string> = {
 
 export function crestSVG(t: TeamData, size = 100): string {
   const c = t.crest;
+  if (c.image) return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg"><image href="${c.image}" x="2" y="2" width="96" height="96" preserveAspectRatio="xMidYMid meet"/></svg>`;
   let shape = '';
   if (c.shape === 'shield') shape = 'M50 4 L90 14 L90 46 C90 72 72 88 50 96 C28 88 10 72 10 46 L10 14 Z';
   else if (c.shape === 'circle') shape = 'M50 4 a46 46 0 1 0 0.01 0 Z';
@@ -48,12 +49,19 @@ export function kitSVG(k: KitData, size = 54): string {
   } else if (k.pattern === 'hoops') {
     defs = `<pattern id="${id}" width="10" height="12" patternUnits="userSpaceOnUse"><rect width="10" height="6" fill="${k.shirt}"/><rect y="6" width="10" height="6" fill="${k.shirt2}"/></pattern>`;
     fill = `url(#${id})`;
+  } else if (k.pattern === 'band') {
+    defs = `<linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0.36" stop-color="${k.shirt}"/><stop offset="0.36" stop-color="${k.shirt2}"/><stop offset="0.56" stop-color="${k.shirt2}"/><stop offset="0.56" stop-color="${k.shirt}"/></linearGradient>`;
+    fill = `url(#${id})`;
+  } else if (k.pattern === 'halves') {
+    defs = `<linearGradient id="${id}" x1="0" y1="0" x2="1" y2="0"><stop offset="0.5" stop-color="${k.shirt}"/><stop offset="0.5" stop-color="${k.shirt2}"/></linearGradient>`;
+    fill = `url(#${id})`;
   } else if (k.pattern === 'sash') {
     defs = `<linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0.42" stop-color="${k.shirt}"/><stop offset="0.42" stop-color="${k.shirt2}"/><stop offset="0.58" stop-color="${k.shirt2}"/><stop offset="0.58" stop-color="${k.shirt}"/></linearGradient>`;
     fill = `url(#${id})`;
   }
   return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg"><defs>${defs}</defs>
     <path d="M30 10 L42 6 Q50 14 58 6 L70 10 L94 26 L84 44 L74 38 L74 92 L26 92 L26 38 L16 44 L6 26 Z" fill="${fill}" stroke="rgba(0,0,0,0.35)" stroke-width="2"/>
+    ${k.pattern === 'vee' ? `<path d="M36 8 L50 44 L64 8" fill="none" stroke="${k.shirt2}" stroke-width="7"/>` : ''}
     <text x="50" y="66" font-family="Rajdhani, Arial" font-weight="700" font-size="30" text-anchor="middle" fill="${k.number}">10</text></svg>`;
 }
 

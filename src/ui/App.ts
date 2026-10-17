@@ -806,7 +806,7 @@ export class App {
     const SHAPES = ['shield', 'circle', 'diamond'] as const;
     const SYMBOLS = ['star', 'ball', 'lion', 'wave', 'bolt', 'crown', 'tower', 'eagle'] as const;
     const SYMBOL_NAMES: Record<string, string> = { star: 'Estrella', ball: 'Balón', lion: 'León', wave: 'Ola', bolt: 'Rayo', crown: 'Corona', tower: 'Torre', eagle: 'Águila' };
-    const PATTERNS = ['solid', 'gradient', 'stripes', 'hoops', 'sash'] as const;
+    const PATTERNS = ['solid', 'gradient', 'stripes', 'hoops', 'sash', 'band', 'halves', 'vee'] as const;
     const PATTERN_NAMES: Record<string, string> = { solid: 'Lisa', gradient: 'Degradado', stripes: 'Rayas', hoops: 'Aros', sash: 'Banda' };
     const POS = { GK: 'POR', DEF: 'DEF', MID: 'MED', FWD: 'DEL' } as const;
     const cyc = <T,>(arr: readonly T[], cur: T, d: number) => arr[(arr.indexOf(cur) + d + arr.length) % arr.length];

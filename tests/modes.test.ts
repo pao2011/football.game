@@ -22,16 +22,16 @@ describe('Competiciones', () => {
   });
 
   it('el torneo avanza de grupos a semifinales y final hasta tener campeón', () => {
-    const t = Tournament.create('aurora', 123);
+    const t = Tournament.create('river', 123);
     let guard = 0;
     while (!t.finished && guard++ < 20) {
       const next = t.nextUserFixture();
       if (!next) break;
       // el usuario gana siempre por 2-0
-      const userHome = next.home === 'aurora';
+      const userHome = next.home === 'river';
       t.recordUserResult(next, userHome ? 2 : 0, userHome ? 0 : 2);
     }
-    expect(t.state.champion).toBe('aurora');
+    expect(t.state.champion).toBe('river');
     expect(t.state.fixtures.filter((f) => f.stage === 'Semifinal').length).toBe(2);
     expect(t.state.fixtures.some((f) => f.stage === 'Final')).toBe(true);
   });
@@ -50,7 +50,7 @@ describe('Competiciones', () => {
   });
 
   it('la carrera completa una temporada de 14 jornadas y progresa a la siguiente', () => {
-    const c = Career.create('brasa', 5);
+    const c = Career.create('boca', 5);
     expect(c.totalRounds).toBe(14);
     let guard = 0;
     while (!c.state.seasonOver && guard++ < 20) {

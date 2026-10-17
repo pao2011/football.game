@@ -137,6 +137,9 @@ describe('Regates', () => {
     for (let k = 0; k < 20; k++) {
       const { m, p } = setupShooter(40);
       const d = withDefender(m, p);
+      // duelo fijo (no depende de qué equipos hay en la lista): buen regateador contra un defensor normal
+      (p as { data: typeof p.data }).data = { ...p.data, attrs: { ...p.data.attrs, control: 82 } };
+      (d as { data: typeof d.data }).data = { ...d.data, attrs: { ...d.data.attrs, defending: 72 } };
       m.rng.next = (() => { let x = k / 20; return () => (x = (x + 0.37) % 1); })();
       m.requestSkill(p, 'stepover', 1);
       for (let i = 0; i < 30; i++) { m.step(); m.events.length = 0; }

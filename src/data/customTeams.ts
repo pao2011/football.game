@@ -99,7 +99,7 @@ export function importTeam(json: string): TeamData {
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 function validKit(k: KitData | undefined) {
-  return !!k && HEX.test(k.shirt) && HEX.test(k.shirt2) && HEX.test(k.shorts) && HEX.test(k.socks) && HEX.test(k.number) && ['solid', 'gradient', 'stripes', 'hoops', 'sash'].includes(k.pattern);
+  return !!k && HEX.test(k.shirt) && HEX.test(k.shirt2) && HEX.test(k.shorts) && HEX.test(k.socks) && HEX.test(k.number) && ['solid', 'gradient', 'stripes', 'hoops', 'sash', 'band', 'halves', 'vee'].includes(k.pattern);
 }
 function validPlayer(p: PlayerData) {
   return !!p && typeof p.name === 'string' && ['GK', 'DEF', 'MID', 'FWD'].includes(p.position) && !!p.attrs && typeof p.attrs.speed === 'number';

@@ -81,14 +81,12 @@ export class Career {
 
   static create(userTeam: string, seed = Date.now() % 100000): Career {
     const rng = new Rng(seed);
-    // la Primera División tiene 8 equipos: si hay más, queda fuera el de menor nivel (nunca el del usuario)
-    const first: TeamData[] = structuredClone(TEAMS);
-    while (first.length > 8) {
-      let worst = -1;
-      first.forEach((t, i) => { if (t.id !== userTeam && (worst < 0 || t.rating < first[worst].rating)) worst = i; });
-      first.splice(worst, 1);
-    }
-    const second = secondDivisionTeams();
+    // Primera y Segunda de 8 equipos cada una con clubes reales: el del usuario y los 7 de más nivel en Primera,
+    // los 8 siguientes en Segunda
+    const pool: TeamData[] = structuredClone(TEAMS).filter((t) => t.id !== userTeam).sort((x, y) => y.rating - x.rating);
+    const mine = structuredClone(TEAMS.find((t) => t.id === userTeam) ?? TEAMS[0]);
+    const first: TeamData[] = [mine, ...pool.slice(0, 7)];
+    const second: TeamData[] = pool.slice(7, 15);
     const teams = [...first, ...second];
     const ages: Record<string, number> = {};
     for (const t of teams) for (const p of t.players) ages[p.id] = rng.int(18, 34);
