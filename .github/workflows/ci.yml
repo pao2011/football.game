@@ -1,8 +1,9 @@
 name: CI
 
 on:
+  # PRs y main (antes también cada rama: con un PR abierto, cada push corría dos veces y se duplicaban los artefactos)
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -37,10 +38,6 @@ jobs:
           for i in $(seq 1 30); do curl -sf http://localhost:18555/estado && break; sleep 0.5; done
           curl -sf http://localhost:18555/estado | grep -q football-elite-3d
           kill %1
-      - uses: actions/upload-artifact@v4
-        with:
-          name: football-elite-3d-web
-          path: dist/
 
   windows:
     name: Ejecutable de Windows (ZIP)
@@ -72,8 +69,10 @@ jobs:
           & $iscc installer\windows.iss
           Copy-Item release\FootballElite3D-Setup.exe FootballElite3D-Setup.exe
       - uses: actions/upload-artifact@v4
+        continue-on-error: true # si la cuota de artefactos está llena no se bloquea el CI ni el Release
         with:
           name: FootballElite3D-Windows
+          retention-days: 1
           path: |
             FootballElite3D-Windows.zip
             FootballElite3D-Setup.exe
@@ -110,8 +109,10 @@ jobs:
       - name: Comprimir
         run: ditto -c -k --keepParent "release/FootballElite3D-darwin-universal/FootballElite3D.app" FootballElite3D-macOS.zip
       - uses: actions/upload-artifact@v4
+        continue-on-error: true # si la cuota de artefactos está llena no se bloquea el CI ni el Release
         with:
           name: FootballElite3D-macOS
+          retention-days: 1
           path: FootballElite3D-macOS.zip
       - name: Publicar app de macOS (Release "latest")
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -145,8 +146,10 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
+        continue-on-error: true # si la cuota de artefactos está llena no se bloquea el CI ni el Release
         with:
           name: FootballElite3D-android-apk
+          retention-days: 1
           path: android/app/build/outputs/apk/debug/app-debug.apk
       - name: Renombrar APK
         run: cp android/app/build/outputs/apk/debug/app-debug.apk FootballElite3D.apk
