@@ -94,6 +94,16 @@ export interface StandOptions {
   night: boolean;
   /** Grada alta en los laterales (no en los estadios pequeños). */
   upper?: boolean;
+  /** Techo solo sobre las plateas laterales (en vez del anillo completo). */
+  roofSides?: boolean;
+  /** En qué lateral hay bandeja alta (por defecto, en los dos). */
+  upperSides?: 'both' | 'far' | 'near' | 'none';
+  /** Colores de las butacas por sectores. */
+  seats?: string[];
+  /** Pista de atletismo (color). */
+  track?: string;
+  /** Lateral vertical de palcos (La Bombonera) del lado de la cámara (+z). */
+  palcos?: boolean;
 }
 
 export function buildStands(o: StandOptions): StandBuild {
@@ -122,12 +132,30 @@ export function buildStands(o: StandOptions): StandBuild {
   const dH = ROOF.inLong - ROOF.inEnd;
   const yOff: YOff = (s) => -dH * s.nx * s.nx;
 
+  // butacas por sectores con los colores del club (cada bandeja empieza desplazada medio sector)
+  const palette = (o.seats ?? []).map((c) => C(c));
+  const seatTone = (base: THREE.Color) => (base === seat ? 1 : base === seatDark ? 0.55 : base === seatLight ? 1.12 : 0);
+  const seatsAt = (tier: number) =>
+    palette.length === 0
+      ? undefined
+      : (_s: PSample, x: number, z: number, base: THREE.Color) => {
+          const k = seatTone(base);
+          if (!k) return base;
+          const n = palette.length * 6;
+          const sector = Math.floor(((Math.atan2(z, x * 0.7) + Math.PI) / (2 * Math.PI)) * n + tier * 0.5);
+          return palette[(sector + tier) % palette.length].clone().multiplyScalar(k);
+        };
+  // laterales con bandeja alta
+  let upperMode = o.upper === false ? 'none' : (o.upperSides ?? 'both');
+  // del lado de los palcos no hay bandeja alta
+  if (o.palcos) upperMode = upperMode === 'both' || upperMode === 'far' ? 'far' : 'none';
+
   // ---- lower bowl (continuous)
   {
     const pts: ProfPt[] = [{ d: 0, y: 0 }, ...stepPts(LOWER)];
     const cols = [wallDark, ...stepColors(LOWER, seat, seatDark)];
     const segs = polySegs(pts, cols).slice(0, pts.length - 1); // open profile
-    loftInto(opaque, ring, true, segs);
+    loftInto(opaque, ring, true, segs, undefined, 1, seatsAt(0));
   }
   // ---- middle bowl (continuous, closed solid)
   const midBack = tierBackD(MIDDLE);
@@ -145,7 +173,7 @@ export function buildStands(o: StandOptions): StandBuild {
     ];
     const cols = [glassC, soffit, wallDark, seat, ...stepColors(MIDDLE, seatLight, seatDark).slice(1), concreteDark, concreteDark];
     // stepPts(MIDDLE) starts with (d0, y0) which duplicates the fascia top -> sliced; first tread color = seat
-    loftInto(opaque, ring, true, polySegs(pts, cols));
+    loftInto(opaque, ring, true, polySegs(pts, cols), undefined, 1, seatsAt(1));
   }
   // ---- concourse floor + facade wall
   {
@@ -159,7 +187,8 @@ export function buildStands(o: StandOptions): StandBuild {
   // ---- upper tiers on both long sides (separate stands with end caps)
   const upBack = tierBackD(UPPER);
   const upTop = tierTopY(UPPER);
-  const upper = o.upper !== false;
+  const upper = upperMode !== 'none';
+  const upperSides = upperMode === 'far' ? [longN] : upperMode === 'near' ? [longP] : upperMode === 'both' ? [longP, longN] : [];
   if (upper) {
     const pts: ProfPt[] = [
       { d: midBack, y: midTop },
@@ -170,12 +199,45 @@ export function buildStands(o: StandOptions): StandBuild {
       { d: upBack, y: midTop },
     ];
     const cols = [glassC, soffit, wallDark, seat, ...stepColors(UPPER, seat, seatDark).slice(1), concreteDark, concreteDark];
-    for (const side of [longP, longN]) {
-      loftInto(opaque, side, false, polySegs(pts, cols));
+    for (const side of upperSides) {
+      loftInto(opaque, side, false, polySegs(pts, cols), undefined, 1, seatsAt(2));
       capInto(opaque, side[0], pts, concreteDark);
       capInto(opaque, side[side.length - 1], pts, concreteDark);
     }
   }
+  // ---- palcos (La Bombonera): pared recta y casi vertical de palcos vidriados sobre la bandeja media, del lado +z
+  if (o.palcos) {
+    const top = 40;
+    const floors = 7;
+    const fh = (top - midTop) / floors;
+    const segs: { a: ProfPt; b: ProfPt; color: THREE.Color }[] = [];
+    for (let i = 0; i < floors; i++) {
+      const y0 = midTop + i * fh;
+      const d0 = midBack - 0.6 + i * 0.35; // leve inclinación hacia atrás
+      segs.push({ a: { d: d0, y: y0 }, b: { d: d0, y: y0 + fh * 0.3 }, color: concrete });
+      segs.push({ a: { d: d0, y: y0 + fh * 0.3 }, b: { d: d0 + 0.35, y: y0 + fh }, color: glassC });
+    }
+    loftInto(opaque, longP, false, segs);
+    const dTop = midBack - 0.6 + floors * 0.35;
+    loftInto(opaque, longP, false, [{ a: { d: dTop, y: top }, b: { d: FACADE_D, y: top }, color: concreteDark }]);
+    const cap: ProfPt[] = [{ d: midBack - 0.6, y: midTop }, { d: dTop, y: top }, { d: FACADE_D, y: top }, { d: FACADE_D, y: midTop }];
+    capInto(opaque, longP[0], cap, concreteDark);
+    capInto(opaque, longP[longP.length - 1], cap, concreteDark);
+    // luz de los palcos de noche
+    const warm = C(0xffd9a8).multiplyScalar(0.7);
+    for (let i = 0; i < floors; i++) {
+      const y0 = midTop + i * fh + fh * 0.45;
+      const d0 = midBack - 0.62 + i * 0.35 + 0.15;
+      loftInto(glowB, longP, false, [{ a: { d: d0, y: y0 }, b: { d: d0, y: y0 + fh * 0.3 }, color: warm }]);
+    }
+  }
+  // ---- pista de atletismo alrededor del campo
+  if (o.track) {
+    const tc = C(o.track);
+    loftInto(opaque, ring, true, [{ a: { d: -7.2, y: 0.018 }, b: { d: -0.15, y: 0.018 }, color: tc }]);
+    for (const d of [-5.4, -3.6, -1.8]) loftInto(opaque, ring, true, [{ a: { d, y: 0.022 }, b: { d: d + 0.07, y: 0.022 }, color: C(0xf2f2f2) }]);
+  }
+
   // ---- glow bands (hospitality glass) at night / sunset
   {
     const warm = C(0xffd9a8);
@@ -184,7 +246,7 @@ export function buildStands(o: StandOptions): StandBuild {
     loftInto(glowB, ring, true, [
       { a: { d: lowBack - 0.04, y: gy1 - 0.25 }, b: { d: lowBack - 0.04, y: gy1 }, color: line },
     ]);
-    for (const side of upper ? [longP, longN] : []) {
+    for (const side of upperSides) {
             const uy1 = UPPER.y0 - 1.4;
       loftInto(glowB, side, false, [
         { a: { d: midBack - 0.04, y: uy1 - 0.25 }, b: { d: midBack - 0.04, y: uy1 }, color: line },
@@ -199,19 +261,19 @@ export function buildStands(o: StandOptions): StandBuild {
     const r1: ProfPt = { d: ROOF_IN_D, y: ROOF.inLong, o: 1 };
     const r2: ProfPt = { d: FACADE_D + 0.4, y: ROOF.outLong, o: 1 };
     const r3: ProfPt = { d: FACADE_D + 0.4, y: ROOF.outLong - 0.9, o: 1 };
-    loftInto(
-      roofB,
-      ring,
-      true,
-      polySegs([r0, r1, r2, r3], [roofC.clone().multiplyScalar(0.8), roofC, roofC.clone().multiplyScalar(0.65), roofC.clone().multiplyScalar(0.85)]),
-      yOff,
-    );
-    // fascia light strip + floodlight flares
-    loftInto(glowB, ring, true, [{ a: { d: ROOF_IN_D - 0.03, y: ROOF.inLong - 1.0, o: 1 }, b: { d: ROOF_IN_D - 0.03, y: ROOF.inLong - 0.7, o: 1 }, color: C(0xffffff) }], yOff);
+    // anillo completo o solo las plateas laterales
+    const roofRuns: [PSample[], boolean][] = o.roofSides ? [[longP, false], [longN, false]] : [[ring, true]];
+    const roofCols = [roofC.clone().multiplyScalar(0.8), roofC, roofC.clone().multiplyScalar(0.65), roofC.clone().multiplyScalar(0.85)];
+    for (const [run, closed] of roofRuns) {
+      loftInto(roofB, run, closed, polySegs([r0, r1, r2, r3], roofCols), yOff);
+      if (!closed) for (const end of [run[0], run[run.length - 1]]) capInto(roofB, end, [r0, r1, r2, r3], roofCols[2], yOff);
+      // fascia light strip + floodlight flares
+      loftInto(glowB, run, closed, [{ a: { d: ROOF_IN_D - 0.03, y: ROOF.inLong - 1.0, o: 1 }, b: { d: ROOF_IN_D - 0.03, y: ROOF.inLong - 0.7, o: 1 }, color: C(0xffffff) }], yOff);
+    }
     // roof underside ribs (structure)
     if (o.quality !== 'low') {
       const ribEvery = o.quality === 'high' ? 8 : 12;
-      walk(ring, true, 0, ribEvery, (x, z, nx, nz) => {
+      for (const [run, closed] of roofRuns) walk(run, closed, 0, ribEvery, (x, z, nx, nz) => {
         const s: PSample = { cx: x - nx * STAND_R, cz: z - nz * STAND_R, nx, nz, sec: 0 };
         const off = yOff(s);
         const [ax, az] = samplePoint(s, ROOF_IN_D + 0.3);
@@ -227,7 +289,7 @@ export function buildStands(o: StandOptions): StandBuild {
         roofB.quad([ax, ya - 1.4, az], [ax, ya, az], [bx, yb, bz], [bx, yb - 0.6, bz], [nz, 0, -nx], soffit);
       });
     }
-    walk(ring, true, ROOF_IN_D + 0.6, 7.5, (x, z, nx, nz) => {
+    for (const [run, closed] of roofRuns) walk(run, closed, ROOF_IN_D + 0.6, 7.5, (x, z, nx, nz) => {
       const s: PSample = { cx: x, cz: z, nx, nz, sec: 0 };
       flares.push(x - nx * 0.6, ROOF.inLong - 1.25 + yOff(s), z - nz * 0.6);
     });
@@ -331,7 +393,7 @@ export function buildStands(o: StandOptions): StandBuild {
   // LED ribbons on tier fascias (scrolling)
   const ribbonT = animate ? ledScroll : ledStatic;
   loftInto(ribbonT, ring, true, [{ a: { d: MIDDLE.d0 - 0.03, y: MIDDLE.y0 - 1.42 }, b: { d: MIDDLE.d0 - 0.03, y: MIDDLE.y0 - 0.08 }, color: C(0xffffff) }], undefined, -1.34 * LED_ASPECT);
-  for (const side of [longP, longN]) {
+  for (const side of upperSides) {
     loftInto(ribbonT, side, false, [{ a: { d: UPPER.d0 - 0.03, y: UPPER.y0 - 1.22 }, b: { d: UPPER.d0 - 0.03, y: UPPER.y0 - 0.08 }, color: C(0xffffff) }], undefined, -1.14 * LED_ASPECT);
   }
 
@@ -432,10 +494,7 @@ export function buildStands(o: StandOptions): StandBuild {
   };
   addRows(LOWER, ring, true, 0);
   addRows(MIDDLE, ring, true, 1);
-  if (upper) {
-    addRows(UPPER, longP, false, 2);
-    addRows(UPPER, longN, false, 2);
-  }
+  for (const side of upperSides) addRows(UPPER, side, false, 2);
 
   return {
     opaque: [opaque.geometry()],

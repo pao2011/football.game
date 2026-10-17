@@ -74,8 +74,10 @@ export class Stadium {
     // ---- analytic stadium shadow (roof opening) uniforms
     this.su = makeStaticShadowUniforms();
     // los estadios pequeños no tienen techo: sin la sombra del anillo del techo
-    this.roofOn = this.q.roof && !data.small;
-    this.su.uSOn.value = this.q.staticShadow && this.preset.staticShadow && !data.small ? (data.timeOfDay === 'night' ? 2 : 1) : 0;
+    const look = data.look ?? {};
+    this.roofOn = this.q.roof && !data.small && look.roof !== 'none';
+    // la sombra analítica del techo supone el anillo completo
+    this.su.uSOn.value = this.q.staticShadow && this.preset.staticShadow && !data.small && (look.roof ?? 'ring') === 'ring' ? (data.timeOfDay === 'night' ? 2 : 1) : 0;
     this.fogOverride = data.fog ? { color: '#5c6670', near: 25, far: 150 } : null;
     this.su.uSSun.value.copy(this.preset.sunDir);
     this.su.uSCore.value.set(CORE_A, CORE_B);
@@ -105,7 +107,8 @@ export class Stadium {
 
     // ---- stands, roof, boards, dugouts
     const night = data.timeOfDay === 'night';
-    const sb = buildStands({ quality, standColor: data.standColor, roofColor: data.roofColor, homeColor, awayColor, roof: this.roofOn, night, upper: !data.small });
+    const sb = buildStands({ quality, standColor: data.standColor, roofColor: data.roofColor, homeColor, awayColor, roof: this.roofOn, night, upper: !data.small,
+      roofSides: look.roof === 'sides', upperSides: look.upper, seats: look.seats, track: look.track, palcos: look.palcos });
     const staticMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0.05 });
     staticMat.onBeforeCompile = (sh) => patchStaticShadow(sh, this.su);
     this.materials.push(staticMat);

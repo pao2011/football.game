@@ -1,9 +1,9 @@
 import { Rng } from '../util/math';
 import type { FormationId, KitData, PlayerData, Position, TeamData } from './types';
 import { CRESTS } from './crests';
+import { ROSTERS } from './rosters';
 
-// Los 30 equipos de la Liga Profesional Argentina 2026 con sus colores y escudos. Belgrano lleva su plantilla real;
-// el resto, jugadores generados (se pueden editar).
+// Los 30 equipos de la Liga Profesional Argentina 2026 con sus colores, escudos y plantillas reales (rosters.ts).
 
 const FIRST = [
   'Mateo', 'Lucas', 'Thiago', 'Bruno', 'Iker', 'Dante', 'Joaquín', 'Nico', 'Álvaro', 'Enzo', 'Gael', 'Santi',
@@ -87,7 +87,7 @@ const SEEDS: TeamSeed[] = [
       { name: 'Manuel Vicentini', number: 12 },
       { name: 'Adrián Spörle', number: 3 },
       { name: 'Alcides Benítez', number: 26 },
-      { name: 'Julián Mavilla', number: 32 },
+      { name: 'Ramiro Tulián', number: 15 },
       { name: 'Francisco González Metilli', number: 11, bonus: 2 },
       { name: 'L. Passerini', number: 20 },
       { name: 'Lautaro Gutiérrez', number: 18 },
@@ -208,7 +208,8 @@ export function buildTeam(s: TeamSeed): TeamData {
   return { ...data, players };
 }
 
-export const TEAMS: TeamData[] = SEEDS.map(buildTeam);
+// plantilla real de cada club (Clausura 2026); Belgrano trae la suya en la semilla
+export const TEAMS: TeamData[] = SEEDS.map((s) => buildTeam(!s.roster && ROSTERS[s.id] ? { ...s, ...ROSTERS[s.id] } : s));
 /** Equipos del juego (sin los creados en el editor): los únicos que se usan en el modo online. */
 export const BUILTIN_TEAM_COUNT = SEEDS.length;
 
