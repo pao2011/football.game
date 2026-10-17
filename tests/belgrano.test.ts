@@ -17,7 +17,7 @@ describe('Belgrano de Córdoba', () => {
     expect(t.players[0].position).toBe('GK');
     const names = t.players.map((p) => p.name);
     expect(names).toContain('Lucas Zelarayán');
-    expect(names).toContain('Matías Daniele');
+    expect(names).toContain('Lucas Passerini');
     expect(t.players.find((p) => p.name === 'Lucas Zelarayán')!.number).toBe(10);
   });
 
