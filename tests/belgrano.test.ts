@@ -17,7 +17,7 @@ describe('Belgrano de Córdoba', () => {
     expect(t.players[0].position).toBe('GK');
     const names = t.players.map((p) => p.name);
     expect(names).toContain('Lucas Zelarayán');
-    expect(names).toContain('Matías Daniele');
+    expect(names).toContain('Lucas Passerini');
     expect(t.players.find((p) => p.name === 'Lucas Zelarayán')!.number).toBe(10);
   });
 
@@ -41,6 +41,12 @@ describe('Belgrano de Córdoba', () => {
       // la hinchada de cada club suena en su cancha; las neutrales, los genéricos
       if (s.homeTeam && CLUB_CHANTS[s.homeTeam]) expect(c.tracks).toEqual(CLUB_CHANTS[s.homeTeam]);
       else expect(c.tracks).toEqual(GENERIC_CHANTS);
+      // Boca: sus temas más los genéricos; los clubes sin audio válido, solo los genéricos
+      if (s.homeTeam === 'boca') {
+        expect(c.tracks.filter((t) => t.name.startsWith('boca')).length).toBe(2);
+        expect(c.tracks.slice(2)).toEqual(GENERIC_CHANTS);
+      }
+      if (s.homeTeam && ['centralcordoba', 'instituto', 'estudiantesrc', 'sarmiento'].includes(s.homeTeam)) expect(c.tracks).toEqual(GENERIC_CHANTS);
     }
     // el tema del minuto 68 no está en la rotación normal
     expect(v.tracks.some((x) => x.url === v.special!.track.url)).toBe(false);
