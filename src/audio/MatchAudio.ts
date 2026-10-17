@@ -22,6 +22,7 @@ export class MatchAudio {
   private specialEnded = false;
   private lastShout = -100;
   private whistleSince = 0;
+  private lastBooBed = 0;
 
   constructor(private audio: AudioEngine, private match: Match) {}
 
@@ -100,7 +101,21 @@ export class MatchAudio {
         break;
       case 'foul':
       case 'handball':
-        a.boo();
+        a.boo(1 + this.match.heat * 0.5);
+        break;
+      case 'scuffle':
+        // roce: la tribuna lo grita y abuchea
+        a.boo(0.8 + this.match.heat * 0.6);
+        if (Math.random() < 0.5) a.ooh();
+        break;
+      case 'brawl':
+        if (e.kind === 'start') {
+          a.boo(1.9);
+          a.cheer(0.55);
+          a.whistle('double');
+        } else {
+          a.boo(1.5);
+        }
         break;
       case 'tackle':
         a.tackle(at);
@@ -109,7 +124,7 @@ export class MatchAudio {
         a.groan();
         break;
       case 'card':
-        a.boo();
+        a.boo(1 + this.match.heat * 0.6);
         break;
       case 'phase':
         if (e.kind !== 'play' && this.whistling) {
@@ -158,12 +173,19 @@ export class MatchAudio {
     }
     // la hinchada local silba cuando el visitante lleva la pelota: tras 1,2 s seguidos y hasta 1 s sin ella
     const against = running && m.phase === 'play' && !m.config.training && m.possessionTeam === 1;
+    // clásico: la hinchada no para de silbar y abuchear
+    const heat = m.config.neutral ? 0 : m.heat;
+    const level = 1 + heat * 0.55;
+    if (against && heat > 0 && t - this.lastBooBed > 26 + 20 * (1 - heat)) {
+      this.lastBooBed = t;
+      this.audio.boo(0.6 + heat * 0.5);
+    }
     if (against !== this.whistling) {
       if (this.whistleSince === 0) this.whistleSince = t;
       if (t - this.whistleSince >= (against ? 1.2 : 1)) {
         this.whistling = against;
         this.whistleSince = 0;
-        this.audio.setWhistling(against);
+        this.audio.setWhistling(against, level);
       }
     } else {
       this.whistleSince = 0;

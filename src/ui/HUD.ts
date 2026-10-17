@@ -128,7 +128,7 @@ export class HUD {
         <b>${t.data.name}</b><small>${t.data.city} · ${t.formation}</small></div>`;
     el.innerHTML = `
       <div class="mi-bar mi-bar-h"></div><div class="mi-bar mi-bar-a"></div>
-      <div class="mi-top">${stadium.name.toUpperCase()}<small>${stadium.capacity.toLocaleString('es-ES')} espectadores</small></div>
+      <div class="mi-top">${this.match.config.classic ? `<span style="color:#ff5a4f">🔥 ${this.match.config.classic.toUpperCase()} 🔥</span><br>` : ''}${stadium.name.toUpperCase()}<small>${stadium.capacity.toLocaleString('es-ES')} espectadores${this.match.config.neutral ? ' · cancha neutral' : ''}</small></div>
       <div class="mi-row">${team(h, 'mi-home')}<div class="mi-vs">VS</div>${team(a, 'mi-away')}</div>
       <div class="mi-go">¡COMIENZA EL PARTIDO!</div>
       <div class="mi-skip">toca para saltar</div>`;
@@ -197,6 +197,12 @@ export class HUD {
         break;
       case 'foul':
         this.showToast(`Falta de ${teamName(e.team)}`, '#ffcf3f');
+        break;
+      case 'scuffle':
+        this.showToast(`💢 Roce: ${e.text ?? ''} empuja a un rival`, '#ff9a3f', 1.8);
+        break;
+      case 'brawl':
+        if (e.kind === 'start') this.lowerThird('<span class="warn-icon">!</span>¡SE ARMÓ LA PELEA!', `${e.text ?? ''} · ${teamName(e.team)}`, 3);
         break;
       case 'card': {
         const col = e.kind === 'yellow' ? '#ffd400' : '#ff2b3b';

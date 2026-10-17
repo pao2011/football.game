@@ -84,7 +84,7 @@ export class CrowdSamples {
   }
 
   /** La tribuna silba (true) o deja de hacerlo (false) con fundido. */
-  setWhistling(on: boolean): void {
+  setWhistling(on: boolean, level = 1): void {
     this.whistling = on;
     if (this.disposed) return;
     const ctx = this.ctx;
@@ -112,7 +112,7 @@ export class CrowdSamples {
       const g = this.whistleGain!;
       g.gain.cancelScheduledValues(t);
       g.gain.setValueAtTime(Math.max(FLOOR, g.gain.value), t);
-      g.gain.exponentialRampToValueAtTime(1.5, t + 1.2);
+      g.gain.exponentialRampToValueAtTime(1.5 * Math.max(0.3, level), t + 1.2);
     } else if (this.whistleSrc && this.whistleGain) {
       const g = this.whistleGain;
       g.gain.cancelScheduledValues(t);

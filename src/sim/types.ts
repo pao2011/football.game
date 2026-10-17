@@ -36,7 +36,8 @@ export type AnimState =
   | 'ref_card' // árbitro: muestra la tarjeta en alto
   | 'ref_warn' // árbitro: aviso verbal (dedo índice)
   | 'ref_point' // árbitro: señala la dirección del tiro libre
-  | 'ref_whistle'; // árbitro: silba
+  | 'ref_whistle' // árbitro: silba
+  | 'shove'; // empujón / roce con un rival (clásicos y peleas)
 
 export interface AnimInfo {
   state: AnimState;
@@ -75,6 +76,8 @@ export type MatchEventType =
   | 'warning' // aviso verbal del árbitro
   | 'sub' // cambio (text: 'sale ⇄ entra')
   | 'chat' // mensaje rápido del rival online
+  | 'scuffle' // roce o empujón entre rivales (partido caliente)
+  | 'brawl' // pelea entre varios jugadores (kind: start | end)
   | 'phase';
 
 export interface MatchEvent {

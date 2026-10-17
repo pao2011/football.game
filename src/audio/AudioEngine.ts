@@ -254,8 +254,8 @@ export class AudioEngine {
   }
 
   /** La tribuna silba (el visitante tiene el balón). No hace nada si no hay grabación. */
-  setWhistling(on: boolean): void {
-    this.run(() => this.samples?.setWhistling(on));
+  setWhistling(on: boolean, level = 1): void {
+    this.run(() => this.samples?.setWhistling(on, level));
   }
 
   setVolumes(v: AudioVolumes): void {
@@ -1068,26 +1068,26 @@ export class AudioEngine {
     });
   }
 
-  /** Boos and whistles after a foul. */
-  boo(): void {
+  /** Boos and whistles after a foul. intensity > 1: más gente y más tiempo (clásicos, peleas). */
+  boo(intensity = 1): void {
     this.run((ctx, g) => {
       const t = ctx.currentTime;
-      const dur = 3.2;
+      const dur = 3.2 * (0.8 + 0.2 * intensity);
       const v = this.claim('crowd', t, dur);
       v.connect(this.wetSend(g.crowdWet, 0.45));
       this.vocalCluster({
         t,
         dur,
-        count: 12,
+        count: Math.round(12 * Math.min(2, intensity)),
         pitch: [[0, 150], [0.4, 140], [1.6, 145], [dur, 115]],
         spread: 3.5,
         vowels: [[0, 'u'], [dur, 'u']],
-        env: [[0, 0], [0.4, 0.9], [2.2, 0.75], [dur, 0]],
+        env: [[0, 0], [0.4, Math.min(1, 0.9 * intensity)], [2.2, Math.min(1, 0.75 * intensity)], [dur, 0]],
         noise: 0.5,
         out: v,
         lowpass: 1600,
       });
-      for (let k = 0; k < 5; k++) this.fanWhistle(t + rand(0.1, 2.2), 0.04, v);
+      for (let k = 0; k < Math.round(5 * intensity); k++) this.fanWhistle(t + rand(0.1, dur - 1), 0.04, v);
     });
   }
 

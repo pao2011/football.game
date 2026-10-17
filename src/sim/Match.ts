@@ -17,6 +17,7 @@ import { SKILL_KINDS, SKILL_NAMES, type MatchEvent, type SkillKind } from './typ
 import { evaluateOffsidePositions, isInPenaltyArea } from './Rules';
 import { placeForRestart, type RestartType } from './SetPieces';
 import { Referee } from './Referee';
+import { HeatDirector } from './Heat';
 import { weatherEnv, type Weather } from './Weather';
 import { AERIAL_ERROR, AERIAL_NAMES, AERIAL_TIMING, aerialInReach, aerialShotVelocity, ballApproach } from './Aerial';
 
@@ -40,6 +41,12 @@ export interface MatchConfig {
   awayFormation?: FormationId;
   homeLineup?: string[];
   awayLineup?: string[];
+  /** Calor del partido 0..1 (clásicos): más roces, faltas, tarjetas, peleas y abucheos. */
+  heat?: number;
+  /** Nombre del clásico (para el marcador y el relator). */
+  classic?: string;
+  /** Sede neutral (final): no suenan los cánticos ni el espectáculo de ningún club. */
+  neutral?: boolean;
   /** Modo entrenamiento. */
   training?: 'free' | 'penalties' | 'freekicks';
   /** Clima (por defecto despejado). */
@@ -151,6 +158,9 @@ export class Match {
   readonly referee = new Referee();
   /** La reanudación espera a que el árbitro termine de amonestar. */
   private restartHoldUntil = 0;
+  /** Calor del partido 0..1 (clásicos). */
+  readonly heat: number;
+  readonly heatDir: HeatDirector | null;
   /**
    * Ley de la ventaja en curso: el árbitro deja seguir porque el equipo que recibió la falta conserva el balón.
    * Si lo pierde antes de `until`, se vuelve atrás y se pita el tiro libre; si no, se amonesta sin parar el juego.
@@ -193,6 +203,8 @@ export class Match {
       this.config = config;
     }
     this.rng = new Rng(config.seed ?? Math.floor(Math.random() * 1e9));
+    this.heat = config.training ? 0 : clamp(config.heat ?? 0, 0, 1);
+    this.heatDir = this.heat > 0 ? new HeatDirector(this, this.heat) : null;
     this.diff = DIFFICULTY[config.difficulty];
     this.weather = config.weather ?? 'clear';
     this.ball.env = weatherEnv(this.weather, config.seed ?? Math.floor(this.rng.next() * 1e6));
@@ -350,7 +362,13 @@ export class Match {
     return true;
   }
 
+  /** Alarga la pausa tras una falta, al menos `sec` segundos desde ahora. */
+  holdRestart(sec: number) {
+    this.restartHoldUntil = Math.max(this.restartHoldUntil, this.time + sec);
+  }
+
   private stepPlay(dt: number) {
+    this.heatDir?.update(dt);
     this.advanceClock(dt);
     this.tacticsAcc += dt;
     if (this.tacticsAcc >= 0.1) {
@@ -1243,7 +1261,8 @@ export class Match {
         if (!involved && !slide) continue;
         // Una entrada de pie de frente con poco contacto es un choque legal (el portador se tambalea)
         const fromBehind = Math.cos(p.facing - o.facing) > 0.5;
-        if (!slide && !fromBehind && d > 0.3) {
+        // en un partido caliente muchos de esos choques se sancionan como falta
+        if (!slide && !fromBehind && d > 0.3 && !(this.heat > 0 && this.rng.next() < this.heat * 0.5)) {
           a.done = true;
           return;
         }
@@ -1316,7 +1335,7 @@ export class Match {
     const fromBehind = Math.cos(offender.facing - victim.facing) > 0.5;
     const speed = Math.hypot(offender.vel.x, offender.vel.z);
     const ballDist = dist2D(victim.pos, this.ball.pos);
-    let severity = (slide ? 0.35 : 0.1) + (fromBehind ? 0.3 : 0) + clamp((speed - 5) / 10, 0, 0.25) + clamp((ballDist - 1.5) / 4, 0, 0.3);
+    let severity = (slide ? 0.35 : 0.1) + (fromBehind ? 0.3 : 0) + clamp((speed - 5) / 10, 0, 0.25) + clamp((ballDist - 1.5) / 4, 0, 0.3) + this.heat * 0.12;
     // Ocasión manifiesta de gol: el rival iba solo hacia el arco y el infractor era el último defensor
     const goalDist = Math.abs(vTeam.attackGoal.x - victim.pos.x);
     const lastMan = oTeam.active.filter((d) => !d.isGK && oTeam.u(d.pos) < oTeam.u(victim.pos)).length === 0;
@@ -1363,6 +1382,8 @@ export class Match {
       const g = vTeam.attackGoal;
       this.referee.signal('point', this.time, refAt, new Vector3(this.referee.pos.x + Math.sign(g.x - this.referee.pos.x) * 10, 0, this.referee.pos.z), 1.4);
     }
+    // partido caliente: la falta puede acabar en pelea (el juego ya está detenido)
+    this.heatDir?.afterFoul(offender, victim, severity, card);
     void severity;
     severity = 0;
     if (inBox) {
@@ -1737,6 +1758,7 @@ export class Match {
     if (r.stage === 'pause') {
       // Los jugadores frenan tras el silbato
       for (const p of this.active) p.desiredVel.multiplyScalar(0.85);
+      this.heatDir?.stepBrawl();
       this.movePlayers(dt);
       if (!this.ball.held) this.ball.step(dt);
       this.advanceClock(dt);

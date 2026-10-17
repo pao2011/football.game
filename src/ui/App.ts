@@ -10,6 +10,7 @@ import type { MatchView } from '../render/MatchView';
 import { deleteReplay, encodeFrames, lastSeconds, listReplays, MAX_SAVED_REPLAYS, saveReplay, type SavedReplay } from '../modes/SavedReplays';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
+import { classicName, matchHeat } from '../data/classics';
 import { GENERIC_STADIUMS, STADIUMS, getStadium, stadiumForHome } from '../data/stadiums';
 import { BUILTIN_TEAM_COUNT, TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
 import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
@@ -21,7 +22,7 @@ import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
 import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, versusDevicesLabel, type Action } from '../input/Input';
 import { MAX_SUBS, type MatchConfig } from '../sim/Match';
 import { manOfTheMatch, playerRatings } from '../sim/Ratings';
-import { Career, SQUAD_MAX, SQUAD_MIN, buyPlayer, marketOffers, playerPrice, sellPlayer } from '../modes/Career';
+import { Career, TORNEO_NAMES, SQUAD_MAX, SQUAD_MIN, buyPlayer, marketOffers, playerPrice, sellPlayer } from '../modes/Career';
 import { Tournament } from '../modes/Tournament';
 import type { Fixture, StandingRow } from '../modes/Competition';
 import { crestSVG, kitSVG } from './Crest';
@@ -299,7 +300,7 @@ export class App {
           <button class="menu-item" data-act="quick">Partido rápido<small>Elige equipos, estadio y dificultad</small></button>
           <button class="menu-item" data-act="online">Online<small>Division Rivals, amistosos y salas con amigos</small></button>
           <button class="menu-item" data-act="tournament">Copa Élite<small>Torneo: fase de grupos y eliminatorias</small></button>
-          <button class="menu-item" data-act="career">Carrera<small>Temporadas de liga con tu club</small></button>
+          <button class="menu-item" data-act="career">Carrera<small>Liga de 30 equipos: Apertura, Clausura y playoffs</small></button>
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
           <button class="menu-item" data-act="editor">✏️ Editor de equipos<small>Crea tu equipo · exportar e importar</small></button>
@@ -438,6 +439,11 @@ export class App {
   // ==================================================================
 
   playMatch(config: MatchConfig, stadiumId: string, ctx: MatchContext, online: OnlineLink | null = null) {
+    // los clásicos son partidos calientes en cualquier modo
+    if (config.heat === undefined && !config.training) {
+      const cl = classicName(config.home.id, config.away.id);
+      if (cl) config = { ...config, heat: matchHeat(config.home.id, config.away.id), classic: cl };
+    }
     this.lastMatch = { config, ctx };
     this.lastStadiumId = stadiumId;
     const home = config.home;
@@ -1016,6 +1022,7 @@ export class App {
     if (ctx.mode === 'quick') return STADIUMS[this.quick.stadium].id;
     if (ctx.mode === 'training') return STADIUMS[2].id;
     if (ctx.mode === 'online') return GENERIC_STADIUMS[ctx.start.seed % GENERIC_STADIUMS.length].id;
+    if (ctx.fixture.venue) return ctx.fixture.venue;
     const home = ctx.fixture.home;
     return stadiumForHome(home, TEAMS.findIndex((t) => t.id === home)).id;
   }
@@ -1092,8 +1099,8 @@ export class App {
       const userIdx = ctx.fixture.home === this.career.state.userTeam ? 0 : 1;
       const scorers = [...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff].filter((p) => p.goals > 0).flatMap((p) => Array(p.goals).fill(p.id));
       const d = disciplineOf([...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff]);
-      availabilityMsgs = this.career.recordUserResult(ctx.fixture, r.home, r.away, scorers, d);
-      if (this.career.state.seasonOver && this.career.standings()[0]?.team === this.career.state.userTeam) addAch('league');
+      availabilityMsgs = this.career.recordUserResult(ctx.fixture, r.home, r.away, scorers, d, r.penalties ?? undefined);
+      if (this.career.state.phase === 'done' && this.career.torneoChampion === this.career.state.userTeam) addAch('league');
     }
     if (ctx.mode === 'online') {
       window.clearInterval(this.onlineWatch);
@@ -1560,57 +1567,94 @@ export class App {
   // Carrera
   // ==================================================================
 
+  private careerView: 'resumen' | 'A' | 'B' | 'anual' | 'playoffs' = 'resumen';
+
   careerHub() {
     this.setMenuMode(true);
     this.career = this.career ?? Career.load();
     const c = this.career;
     if (!c) {
-      this.pickTeamScreen('Elige el club que dirigirás', 'MODO CARRERA', (id) => { this.career = Career.create(id); this.careerHub(); }, () => this.mainMenu());
+      this.pickTeamScreen('Elige el club que dirigirás en la Liga Profesional', 'MODO CARRERA', (id) => { this.career = Career.create(id); this.careerView = 'resumen'; this.careerHub(); }, () => this.mainMenu());
       return;
     }
     const st = c.state;
     const lookup = (id: string) => c.team(id);
     const next = c.nextUserFixture();
-    const table = c.standings();
-    const myPos = table.findIndex((r) => r.team === st.userTeam) + 1;
-    const recent = st.fixtures.filter((f) => f.played).slice(-8).reverse();
-    const roundFx = next ? st.fixtures.filter((f) => f.round === next.round) : [];
-    const history = st.history.map((h) => `<div class="row"><span>Temporada ${h.season}</span><span>Campeón: ${esc(lookup(h.champion).name)} · Tu posición: ${h.userPosition}.º</span></div>`).join('');
+    const VIEWS = ['resumen', 'A', 'B', 'anual', 'playoffs'] as const;
+    const VIEW_NAMES = { resumen: 'Resumen', A: 'Zona A', B: 'Zona B', anual: 'Tabla anual', playoffs: 'Playoffs' } as const;
+    const view = this.careerView;
+    const zonePos = c.standings().findIndex((r) => r.team === st.userTeam) + 1;
+    const zoneNote = '<div class="muted" style="font-size:12px;margin-top:6px">Los 8 primeros de cada zona pasan a los playoffs.</div>';
+    const fxLine = (f: Fixture) => {
+      const cl = c.classicOf(f);
+      return `${cl ? `<div class="crumb" style="color:var(--danger)">🔥 ${esc(cl.toUpperCase())}</div>` : ''}${this.fixtureHTML(f, st.userTeam, lookup)}`;
+    };
+    const phaseName = st.phase === 'regular' ? 'Fase regular' : st.phase === 'playoffs' ? 'Playoffs' : 'Torneo terminado';
+    let body = '';
+    if (view === 'A' || view === 'B') {
+      body = `<div class="panel"><h3>Zona ${view}</h3>${this.tableHTML(c.zoneStandings(view), st.userTeam, lookup)}${zoneNote}</div>`;
+    } else if (view === 'anual') {
+      body = `<div class="panel"><h3>Tabla anual ${st.season}</h3>${this.tableHTML(c.annualStandings(), st.userTeam, lookup)}<div class="muted" style="font-size:12px;margin-top:6px">Suma los partidos de fase regular del Apertura y el Clausura (30 equipos).</div></div>`;
+    } else if (view === 'playoffs') {
+      const rounds = [...new Set(c.playoffFx.map((f) => f.round))];
+      body = rounds.length
+        ? rounds.map((r) => {
+          const fx = c.playoffFx.filter((f) => f.round === r);
+          return `<div class="panel" style="margin-bottom:12px"><h3>${esc(fx[0].stage)}</h3>${fx.map((f) => fxLine(f)).join('')}${fx[0].venue ? `<div class="muted" style="font-size:12px">Sede neutral: ${esc(getStadium(fx[0].venue).name)}</div>` : ''}</div>`;
+        }).join('')
+        : '<div class="panel"><p class="muted">Los playoffs empiezan al terminar las 15 fechas: pasan los 8 primeros de cada zona (octavos, cuartos, semifinales y final en cancha neutral).</p></div>';
+    } else {
+      const roundFx = next ? st.fixtures.filter((f) => f.round === next.round && f !== next) : [];
+      const recent = st.fixtures.filter((f) => f.played).slice(-8).reverse();
+      const history = st.history.map((h) => `<div class="row"><span>Temporada ${h.season}</span><span>Apertura: ${esc(lookup(h.apertura).short)} · Clausura: ${esc(lookup(h.clausura).short)} · Anual: ${esc(lookup(h.annual).short)} · Tu puesto: ${h.userPosition}.º</span></div>`).join('');
+      const champ = c.torneoChampion;
+      body = `<div class="grid2"><div>
+          <div class="panel"><h3>Zona ${c.userZone}</h3>${this.tableHTML(c.standings(), st.userTeam, lookup)}${zoneNote}</div>
+          ${st.news?.length ? `<div class="panel" style="margin-top:16px"><h3>Noticias</h3>${st.news.slice(0, 6).map((n) => `<div class="muted" style="font-size:13px;margin-bottom:4px">${esc(n)}</div>`).join('')}</div>` : ''}
+        </div><div>
+          ${champ ? `<div class="panel" style="margin-bottom:16px"><b>${TORNEO_NAMES[st.torneo]}: campeón ${esc(lookup(champ).name)}</b><br><span class="muted">${esc(c.userPlayoffResult())}</span></div>` : ''}
+          ${next ? `<div class="panel" style="margin-bottom:16px"><div class="crumb">${esc(next.stage.toUpperCase())}${next.venue ? ' · CANCHA NEUTRAL' : ''}</div>${fxLine(next)}${next.venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(next.venue).name)}</div>` : ''}${roundFx.length ? '<div class="muted" style="margin-top:8px">Resto de la fecha:</div>' + roundFx.map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('') : ''}</div>`
+            : st.phase !== 'done' ? `<div class="panel" style="margin-bottom:16px"><b>${c.userPlayoffResult()}</b><div class="muted">Simula el resto del torneo para seguir adelante.</div></div>` : ''}
+          <div class="panel"><h3>Últimos resultados</h3>${recent.map((f) => `<div class="muted" style="font-size:11px">${esc(f.stage)}</div>${this.fixtureHTML(f, st.userTeam, lookup)}`).join('') || '<span class="muted">Aún no se jugó ningún partido.</span>'}</div>
+          ${history ? `<div class="panel" style="margin-top:16px"><h3>Historial</h3>${history}</div>` : ''}
+        </div></div>`;
+    }
+    const lastBtn = st.seasonOver ? '<button class="btn primary" data-act="nextSeason">Nueva temporada</button>'
+      : st.phase === 'done' ? '<button class="btn primary" data-act="clausura">Empezar el Clausura</button>'
+      : next ? '<button class="btn primary" data-act="play">Jugar partido</button>' : '<button class="btn primary" data-act="simRest">Simular el resto</button>';
     this.show(`
-      <div class="screen-header"><div><div class="crumb">CARRERA · TEMPORADA ${st.season} · ${esc(c.user.name)} · PRESUPUESTO ${(st.budget ?? 0).toFixed(1)} M</div><h2>${c.division === 1 ? 'Primera División' : 'Segunda División'}</h2></div></div>
+      <div class="screen-header"><div><div class="crumb">CARRERA · TEMPORADA ${st.season} · ${esc(c.user.name)} · PRESUPUESTO ${(st.budget ?? 0).toFixed(1)} M${st.phase === 'regular' ? ` · ${zonePos}.º EN LA ZONA ${c.userZone}` : ''}</div><h2>${TORNEO_NAMES[st.torneo]} · ${phaseName}</h2></div></div>
       <div class="screen-body">
-        ${st.seasonOver ? `<div class="panel" style="margin-bottom:16px"><b>¡Temporada terminada!</b> Campeón: ${esc(lookup(table[0].team).name)}. Tu equipo terminó ${myPos}.º.</div>` : ''}
-        <div class="grid2">
-          <div><div class="panel"><h3>Clasificación</h3>${this.tableHTML(table, st.userTeam, lookup)}<div class="muted" style="font-size:12px;margin-top:6px">${c.division === 1 ? 'Los 2 últimos descienden a Segunda.' : 'Los 2 primeros ascienden a Primera.'}</div></div>
-            ${st.divisions ? `<details class="panel" style="margin-top:16px"><summary>${c.division === 1 ? 'Segunda División' : 'Primera División'}${st.otherTable ? ' · temporada anterior' : ''}</summary>${st.otherTable ? this.tableHTML(st.otherTable, st.userTeam, lookup) : c.divisionTeams(c.division === 1 ? 2 : 1).map((id) => `<div class="row"><span>${esc(lookup(id).name)}</span><span class="muted">${lookup(id).rating}</span></div>`).join('')}</details>` : ''}
-            ${st.news?.length ? `<div class="panel" style="margin-top:16px"><h3>Noticias</h3>${st.news.slice(0, 6).map((n) => `<div class="muted" style="font-size:13px;margin-bottom:4px">${esc(n)}</div>`).join('')}</div>` : ''}
-          </div>
-          <div>
-            ${next ? `<div class="panel" style="margin-bottom:16px"><div class="crumb">${esc(next.stage)} DE ${c.totalRounds}</div>${this.fixtureHTML(next, st.userTeam, lookup)}<div class="muted" style="margin-top:8px">Resto de la jornada:</div>${roundFx.filter((f) => f !== next).map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('')}</div>` : ''}
-            <div class="panel"><h3>Últimos resultados</h3>${recent.map((f) => `<div class="muted" style="font-size:11px">${esc(f.stage)}</div>${this.fixtureHTML(f, st.userTeam, lookup)}`).join('') || '<span class="muted">Aún no se jugó ningún partido.</span>'}</div>
-            ${history ? `<div class="panel" style="margin-top:16px"><h3>Historial</h3>${history}</div>` : ''}
-          </div>
-        </div>
+        ${this.stepper('Ver', VIEW_NAMES[view], 'view')}
+        ${body}
       </div>
       <div class="screen-footer">
         <button class="btn" data-act="back">Menú</button>
         <button class="btn danger" data-act="abandon">Abandonar carrera</button>
         <button class="btn" data-act="squad">Plantilla y alineación</button>
         <button class="btn" data-act="market">Mercado</button>
-        ${st.seasonOver ? '<button class="btn primary" data-act="nextSeason">Nueva temporada</button>' : next ? '<button class="btn primary" data-act="play">Jugar partido</button>' : ''}
+        ${next && !st.seasonOver && st.phase !== 'done' ? '<button class="btn" data-act="simRound">Simular fecha</button>' : ''}
+        ${lastBtn}
       </div>`, {
       back: () => this.mainMenu(),
       abandon: () => { Career.clear(); this.career = null; this.careerHub(); },
       squad: () => this.squadScreen(),
       market: () => this.marketScreen(),
+      viewPrev: () => { this.careerView = VIEWS[(VIEWS.indexOf(view) + VIEWS.length - 1) % VIEWS.length]; this.careerHub(); },
+      viewNext: () => { this.careerView = VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length]; this.careerHub(); },
+      simRound: () => {
+        c.simulateUserFixture();
+        this.careerHub();
+      },
+      simRest: () => { c.simulateUntilUserOrEnd(); this.careerHub(); },
+      clausura: () => { c.startClausura(); this.careerView = 'resumen'; this.careerHub(); },
       nextSeason: () => {
         const res = c.startNextSeason();
-        const moveMsg = res.userMove === 'up' ? '<p style="color:var(--accent)"><b>¡Ascenso! El año que viene juegas en Primera.</b></p>' : res.userMove === 'down' ? '<p style="color:var(--danger)"><b>Descenso: el año que viene juegas en Segunda.</b></p>' : '';
         const ch = res.changes.slice(0, 12).map((x) => `<div class="row"><span>${esc(x.name)}</span><span style="color:${x.delta > 0 ? 'var(--accent)' : 'var(--danger)'}">${x.delta > 0 ? '+' : ''}${x.delta}</span></div>`).join('');
-        this.show(`<div class="screen-header"><div><div class="crumb">FIN DE TEMPORADA</div><h2>Temporada ${st.season}</h2></div></div>
-          <div class="screen-body"><div class="grid2"><div class="panel"><p>Campeón: <b>${esc(lookup(res.champion).name)}</b></p><p>Tu posición final: <b>${res.position}.º</b></p>${moveMsg}<p>Suben a Primera: ${res.promoted.map((id) => esc(lookup(id).name)).join(', ')}</p><p>Bajan a Segunda: ${res.relegated.map((id) => esc(lookup(id).name)).join(', ')}</p><p>Ingresos de la temporada: <b>+${res.income} M</b> (presupuesto: ${(st.budget ?? 0).toFixed(1)} M)</p></div>
+        this.show(`<div class="screen-header"><div><div class="crumb">FIN DE TEMPORADA</div><h2>Temporada ${st.season - 1}</h2></div></div>
+          <div class="screen-body"><div class="grid2"><div class="panel"><p>Campeón del Apertura: <b>${esc(lookup(res.apertura).name)}</b></p><p>Campeón del Clausura: <b>${esc(lookup(res.clausura).name)}</b></p><p>Tabla anual: <b>${esc(lookup(res.annual).name)}</b></p><p>Tu puesto en la tabla anual: <b>${res.position}.º</b></p><p>Ingresos de la temporada: <b>+${res.income} M</b> (presupuesto: ${(st.budget ?? 0).toFixed(1)} M)</p></div>
           <div class="panel"><h3>Evolución de tu plantilla</h3>${ch || '<span class="muted">Sin cambios</span>'}</div></div></div>
-          <div class="screen-footer"><button class="btn primary" data-act="ok">Continuar</button></div>`, { ok: () => this.careerHub() }, () => this.careerHub());
+          <div class="screen-footer"><button class="btn primary" data-act="ok">Continuar</button></div>`, { ok: () => { this.careerView = 'resumen'; this.careerHub(); } }, () => this.careerHub());
       },
       play: () => {
         if (!next) return;
@@ -1619,7 +1663,8 @@ export class App {
         const side = next.home === st.userTeam ? 0 : 1;
         this.playMatch({
           home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: side,
-          halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty, extraTime: false, penalties: false,
+          halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty, extraTime: next.knockout, penalties: next.knockout,
+          neutral: !!next.venue,
           homeFormation: side === 0 ? st.formation : undefined, awayFormation: side === 1 ? st.formation : undefined,
           homeLineup: side === 0 ? this.career?.matchLineup() ?? st.lineup : undefined, awayLineup: side === 1 ? this.career?.matchLineup() ?? st.lineup : undefined,
           weather: randomWeather(Math.random()),
