@@ -5,6 +5,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     chunkSizeWarningLimit: 1500,
+    // un solo archivo JS (scripts/single-file.mjs lo incrusta en jugar.html)
+    rollupOptions: { output: { inlineDynamicImports: true } },
   },
   test: {
     environment: 'node',

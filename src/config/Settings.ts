@@ -28,6 +28,8 @@ export interface GameSettings {
   musicVolume: number;
   sfxVolume: number;
   crowdVolume: number;
+  /** Voz del relator (0 = sin narración). */
+  commentaryVolume: number;
   /** Volumen de los sonidos del balón (dentro de los efectos). */
   ballVolume: number;
   /** Volumen del silbato del árbitro (dentro de los efectos). */
@@ -82,6 +84,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   musicVolume: 0.5,
   sfxVolume: 0.9,
   crowdVolume: 0.7,
+  commentaryVolume: 0.9,
   ballVolume: 1,
   refereeVolume: 1,
   vibration: true,

@@ -15,6 +15,7 @@
  * OfflineAudioContext) can be injected for offline rendering / tests.
  */
 
+import { StadiumChants, type ChantTrack } from './StadiumChants';
 import { MenuMusic, STEP } from './MenuMusic';
 
 export interface AudioVolumes {
@@ -150,6 +151,9 @@ export class AudioEngine {
   private voices: Record<BusKind, Voice[]> = { sfx: [], crowd: [] };
 
   private amb: Ambience | null = null;
+  /** Cánticos grabados: si hay, sustituyen a los cánticos y bombos sintetizados. */
+  private chantTracks: ChantTrack[] = [];
+  private real: StadiumChants | null = null;
   private weatherNodes: { out: GainNode; sources: AudioScheduledSourceNode[] } | null = null;
   private roll: { src: AudioBufferSourceNode; bp: BiquadFilterNode; gain: GainNode; pan: StereoPannerNode } | null = null;
   private excitement = 0;
@@ -214,6 +218,11 @@ export class AudioEngine {
     });
   }
 
+  /** Grabaciones de cánticos de cancha que suenan en las tribunas durante los partidos. */
+  setChantTracks(tracks: ChantTrack[]): void {
+    this.chantTracks = tracks.slice();
+  }
+
   setVolumes(v: AudioVolumes): void {
     if (!v) return;
     this.vols = {
@@ -252,6 +261,8 @@ export class AudioEngine {
     if (this.disposed) return;
     this.safe(() => {
       this.stopTimers();
+      this.real?.stop();
+      this.real = null;
       if (this.amb) for (const s of this.amb.sources) this.tryStop(s);
       if (this.roll) this.tryStop(this.roll.src);
       this.roll = null;
@@ -862,8 +873,14 @@ export class AudioEngine {
 
       this.amb = { out, tone, murmur, babble, swell, sources, timer: null, nextChant: t + 1.5, nextBar: t + 0.6, bar: 0 };
       this.applyExcitement(0.05);
-      // first chant soon, then periodic via timer
-      this.scheduleChant(t + 1.5);
+      if (this.chantTracks.length && StadiumChants.supported(ctx)) {
+        this.real = new StadiumChants(ctx, this.chantTracks, g.crowd, g.crowdWet);
+        this.real.setExcitement(this.excitement);
+        this.real.start(1.5);
+      } else {
+        // first chant soon, then periodic via timer
+        this.scheduleChant(t + 1.5);
+      }
       this.amb.nextChant = t + rand(10, 18);
       if (!this.isOffline(ctx)) {
         this.amb.timer = setInterval(() => this.ambienceTick(), 500);
@@ -876,6 +893,8 @@ export class AudioEngine {
       const a = this.amb;
       if (!a) return;
       this.amb = null;
+      this.real?.stop();
+      this.real = null;
       if (a.timer) clearInterval(a.timer);
       const t = ctx.currentTime;
       a.out.gain.cancelScheduledValues(t);
@@ -889,6 +908,7 @@ export class AudioEngine {
   setExcitement(x: number): void {
     this.excitement = clamp01(x);
     this.run(() => this.applyExcitement(0.6));
+    this.real?.setExcitement(this.excitement);
   }
 
   /** Goal roar, intensity 0..1. */
@@ -1580,6 +1600,8 @@ export class AudioEngine {
     const ctx = this.ctx;
     if (!a || !ctx || !this.unlocked) return;
     this.safe(() => {
+      // con cánticos grabados la hinchada real se encarga del canto y de los bombos
+      if (this.real) return;
       const now = ctx.currentTime;
       if (now >= a.nextChant - 0.6) {
         this.scheduleChant(Math.max(now + 0.05, a.nextChant));
@@ -1601,6 +1623,10 @@ export class AudioEngine {
   chant(boost = 1): void {
     this.run((ctx) => {
       if (!this.amb) return;
+      if (this.real) {
+        this.real.boost(clamp01(boost));
+        return;
+      }
       this.scheduleChant(ctx.currentTime + 0.05, clamp01(boost));
       this.amb.nextChant = Math.max(this.amb.nextChant, ctx.currentTime + 12);
     });

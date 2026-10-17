@@ -41,7 +41,12 @@ Antes de programar se evaluaron Godot, Unity y Unreal. El entorno de desarrollo 
 - **física e IA propias** a medida del fútbol (más control que un motor genérico);
 - un **ejecutable nativo** con Electron, sin licencias ni servicios de pago.
 
-Todos los recursos (modelos, animaciones, estadio, público, texturas, escudos, música y sonidos) se **generan proceduralmente** en código. No se usa ningún recurso externo, marca, escudo o nombre protegido.
+Los recursos (modelos, animaciones, estadio, público, texturas, escudos, música y sonidos) se **generan proceduralmente** en código, salvo los **cánticos de cancha**, que son grabaciones reales de hinchadas argentinas (`src/assets/chants/`). No se usa ninguna marca, escudo o nombre protegido.
+
+### Sonido de cancha y relator
+
+- **Cánticos reales** ("Bombo y repique", "Vamos que tenemos que ganar", "A ver si ponen huevos", "La vida es un carnaval", "Que esta tarde tenemos que ganar"): se turnan durante el partido y no suenan "pegados" encima del juego: pasan por una cadena de estadio (`src/audio/StadiumChants.ts`) con micrófono lejano (filtros), anchura de tribuna (efecto Haas), coro, ecos de la tribuna de enfrente y la reverb del estadio. Suben con la emoción del partido, en el recibimiento y tras cada gol. Volumen: *Configuración → Sonido → Público y cánticos*.
+- **Relator con voz** (`src/audio/Commentary.ts`): narra el arranque, remates, atajadas, palos, faltas, tarjetas, córners, penales, cambios, el descuento, el entretiempo y el final, y grita los goles con el nombre del goleador. Usa la mejor voz en castellano del sistema (prioriza rioplatense y voces naturales/neuronales: en Edge *Microsoft Tomás Online (Natural)*, en Chrome *Google español*, en Android el TTS de Google). Volumen: *Configuración → Sonido → Narrador* (al cambiarlo dice una frase de prueba).
 
 ## 2. Ubicación
 

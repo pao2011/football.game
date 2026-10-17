@@ -10,9 +10,12 @@ import { MatchView } from '../render/MatchView';
 import type { MatchEvent } from '../sim/types';
 import { HUD } from '../ui/HUD';
 import { Commentary } from '../ui/Commentary';
+import { getLang } from '../i18n';
 import { AchievementTracker } from '../modes/Achievements';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { MatchAudio } from '../audio/MatchAudio';
+import { Narrator } from '../audio/Narrator';
+import { getSpeech } from '../audio/Speech';
 import { activePad } from '../input/pads';
 import { TouchControls, isTouchDevice } from '../input/TouchControls';
 import { loadJSON, saveJSON } from '../save/Storage';
@@ -77,6 +80,8 @@ export class MatchRunner {
   private commentary: Commentary | null = null;
   readonly controller: HumanController | null;
   readonly audio: MatchAudio;
+  /** Relator con voz. */
+  readonly narrator: Narrator;
   /** Controles táctiles (solo en móvil o si se activan en la configuración). */
   readonly touch: TouchControls | null;
   private acc = 0;
@@ -204,7 +209,7 @@ export class MatchRunner {
       this.achievements = new AchievementTracker(this.match, config.humanTeam as 0 | 1);
       this.achievements.onUnlock = (a) => this.hud.showBanner(`🏆 ${a.icon} ${escapeHtml(a.name)}`, `Logro desbloqueado · ${escapeHtml(a.desc)}`, '#ffd23f', 3.2);
     }
-    this.commentary = settings.commentary !== false && !config.training ? new Commentary(uiRoot, this.match, !!settings.commentaryVoice) : null;
+    this.commentary = settings.commentary !== false && !config.training ? new Commentary(uiRoot, this.match, getLang() !== 'es' && settings.commentaryVolume > 0) : null;
     this.touch = wantTouch && (this.controller || (isGuest && !online?.spectator)) ? new TouchControls(uiRoot, input) : null;
     document.body.classList.toggle('touch', !!this.touch);
     if (this.touch) {
@@ -217,6 +222,9 @@ export class MatchRunner {
     }
     this.audio = new MatchAudio(audioEngine, this.match);
     this.audio.start();
+    this.narrator = new Narrator(getSpeech(), this.match, stadium.name);
+    // el relator con voz habla castellano; en otros idiomas habla el comentarista de texto
+    this.narrator.volume = () => (getLang() !== 'es' ? 0 : (settings.commentaryVolume ?? 0.9) * settings.masterVolume);
     // hinchada: el sonido de cada cohete sale de su explosión
     this.view.stadium.fans.onBurst = (d) => audioEngine.firework(d);
     this.audioEngine = audioEngine;
@@ -267,6 +275,7 @@ export class MatchRunner {
         // recibimiento: fuegos artificiales, bengalas, papelitos y cántico con bombo
         this.view.stadium.fans.welcome();
         this.audioEngine.chant(1);
+        this.narrator.welcome();
         this.view.director.startIntro(INTRO_SECONDS);
         this.introEndAt = performance.now() + (INTRO_SECONDS * 1000) / this.timeScale;
       }
@@ -345,6 +354,7 @@ export class MatchRunner {
       this.hud.powerAnchor = null;
     }
     this.audio.update(this.view.excitement, this.view.camera);
+    if (!this.paused) this.narrator.update(dt);
     this.hud.update(dt);
     this.commentary?.update();
     if (this.touch && team) {
@@ -373,6 +383,7 @@ export class MatchRunner {
     const m = this.match;
     this.hud.onEvent(e);
     this.commentary?.onEvent(e);
+    this.narrator.onEvent(e);
     this.achievements?.onEvent(e);
     this.audio.onEvent(e);
     if (e.type === 'net' && e.x !== undefined && e.z !== undefined) this.view.netImpact(e.x, e.z, e.power ?? 0.6);
@@ -573,6 +584,7 @@ export class MatchRunner {
   pause() {
     if (this.match.finished) return;
     this.paused = true;
+    this.narrator.stop();
     if (this.online) {
       this.input.suppressed = true;
       // la pausa detiene el partido para los dos (un número limitado de veces); el espectador solo abre el menú
@@ -619,6 +631,7 @@ export class MatchRunner {
     this.haltEl?.remove();
     cancelAnimationFrame(this.raf);
     this.audio.stop();
+    this.narrator.stop();
     this.hud.dispose();
     this.commentary?.dispose();
     this.input2?.dispose();
