@@ -1,7 +1,9 @@
 import { Rng } from '../util/math';
 import type { FormationId, KitData, PlayerData, Position, TeamData } from './types';
+import { CRESTS } from './crests';
 
-// Equipos ficticios (nombres, escudos y equipaciones originales) y Belgrano de Córdoba, con su plantilla real.
+// Los 30 equipos de la Liga Profesional Argentina 2026 con sus colores y escudos. Belgrano lleva su plantilla real;
+// el resto, jugadores generados (se pueden editar).
 
 const FIRST = [
   'Mateo', 'Lucas', 'Thiago', 'Bruno', 'Iker', 'Dante', 'Joaquín', 'Nico', 'Álvaro', 'Enzo', 'Gael', 'Santi',
@@ -41,79 +43,34 @@ export interface RosterEntry {
   bonus?: number;
 }
 
+/** Equipación: camiseta, color secundario, diseño, pantalón, medias y dorsal. */
+const kit = (shirt: string, shirt2: string, pattern: KitData['pattern'], shorts: string, socks: string, number: string): KitData => ({ shirt, shirt2, pattern, shorts, socks, number });
+const crest = (id: string, primary: string, secondary: string): TeamData['crest'] => ({ shape: 'shield', primary, secondary, symbol: 'none', image: CRESTS[id] });
+const GK_A = kit('#e8ff3a', '#a8c800', 'solid', '#1a1a1a', '#e8ff3a', '#1a1a1a');
+const GK_B = kit('#ff7a1a', '#c45200', 'solid', '#2a1200', '#ff7a1a', '#2a1200');
+const GK_C = kit('#1fd18a', '#0f8a5a', 'solid', '#0f3a2a', '#1fd18a', '#0f3a2a');
+const GK_D = kit('#8a2be2', '#5a1aa0', 'solid', '#1a0a30', '#8a2be2', '#ffffff');
+
+/** Liga Profesional Argentina 2026: los 30 equipos de Primera División, con sus colores. */
 const SEEDS: TeamSeed[] = [
-  {
-    id: 'aurora', name: 'Aurora FC', short: 'AUR', city: 'Puerto Aurora',
-    crest: { shape: 'shield', primary: '#5b2bb5', secondary: '#f49ad8', symbol: 'star' },
-    home: { shirt: '#f49ad8', shirt2: '#4a1fa8', pattern: 'gradient', shorts: '#3d1d9a', socks: '#3d1d9a', number: '#ffffff' },
-    away: { shirt: '#f4f1fa', shirt2: '#c9b8f0', pattern: 'solid', shorts: '#f4f1fa', socks: '#f4f1fa', number: '#4a1fa8' },
-    gkKit: { shirt: '#1fd18a', shirt2: '#0f8a5a', pattern: 'gradient', shorts: '#0f3a2a', socks: '#1fd18a', number: '#0f3a2a' },
-    formation: '4-3-3', rating: 82, seed: 11,
-  },
-  {
-    id: 'brasa', name: 'Brasa United', short: 'BRS', city: 'Ciudad Brasa',
-    crest: { shape: 'shield', primary: '#c8102e', secondary: '#c9a24a', symbol: 'ball' },
-    home: { shirt: '#111111', shirt2: '#d61f26', pattern: 'gradient', shorts: '#d61f26', socks: '#111111', number: '#c9a24a' },
-    away: { shirt: '#f2efe6', shirt2: '#c9a24a', pattern: 'sash', shorts: '#1a1a1a', socks: '#f2efe6', number: '#1a1a1a' },
-    gkKit: { shirt: '#f7d417', shirt2: '#c8a40f', pattern: 'solid', shorts: '#222222', socks: '#f7d417', number: '#222222' },
-    formation: '4-2-3-1', rating: 84, seed: 22,
-  },
-  {
-    id: 'marea', name: 'Deportivo Marea', short: 'MAR', city: 'Bahía Marea',
-    crest: { shape: 'circle', primary: '#0b4f8a', secondary: '#7fd3ff', symbol: 'wave' },
-    home: { shirt: '#1c7fd6', shirt2: '#ffffff', pattern: 'stripes', shorts: '#ffffff', socks: '#1c7fd6', number: '#0b2f55' },
-    away: { shirt: '#0b2f55', shirt2: '#1c7fd6', pattern: 'solid', shorts: '#0b2f55', socks: '#0b2f55', number: '#7fd3ff' },
-    gkKit: { shirt: '#ff7a1a', shirt2: '#c45200', pattern: 'solid', shorts: '#3a1a00', socks: '#ff7a1a', number: '#3a1a00' },
-    formation: '4-4-2', rating: 79, seed: 33,
-  },
-  {
-    id: 'leones', name: 'Atlético Leones', short: 'LEO', city: 'Villa Leones',
-    crest: { shape: 'shield', primary: '#e8b400', secondary: '#1a1a1a', symbol: 'lion' },
-    home: { shirt: '#f5c400', shirt2: '#1a1a1a', pattern: 'hoops', shorts: '#1a1a1a', socks: '#f5c400', number: '#1a1a1a' },
-    away: { shirt: '#262626', shirt2: '#f5c400', pattern: 'solid', shorts: '#262626', socks: '#262626', number: '#f5c400' },
-    gkKit: { shirt: '#7d3cff', shirt2: '#4a1fb0', pattern: 'solid', shorts: '#1b0b40', socks: '#7d3cff', number: '#ffffff' },
-    formation: '4-3-3', rating: 80, seed: 44,
-  },
-  {
-    id: 'rayo', name: 'Rayo Norte', short: 'RAY', city: 'Norteña',
-    crest: { shape: 'diamond', primary: '#00a86b', secondary: '#ffffff', symbol: 'bolt' },
-    home: { shirt: '#00a86b', shirt2: '#006b44', pattern: 'gradient', shorts: '#ffffff', socks: '#00a86b', number: '#ffffff' },
-    away: { shirt: '#ffffff', shirt2: '#00a86b', pattern: 'sash', shorts: '#00a86b', socks: '#ffffff', number: '#006b44' },
-    gkKit: { shirt: '#e8317a', shirt2: '#a3174f', pattern: 'solid', shorts: '#2a0614', socks: '#e8317a', number: '#ffffff' },
-    formation: '4-4-2', rating: 76, seed: 55,
-  },
-  {
-    id: 'reales', name: 'Real Corona', short: 'COR', city: 'San Corona',
-    crest: { shape: 'shield', primary: '#ffffff', secondary: '#8a1538', symbol: 'crown' },
-    home: { shirt: '#f7f7f7', shirt2: '#8a1538', pattern: 'solid', shorts: '#f7f7f7', socks: '#8a1538', number: '#8a1538' },
-    away: { shirt: '#8a1538', shirt2: '#5a0c22', pattern: 'gradient', shorts: '#5a0c22', socks: '#8a1538', number: '#ffffff' },
-    gkKit: { shirt: '#3a3a3a', shirt2: '#111111', pattern: 'solid', shorts: '#111111', socks: '#3a3a3a', number: '#ffd400' },
-    formation: '4-2-3-1', rating: 86, seed: 66,
-  },
-  {
-    id: 'torre', name: 'Club Torreón', short: 'TOR', city: 'Torreón Alto',
-    crest: { shape: 'circle', primary: '#ff6a00', secondary: '#0d1b2a', symbol: 'tower' },
-    home: { shirt: '#ff6a00', shirt2: '#0d1b2a', pattern: 'solid', shorts: '#0d1b2a', socks: '#ff6a00', number: '#0d1b2a' },
-    away: { shirt: '#9fd8ff', shirt2: '#0d1b2a', pattern: 'hoops', shorts: '#ffffff', socks: '#9fd8ff', number: '#0d1b2a' },
-    gkKit: { shirt: '#2ee6d6', shirt2: '#119b90', pattern: 'solid', shorts: '#06302d', socks: '#2ee6d6', number: '#06302d' },
-    formation: '3-5-2', rating: 77, seed: 77,
-  },
-  {
-    id: 'aguilas', name: 'Águilas del Sur', short: 'AGS', city: 'Puerto Sur',
-    crest: { shape: 'diamond', primary: '#0a2a66', secondary: '#e3c16f', symbol: 'eagle' },
-    home: { shirt: '#0a2a66', shirt2: '#e3c16f', pattern: 'sash', shorts: '#0a2a66', socks: '#e3c16f', number: '#e3c16f' },
-    away: { shirt: '#e8e2cf', shirt2: '#0a2a66', pattern: 'stripes', shorts: '#0a2a66', socks: '#e8e2cf', number: '#0a2a66' },
-    gkKit: { shirt: '#b6ff2e', shirt2: '#78b80c', pattern: 'solid', shorts: '#203000', socks: '#b6ff2e', number: '#203000' },
-    formation: '4-3-3', rating: 81, seed: 88,
-  },
+  { id: 'aldosivi', name: 'Aldosivi', short: 'ALD', city: 'Mar del Plata', crest: crest('aldosivi', '#0b7a3a', '#f5d000'),
+    home: kit('#0b7a3a', '#f5d000', 'stripes', '#0b7a3a', '#0b7a3a', '#ffffff'), away: kit('#ffffff', '#0b7a3a', 'solid', '#ffffff', '#ffffff', '#0b7a3a'), gkKit: GK_B, formation: '4-4-2', rating: 73, seed: 101 },
+  { id: 'argentinos', name: 'Argentinos Juniors', short: 'ARG', city: 'La Paternal', crest: crest('argentinos', '#d7182a', '#ffffff'),
+    home: kit('#d7182a', '#ffffff', 'solid', '#ffffff', '#d7182a', '#ffffff'), away: kit('#ffffff', '#d7182a', 'solid', '#d7182a', '#ffffff', '#d7182a'), gkKit: GK_A, formation: '4-3-3', rating: 79, seed: 102 },
+  { id: 'atltucuman', name: 'Atlético Tucumán', short: 'ATU', city: 'San Miguel de Tucumán', crest: crest('atltucuman', '#6cb4e4', '#ffffff'),
+    home: kit('#ffffff', '#6cb4e4', 'stripes', '#1a2a4a', '#1a2a4a', '#1a2a4a'), away: kit('#1a2a4a', '#6cb4e4', 'solid', '#1a2a4a', '#1a2a4a', '#6cb4e4'), gkKit: GK_C, formation: '4-4-2', rating: 75, seed: 103 },
+  { id: 'banfield', name: 'Banfield', short: 'BAN', city: 'Banfield', crest: crest('banfield', '#00703c', '#ffffff'),
+    home: kit('#ffffff', '#00703c', 'stripes', '#ffffff', '#00703c', '#00703c'), away: kit('#00703c', '#ffffff', 'solid', '#00703c', '#00703c', '#ffffff'), gkKit: GK_A, formation: '4-4-2', rating: 75, seed: 104 },
+  { id: 'barracas', name: 'Barracas Central', short: 'BAR', city: 'Barracas', crest: crest('barracas', '#d0102a', '#ffffff'),
+    home: kit('#ffffff', '#d0102a', 'stripes', '#1a1a1a', '#1a1a1a', '#1a1a1a'), away: kit('#1a1a1a', '#d0102a', 'solid', '#1a1a1a', '#1a1a1a', '#ffffff'), gkKit: GK_C, formation: '4-4-2', rating: 76, seed: 105 },
   {
     // Belgrano de Córdoba ("los Piratas"). Camiseta celeste; plantilla del plantel profesional 2026 (Apertura campeón).
     id: 'belgrano', name: 'Belgrano de Córdoba', short: 'CAB', city: 'Córdoba',
-    crest: { shape: 'shield', primary: '#5db8e8', secondary: '#ffffff', symbol: 'none', stripes: true },
+    crest: crest('belgrano', '#5db8e8', '#ffffff'),
     home: { shirt: '#5db8e8', shirt2: '#ffffff', pattern: 'solid', shorts: '#ffffff', socks: '#5db8e8', number: '#ffffff' },
     away: { shirt: '#161616', shirt2: '#5db8e8', pattern: 'solid', shorts: '#161616', socks: '#161616', number: '#5db8e8' },
     gkKit: { shirt: '#e8ff3a', shirt2: '#a8c800', pattern: 'solid', shorts: '#1a1a1a', socks: '#e8ff3a', number: '#1a1a1a' },
-    formation: '4-4-2', rating: 80, seed: 99,
+    formation: '4-4-2', rating: 81, seed: 99,
     roster: [
       { name: 'Matías Daniele', number: 1, bonus: 2 },
       { name: 'Alexis Maldonado', number: 2 },
@@ -136,6 +93,54 @@ const SEEDS: TeamSeed[] = [
       { name: 'Lautaro Gutiérrez', number: 18 },
     ],
   },
+  { id: 'boca', name: 'Boca Juniors', short: 'BOC', city: 'La Boca', crest: crest('boca', '#0b2a6b', '#f2b705'),
+    home: kit('#0b2a6b', '#f2b705', 'band', '#0b2a6b', '#0b2a6b', '#f2b705'), away: kit('#f2c230', '#0b2a6b', 'solid', '#f2c230', '#f2c230', '#0b2a6b'), gkKit: GK_C, formation: '4-3-3', rating: 84, seed: 106 },
+  { id: 'centralcordoba', name: 'Central Córdoba', short: 'CCO', city: 'Santiago del Estero', crest: crest('centralcordoba', '#111111', '#ffffff'),
+    home: kit('#ffffff', '#111111', 'stripes', '#111111', '#111111', '#111111'), away: kit('#d0102a', '#ffffff', 'solid', '#d0102a', '#d0102a', '#ffffff'), gkKit: GK_A, formation: '4-4-2', rating: 75, seed: 107 },
+  { id: 'defensa', name: 'Defensa y Justicia', short: 'DYJ', city: 'Florencio Varela', crest: crest('defensa', '#f7d417', '#0a7a3a'),
+    home: kit('#f7d417', '#0a7a3a', 'solid', '#0a7a3a', '#f7d417', '#0a7a3a'), away: kit('#0a7a3a', '#f7d417', 'solid', '#0a7a3a', '#0a7a3a', '#f7d417'), gkKit: GK_D, formation: '4-2-3-1', rating: 77, seed: 108 },
+  { id: 'estudiantes', name: 'Estudiantes de La Plata', short: 'EST', city: 'La Plata', crest: crest('estudiantes', '#d4111b', '#ffffff'),
+    home: kit('#ffffff', '#d4111b', 'stripes', '#111111', '#111111', '#111111'), away: kit('#13235b', '#d4111b', 'solid', '#13235b', '#13235b', '#ffffff'), gkKit: GK_C, formation: '4-4-2', rating: 81, seed: 109 },
+  { id: 'estudiantesrc', name: 'Estudiantes de Río Cuarto', short: 'ERC', city: 'Río Cuarto', crest: crest('estudiantesrc', '#3a9ad9', '#ffffff'),
+    home: kit('#3a9ad9', '#ffffff', 'solid', '#ffffff', '#3a9ad9', '#ffffff'), away: kit('#ffffff', '#3a9ad9', 'solid', '#3a9ad9', '#ffffff', '#3a9ad9'), gkKit: GK_B, formation: '4-4-2', rating: 73, seed: 110 },
+  { id: 'gimnasia', name: 'Gimnasia y Esgrima La Plata', short: 'GLP', city: 'La Plata', crest: crest('gimnasia', '#0b2459', '#ffffff'),
+    home: kit('#f4f4f4', '#0b2459', 'band', '#ffffff', '#ffffff', '#0b2459'), away: kit('#0b2459', '#ffffff', 'band', '#0b2459', '#0b2459', '#ffffff'), gkKit: GK_A, formation: '4-3-3', rating: 76, seed: 111 },
+  { id: 'gimnasiamza', name: 'Gimnasia y Esgrima de Mendoza', short: 'GME', city: 'Mendoza', crest: crest('gimnasiamza', '#111111', '#ffffff'),
+    home: kit('#ffffff', '#111111', 'stripes', '#111111', '#111111', '#111111'), away: kit('#111111', '#ffffff', 'solid', '#111111', '#111111', '#ffffff'), gkKit: GK_B, formation: '4-4-2', rating: 73, seed: 112 },
+  { id: 'huracan', name: 'Huracán', short: 'HUR', city: 'Parque Patricios', crest: crest('huracan', '#d21f2b', '#ffffff'),
+    home: kit('#ffffff', '#d21f2b', 'solid', '#ffffff', '#ffffff', '#d21f2b'), away: kit('#d21f2b', '#ffffff', 'solid', '#d21f2b', '#d21f2b', '#ffffff'), gkKit: GK_C, formation: '4-2-3-1', rating: 78, seed: 113 },
+  { id: 'independiente', name: 'Independiente', short: 'IND', city: 'Avellaneda', crest: crest('independiente', '#cc0000', '#ffffff'),
+    home: kit('#cc0000', '#ffffff', 'solid', '#13235b', '#cc0000', '#ffffff'), away: kit('#ffffff', '#cc0000', 'solid', '#ffffff', '#ffffff', '#cc0000'), gkKit: GK_A, formation: '4-3-3', rating: 79, seed: 114 },
+  { id: 'indrivadavia', name: 'Independiente Rivadavia', short: 'CSI', city: 'Mendoza', crest: crest('indrivadavia', '#13235b', '#ffffff'),
+    home: kit('#13235b', '#ffffff', 'solid', '#ffffff', '#13235b', '#ffffff'), away: kit('#ffffff', '#13235b', 'solid', '#13235b', '#ffffff', '#13235b'), gkKit: GK_B, formation: '4-4-2', rating: 76, seed: 115 },
+  { id: 'instituto', name: 'Instituto', short: 'INS', city: 'Córdoba', crest: crest('instituto', '#d0102a', '#ffffff'),
+    home: kit('#ffffff', '#d0102a', 'stripes', '#ffffff', '#d0102a', '#d0102a'), away: kit('#d0102a', '#ffffff', 'solid', '#d0102a', '#d0102a', '#ffffff'), gkKit: GK_C, formation: '4-4-2', rating: 75, seed: 116 },
+  { id: 'lanus', name: 'Lanús', short: 'LAN', city: 'Lanús', crest: crest('lanus', '#7b1a2c', '#ffffff'),
+    home: kit('#7b1a2c', '#ffffff', 'solid', '#7b1a2c', '#7b1a2c', '#ffffff'), away: kit('#ffffff', '#7b1a2c', 'solid', '#ffffff', '#ffffff', '#7b1a2c'), gkKit: GK_A, formation: '4-2-3-1', rating: 80, seed: 117 },
+  { id: 'newells', name: "Newell's Old Boys", short: 'NOB', city: 'Rosario', crest: crest('newells', '#c8102e', '#111111'),
+    home: kit('#c8102e', '#111111', 'halves', '#111111', '#111111', '#ffffff'), away: kit('#ffffff', '#c8102e', 'solid', '#ffffff', '#ffffff', '#111111'), gkKit: GK_C, formation: '4-3-3', rating: 76, seed: 118 },
+  { id: 'platense', name: 'Platense', short: 'PLA', city: 'Vicente López', crest: crest('platense', '#5a3417', '#ffffff'),
+    home: kit('#ffffff', '#5a3417', 'band', '#5a3417', '#ffffff', '#5a3417'), away: kit('#5a3417', '#ffffff', 'solid', '#5a3417', '#5a3417', '#ffffff'), gkKit: GK_A, formation: '4-4-2', rating: 77, seed: 119 },
+  { id: 'racing', name: 'Racing Club', short: 'RAC', city: 'Avellaneda', crest: crest('racing', '#6cc3ee', '#ffffff'),
+    home: kit('#ffffff', '#6cc3ee', 'stripes', '#111111', '#111111', '#13235b'), away: kit('#13235b', '#6cc3ee', 'solid', '#13235b', '#13235b', '#ffffff'), gkKit: GK_B, formation: '4-3-3', rating: 82, seed: 120 },
+  { id: 'riestra', name: 'Deportivo Riestra', short: 'RIE', city: 'Bajo Flores', crest: crest('riestra', '#111111', '#ffffff'),
+    home: kit('#111111', '#ffffff', 'solid', '#111111', '#111111', '#ffffff'), away: kit('#ffffff', '#111111', 'solid', '#ffffff', '#ffffff', '#111111'), gkKit: GK_A, formation: '4-4-2', rating: 74, seed: 121 },
+  { id: 'river', name: 'River Plate', short: 'RIV', city: 'Núñez', crest: crest('river', '#e31b23', '#ffffff'),
+    home: kit('#ffffff', '#e31b23', 'sash', '#111111', '#ffffff', '#111111'), away: kit('#e31b23', '#111111', 'sash', '#e31b23', '#e31b23', '#ffffff'), gkKit: GK_D, formation: '4-3-3', rating: 84, seed: 122 },
+  { id: 'rosariocentral', name: 'Rosario Central', short: 'CEN', city: 'Rosario', crest: crest('rosariocentral', '#0b2d6b', '#f5c400'),
+    home: kit('#0b2d6b', '#f5c400', 'stripes', '#0b2d6b', '#0b2d6b', '#ffffff'), away: kit('#f5c400', '#0b2d6b', 'solid', '#f5c400', '#f5c400', '#0b2d6b'), gkKit: GK_C, formation: '4-2-3-1', rating: 80, seed: 123 },
+  { id: 'sanlorenzo', name: 'San Lorenzo', short: 'SLO', city: 'Boedo', crest: crest('sanlorenzo', '#0b2d6b', '#c8102e'),
+    home: kit('#0b2d6b', '#c8102e', 'stripes', '#0b2d6b', '#0b2d6b', '#ffffff'), away: kit('#ffffff', '#c8102e', 'solid', '#ffffff', '#ffffff', '#0b2d6b'), gkKit: GK_A, formation: '4-4-2', rating: 77, seed: 124 },
+  { id: 'sarmiento', name: 'Sarmiento', short: 'SAR', city: 'Junín', crest: crest('sarmiento', '#00813f', '#ffffff'),
+    home: kit('#00813f', '#ffffff', 'solid', '#ffffff', '#00813f', '#ffffff'), away: kit('#ffffff', '#00813f', 'solid', '#00813f', '#ffffff', '#00813f'), gkKit: GK_B, formation: '4-4-2', rating: 74, seed: 125 },
+  { id: 'talleres', name: 'Talleres', short: 'TAL', city: 'Córdoba', crest: crest('talleres', '#0b2d6b', '#ffffff'),
+    home: kit('#ffffff', '#0b2d6b', 'stripes', '#0b2d6b', '#0b2d6b', '#0b2d6b'), away: kit('#0b2d6b', '#ffffff', 'solid', '#0b2d6b', '#0b2d6b', '#ffffff'), gkKit: GK_A, formation: '4-2-3-1', rating: 80, seed: 126 },
+  { id: 'tigre', name: 'Tigre', short: 'TIG', city: 'Victoria', crest: crest('tigre', '#1a3e8f', '#c8102e'),
+    home: kit('#1a3e8f', '#c8102e', 'band', '#1a3e8f', '#1a3e8f', '#ffffff'), away: kit('#ffffff', '#1a3e8f', 'band', '#ffffff', '#ffffff', '#1a3e8f'), gkKit: GK_C, formation: '4-3-3', rating: 77, seed: 127 },
+  { id: 'union', name: 'Unión de Santa Fe', short: 'UNI', city: 'Santa Fe', crest: crest('union', '#d0102a', '#ffffff'),
+    home: kit('#ffffff', '#d0102a', 'stripes', '#ffffff', '#d0102a', '#d0102a'), away: kit('#13235b', '#d0102a', 'solid', '#13235b', '#13235b', '#ffffff'), gkKit: GK_A, formation: '4-4-2', rating: 77, seed: 128 },
+  { id: 'velez', name: 'Vélez Sarsfield', short: 'VEL', city: 'Liniers', crest: crest('velez', '#1a4fa0', '#ffffff'),
+    home: kit('#ffffff', '#1a4fa0', 'vee', '#ffffff', '#ffffff', '#1a4fa0'), away: kit('#1a4fa0', '#ffffff', 'vee', '#1a4fa0', '#1a4fa0', '#ffffff'), gkKit: GK_B, formation: '4-3-3', rating: 80, seed: 129 },
 ];
 
 // Puestos de la plantilla: 11 titulares en el orden de la formación + 7 suplentes.
@@ -208,9 +213,8 @@ export const TEAMS: TeamData[] = SEEDS.map(buildTeam);
 export const BUILTIN_TEAM_COUNT = SEEDS.length;
 
 export function getTeam(id: string): TeamData {
-  const t = TEAMS.find((t) => t.id === id);
-  if (!t) throw new Error(`Equipo desconocido: ${id}`);
-  return t;
+  // equipos que ya no existen (partidas guardadas, rivales online con otra versión): el primero de la lista
+  return TEAMS.find((t) => t.id === id) ?? TEAMS[0];
 }
 
 /** Media general de un jugador para su puesto. */

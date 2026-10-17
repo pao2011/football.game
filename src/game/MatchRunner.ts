@@ -221,8 +221,8 @@ export class MatchRunner {
         this.pendingTip = '<b>TOCA</b> PASE o TIRO = automático · <b>MANTÉN</b> = potencia · <b>ROSCA / VASELINA / RASO / POTENTE</b> = tipo de tiro (mantén uno y toca otro para combinar)';
       }
     }
-    // cada estadio tiene sus cánticos (los de Belgrano solo suenan en su cancha)
-    const chants = chantsForStadium(stadium.id);
+    // cada cancha tiene los cánticos de su hinchada (solo suenan ahí)
+    const chants = chantsForStadium(stadium);
     audioEngine.setChantTracks(chants.tracks, chants.special);
     this.audio = new MatchAudio(audioEngine, this.match);
     this.audio.start();

@@ -26,7 +26,8 @@ export interface PlayerData {
 export interface KitData {
   shirt: string; // color principal
   shirt2: string; // color secundario (degradado / mangas)
-  pattern: 'solid' | 'gradient' | 'stripes' | 'hoops' | 'sash';
+  /** band: franja horizontal en el pecho (Boca, Gimnasia) · halves: mitades verticales (Newell's) · vee: V en el pecho (Vélez). */
+  pattern: 'solid' | 'gradient' | 'stripes' | 'hoops' | 'sash' | 'band' | 'halves' | 'vee';
   shorts: string;
   socks: string;
   number: string; // color del dorsal
@@ -39,7 +40,9 @@ export interface TeamData {
   city: string;
   crest: { shape: 'shield' | 'circle' | 'diamond'; primary: string; secondary: string; symbol: 'star' | 'ball' | 'lion' | 'wave' | 'bolt' | 'crown' | 'tower' | 'eagle' | 'none';
     /** Rayas verticales (primario/secundario) en vez del degradado, con las siglas en azul oscuro. */
-    stripes?: boolean };
+    stripes?: boolean;
+    /** Escudo oficial como imagen (URL); si está, sustituye al dibujado. */
+    image?: string };
   home: KitData;
   away: KitData;
   gkKit: KitData;

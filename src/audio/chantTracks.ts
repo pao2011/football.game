@@ -19,7 +19,7 @@ import belgranoMinuto68 from '../assets/chants/belgrano-minuto-68.mp3?url';
  * En el juego de un solo archivo (jugar.html) scripts/single-file.mjs los incrusta como data: URI.
  */
 
-/** Cánticos genéricos (Hinchadas Argentinas): suenan en todos los estadios menos en el de Belgrano. */
+/** Cánticos genéricos (Hinchadas Argentinas): estadios neutrales y clubes sin grabaciones propias. */
 export const GENERIC_CHANTS: ChantTrack[] = [
   { name: 'Bombo y repique', url: bomboYRepique },
   { name: 'Vamos que tenemos que ganar', url: vamosQueTenemosQueGanar },
@@ -40,14 +40,30 @@ export const BELGRANO_CHANTS: ChantTrack[] = [
   { name: 'Belgrano 8', url: belgrano8 },
 ];
 
+/** Cánticos de cada hinchada (4 temas de ~1 minuto por club, sacados de sus compilados), por id de equipo. */
+const CLUB_FILES = import.meta.glob('../assets/chants/clubs/*.mp3', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+export const CLUB_CHANTS: Record<string, ChantTrack[]> = {};
+for (const [path, url] of Object.entries(CLUB_FILES).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))) {
+  const m = /\/([a-z]+)-(\d+)\.mp3$/.exec(path);
+  if (!m) continue;
+  (CLUB_CHANTS[m[1]] ??= []).push({ name: `${m[1]} ${m[2]}`, url });
+}
+// Belgrano: además de su compilado, los temas de la tribuna sacados de videos
+CLUB_CHANTS.belgrano = [...BELGRANO_CHANTS, ...(CLUB_CHANTS.belgrano ?? [])];
+
 export interface StadiumChantSet {
   tracks: ChantTrack[];
   /** Tema que no está en la rotación: suena una sola vez, justo al llegar al minuto indicado. */
   special?: { minute: number; track: ChantTrack };
 }
 
-/** Cánticos de cada estadio. */
-export function chantsForStadium(stadiumId: string): StadiumChantSet {
-  if (stadiumId === 'villagra') return { tracks: BELGRANO_CHANTS, special: { minute: 68, track: { name: 'Belgrano minuto 68', url: belgranoMinuto68 } } };
-  return { tracks: GENERIC_CHANTS };
+/**
+ * Cánticos de un estadio: los de la hinchada del club dueño de la cancha (solo suenan ahí); los estadios
+ * neutrales y los clubes sin grabaciones usan los genéricos. Belgrano tiene además su tema del minuto 68.
+ */
+export function chantsForStadium(stadium: { id: string; homeTeam?: string }): StadiumChantSet {
+  const club = stadium.homeTeam ? CLUB_CHANTS[stadium.homeTeam] : undefined;
+  const set: StadiumChantSet = { tracks: club?.length ? club : GENERIC_CHANTS };
+  if (stadium.homeTeam === 'belgrano') set.special = { minute: 68, track: { name: 'Belgrano minuto 68', url: belgranoMinuto68 } };
+  return set;
 }

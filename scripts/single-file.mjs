@@ -4,7 +4,7 @@
 //                                   descargar el ZIP; index.html redirige aquí cuando se abre como archivo
 //   release/FootballElite3D.html    el mismo documento, para publicarlo como descarga
 //   release/artifact/index.html     fragmento (sin <html>/<head>) para publicarlo como página de claude.ai
-// Los cánticos (.mp3) se incrustan como data: URI para que suenen también al abrir el archivo con doble clic.
+// Los cánticos (.mp3) y los escudos (.webp) se incrustan como data: URI para que suenen también al abrir el archivo con doble clic.
 import { readFileSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -16,10 +16,13 @@ if (jsFiles.length !== 1 || !cssFile) throw new Error('Ejecuta primero: npm run 
 
 // Evita que el JS cierre la etiqueta <script> o abra un comentario HTML al incrustarlo
 let js = readFileSync(join(dist, 'assets', jsFiles[0]), 'utf8').replace(/<\/script/gi, '<\\/script').replace(/<!--/g, '<\\!--');
-for (const f of assets.filter((a) => a.endsWith('.mp3'))) {
+const MIME = { '.mp3': 'audio/mpeg', '.webp': 'image/webp', '.png': 'image/png' };
+for (const f of assets) {
+  const mime = MIME[f.slice(f.lastIndexOf('.'))];
+  if (!mime) continue;
   const ref = JSON.stringify(f);
   if (!js.includes(ref)) throw new Error(`No se encontró la referencia a ${f} en el JS`);
-  js = js.split(ref).join(JSON.stringify(`data:audio/mpeg;base64,${readFileSync(join(dist, 'assets', f)).toString('base64')}`));
+  js = js.split(ref).join(JSON.stringify(`data:${mime};base64,${readFileSync(join(dist, 'assets', f)).toString('base64')}`));
 }
 const css = readFileSync(join(dist, 'assets', cssFile), 'utf8') + '\n:root{color-scheme:dark}\n';
 

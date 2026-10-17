@@ -133,6 +133,38 @@ function drawPattern(ctx: CanvasRenderingContext2D, kit: KitData, W: number, y0:
       ctx.restore();
       break;
     }
+    case 'band': {
+      // franja horizontal ancha a la altura del pecho (también en las mangas)
+      ctx.fillStyle = shirt2;
+      ctx.fillRect(0, y0 + h * (sleeves ? 0.35 : 0.3), W, h * (sleeves ? 0.3 : 0.22));
+      break;
+    }
+    case 'halves': {
+      if (sleeves) break;
+      // frente (u 0.5..1) y espalda (u 0..0.5): cada uno partido al medio
+      ctx.fillStyle = shirt2;
+      ctx.fillRect(W * 0.75, y0, W * 0.25, h);
+      ctx.fillRect(W * 0.25, y0, W * 0.25, h);
+      break;
+    }
+    case 'vee': {
+      if (sleeves) break;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, y0, W, h);
+      ctx.clip();
+      ctx.strokeStyle = shirt2;
+      ctx.lineWidth = W * 0.06;
+      ctx.lineJoin = 'miter';
+      // V en el pecho: de los hombros (u≈0.56 y 0.94) al centro (u 0.75)
+      ctx.beginPath();
+      ctx.moveTo(W * 0.55, y0 - h * 0.02);
+      ctx.lineTo(W * 0.75, y0 + h * 0.5);
+      ctx.lineTo(W * 0.95, y0 - h * 0.02);
+      ctx.stroke();
+      ctx.restore();
+      break;
+    }
     default:
       break;
   }
