@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { DIFFICULTY_LABELS } from '../ai/Difficulty';
+import { AutoQuality } from '../game/AutoQuality';
+import { LANG_NAMES, setLang } from '../i18n';
+import { ReplayViewer } from '../game/ReplayViewer';
+import type { MatchView } from '../render/MatchView';
+import { deleteReplay, encodeFrames, lastSeconds, listReplays, MAX_SAVED_REPLAYS, saveReplay, type SavedReplay } from '../modes/SavedReplays';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
 import { STADIUMS, getStadium } from '../data/stadiums';
@@ -14,7 +19,7 @@ import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
 import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, versusDevicesLabel, type Action } from '../input/Input';
 import { MAX_SUBS, type MatchConfig } from '../sim/Match';
 import { manOfTheMatch, playerRatings } from '../sim/Ratings';
-import { Career } from '../modes/Career';
+import { Career, SQUAD_MAX, SQUAD_MIN, buyPlayer, marketOffers, playerPrice, sellPlayer } from '../modes/Career';
 import { Tournament } from '../modes/Tournament';
 import type { Fixture, StandingRow } from '../modes/Competition';
 import { crestSVG, kitSVG } from './Crest';
@@ -91,6 +96,8 @@ export class App {
   private overlay: Screen | null = null;
   private quick: QuickSetup;
   private lastMatch: { config: MatchConfig; ctx: MatchContext } | null = null;
+  private lastStadiumId = '';
+  private replayViewer: ReplayViewer | null = null;
   tournament: Tournament | null = null;
   career: Career | null = null;
 
@@ -113,6 +120,7 @@ export class App {
     this.bg = el('div', 'menu-bg', '<div class="pitch-lines"></div>');
     document.body.insertBefore(this.bg, ui);
     registerCustomTeams(); // equipos creados en el editor
+    setLang(this.settings.language);
     this.applyAudio();
     this.quick = { home: 0, away: 1, stadium: 0, half: HALF_OPTIONS.indexOf(this.settings.halfMinutes), difficulty: DIFFS.indexOf(this.settings.difficulty), side: 0, formation: null };
     if (this.quick.half < 0) this.quick.half = 2;
@@ -162,6 +170,7 @@ export class App {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * this.settings.resolutionScale);
     this.renderer.setSize(w, h, false);
     this.runner?.resize(w, h);
+    this.replayViewer?.resize(w, h);
   }
 
   private show(html: string, handlers: Handlers, back: (() => void) | null, cls = '') {
@@ -272,6 +281,7 @@ export class App {
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
           <button class="menu-item" data-act="editor">✏️ Editor de equipos<small>Crea tu equipo · exportar e importar</small></button>
+          <button class="menu-item" data-act="replays">🎬 Repeticiones<small>Tus jugadas guardadas</small></button>
           <button class="menu-item" data-act="achievements">🏆 Logros<small>${Object.keys(unlockedSet()).length}/${ACHIEVEMENTS.length} desbloqueados</small></button>
           <button class="menu-item" data-act="controls">Controles<small>Teclado y mando · reasignar teclas</small></button>
           ${!isElectron && !isNativeApp() ? '<button class="menu-item apk-item" data-act="apk">📲 Descargar APK<small>Instala el juego en tu Android</small></button>' : ''}
@@ -284,6 +294,7 @@ export class App {
       </div>
       <div class="version-tag">v${VERSION} · ${isTouchDevice() ? 'Toca una opción para elegir' : '↑↓ para navegar · Enter/S para elegir · Esc para volver'}</div>`, {
       quick: () => this.quickMatchScreen(),
+      replays: () => this.replaysScreen(),
       online: () => this.onlineMenu(),
       tournament: () => this.tournamentHub(),
       career: () => this.careerHub(),
@@ -401,6 +412,7 @@ export class App {
 
   playMatch(config: MatchConfig, stadiumId: string, ctx: MatchContext, online: OnlineLink | null = null) {
     this.lastMatch = { config, ctx };
+    this.lastStadiumId = stadiumId;
     const home = config.home;
     const away = config.away;
     const tip = TIPS[Math.floor(Math.random() * TIPS.length)];
@@ -420,6 +432,7 @@ export class App {
           const runner = new MatchRunner(this.renderer, config, getStadium(stadiumId), this.settings, this.input, this.audio, this.ui, online);
           this.runner = runner;
           runner.resize(window.innerWidth, window.innerHeight);
+          if (this.settings.autoQuality) this.attachAutoQuality(runner);
           // precompilar shaders
           this.renderer.compile(runner.view.scene, runner.view.camera);
           bar.style.width = '100%';
@@ -458,6 +471,188 @@ export class App {
       <button class="btn" data-act="menu">Menú principal</button></div>`, { menu: () => this.mainMenu() }, () => this.mainMenu());
   }
 
+  /** Modo foto: el partido queda congelado y la cámara se mueve libre (arrastrar, rueda/pellizco, teclas). */
+  private photoMode(target?: { view: MatchView; onExit: () => void }) {
+    const r = this.runner;
+    if (!target && !r) return;
+    const view = target?.view ?? r!.view;
+    const onExit = target?.onExit ?? (() => this.pauseMenu());
+    view.startPhoto();
+    const hudRoot = target ? null : r!.hud.root;
+    if (hudRoot) hudRoot.style.visibility = 'hidden';
+    const savedInd = view.opts.showIndicators;
+    view.opts.showIndicators = false;
+    const root = el('div', 'photo-mode', `
+      <div class="pm-surface"></div>
+      <div class="pm-bar">
+        <button class="btn primary" data-act="shot">📷 Capturar</button>
+        <button class="btn" data-act="exit">Salir</button>
+      </div>
+      <div class="pm-hint">${isTouchDevice() ? 'Arrastra para girar · dos dedos: acercar y mover' : 'Arrastra para girar · rueda: acercar · WASD / flechas: mover · Q/E: subir y bajar · F: capturar'}</div>`);
+    this.ui.appendChild(root);
+    const surface = root.querySelector('.pm-surface') as HTMLElement;
+    const pts = new Map<number, { x: number; y: number }>();
+    let pinch = 0;
+    let mid = { x: 0, y: 0 };
+    surface.addEventListener('pointerdown', (e) => { surface.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); pinch = 0; });
+    surface.addEventListener('pointermove', (e) => {
+      const prev = pts.get(e.pointerId);
+      if (!prev) return;
+      const cur = { x: e.clientX, y: e.clientY };
+      if (pts.size === 1) {
+        view.photoMove(-(cur.x - prev.x) * 0.006, (cur.y - prev.y) * 0.005);
+      }
+      pts.set(e.pointerId, cur);
+      if (pts.size === 2) {
+        const [a, b] = [...pts.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        if (pinch > 0) view.photoMove(0, 0, pinch / d, -(m.x - mid.x) * 0.05, (m.y - mid.y) * 0.05);
+        pinch = d;
+        mid = m;
+      }
+    });
+    const up = (e: PointerEvent) => { pts.delete(e.pointerId); pinch = 0; };
+    surface.addEventListener('pointerup', up);
+    surface.addEventListener('pointercancel', up);
+    surface.addEventListener('wheel', (e) => { e.preventDefault(); view.photoMove(0, 0, Math.exp(e.deltaY * 0.001)); }, { passive: false });
+    const held = new Set<string>();
+    const key = (e: KeyboardEvent) => {
+      if (e.type === 'keydown') held.add(e.code); else held.delete(e.code);
+      if (e.type === 'keydown' && e.code === 'KeyF') shot();
+      if (e.type === 'keydown' && e.code === 'Escape') exit();
+      e.stopPropagation();
+    };
+    window.addEventListener('keydown', key, true);
+    window.addEventListener('keyup', key, true);
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const k = (c: string, c2: string) => (held.has(c) || held.has(c2) ? 1 : 0);
+      const s = 0.35;
+      const pr = k('KeyD', 'ArrowRight') - k('KeyA', 'ArrowLeft');
+      const pf = k('KeyW', 'ArrowUp') - k('KeyS', 'ArrowDown');
+      const pz = k('KeyQ', 'PageUp') - k('KeyE', 'PageDown');
+      if (pr || pf || pz) view.photoMove(0, pz * 0.02, 1, pr * s, pf * s);
+    };
+    raf = requestAnimationFrame(tick);
+    const shot = () => {
+      const url = view.capture();
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `football-elite-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      root.classList.remove('flash');
+      void root.offsetWidth;
+      root.classList.add('flash');
+      this.audio.uiClick();
+    };
+    const exit = () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('keydown', key, true);
+      window.removeEventListener('keyup', key, true);
+      root.remove();
+      view.stopPhoto();
+      view.opts.showIndicators = savedInd;
+      if (hudRoot) hudRoot.style.visibility = '';
+      onExit();
+    };
+    root.querySelector('[data-act=shot]')!.addEventListener('click', shot);
+    root.querySelector('[data-act=exit]')!.addEventListener('click', exit);
+  }
+
+  /** Guarda los últimos 8 s del partido en curso como repetición. */
+  private saveLastPlay(): boolean {
+    const r = this.runner;
+    if (!r) return false;
+    const m = r.match;
+    const frames = lastSeconds(m.replay, 8);
+    if (frames.length < 2) return false;
+    const end = frames[frames.length - 1];
+    const [a, b] = m.teams;
+    return saveReplay({
+      id: `${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`,
+      date: Date.now(),
+      title: `${a.data.short} - ${b.data.short}`,
+      clock: m.clockText,
+      score: `${a.stats.goals} - ${b.stats.goals}`,
+      stadiumId: this.lastStadiumId,
+      goalSide: end.ball[0] >= 0 ? 1 : -1,
+      home: m.config.home, away: m.config.away, homeKit: m.config.homeKit, awayKit: m.config.awayKit,
+      weather: m.weather,
+      data: encodeFrames(frames),
+    });
+  }
+
+  /** Lista de repeticiones guardadas. */
+  replaysScreen() {
+    this.setMenuMode(true);
+    const list = listReplays();
+    const date = (t: number) => new Date(t).toLocaleString(undefined, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const s = this.show(`
+      <div class="screen-header"><div><div class="crumb">GALERÍA</div><h2>Repeticiones</h2></div></div>
+      <div class="screen-body">
+        ${list.length ? `<div class="replay-list">${list.map((r) => `<div class="panel replay-item">
+          <div class="ri-teams">${crestSVG(r.home, 34)}<div><b>${esc(r.title)}</b> <span class="muted">${esc(r.score)} · ${esc(r.clock)}</span><small class="muted">${esc(getStadium(r.stadiumId).name)} · ${date(r.date)}</small></div>${crestSVG(r.away, 34)}</div>
+          <div class="ri-actions"><button class="btn primary" data-act="watch" data-id="${r.id}">▶ Ver</button><button class="btn" data-act="del" data-id="${r.id}">🗑</button></div>
+        </div>`).join('')}</div>` : '<div class="panel muted">Todavía no guardaste ninguna jugada. Durante un partido, pausa y elige <b>💾 Guardar jugada</b> para conservar los últimos 8 segundos (hasta ' + MAX_SAVED_REPLAYS + ').</div>'}
+      </div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, {
+      watch: (b) => { const r = list.find((x) => x.id === b.dataset.id); if (r) this.watchReplay(r); },
+      del: (b) => { deleteReplay(b.dataset.id!); this.replaysScreen(); },
+      back: () => this.mainMenu(),
+    }, () => this.mainMenu());
+    void s;
+  }
+
+  private watchReplay(saved: SavedReplay) {
+    this.screen?.dispose();
+    this.screen = null;
+    this.audio.stopMenuMusic();
+    let viewer: ReplayViewer;
+    try {
+      viewer = new ReplayViewer(this.renderer, saved, getStadium(saved.stadiumId), this.settings);
+    } catch (e) {
+      console.error(e);
+      this.replaysScreen();
+      return;
+    }
+    this.setMenuMode(false);
+    this.canvas.classList.remove('hidden');
+    this.bg.classList.add('hidden');
+    viewer.resize(window.innerWidth, window.innerHeight);
+    this.replayViewer = viewer;
+    viewer.start();
+    const controls = () => {
+      const s = this.show(`
+        <div class="replay-bar">
+          <div class="rb-title">${crestSVG(saved.home, 26)} <b>${esc(saved.title)}</b> <span class="muted">${esc(saved.score)} · ${esc(saved.clock)}</span></div>
+          <div class="rb-btns">
+            <button class="btn" data-act="toggle">${viewer.paused ? '▶' : '❚❚'}</button>
+            <button class="btn" data-act="restart">⏮</button>
+            <button class="btn" data-act="speed">${viewer.speed === 1 ? '1x' : viewer.speed < 1 ? '½x' : '2x'}</button>
+            <button class="btn" data-act="photo">📷</button>
+            <button class="btn" data-act="back">Salir</button>
+          </div>
+        </div>`, {
+        toggle: () => { viewer.paused = !viewer.paused; controls(); },
+        restart: () => { viewer.restart(); viewer.paused = false; controls(); },
+        speed: () => { viewer.speed = viewer.speed === 1 ? 0.5 : viewer.speed < 1 ? 2 : 1; controls(); },
+        photo: () => {
+          viewer.paused = true;
+          this.screen?.dispose();
+          this.screen = null;
+          this.photoMode({ view: viewer.view, onExit: () => controls() });
+        },
+        back: () => { viewer.dispose(); this.replayViewer = null; this.replaysScreen(); },
+      }, () => { viewer.dispose(); this.replayViewer = null; this.replaysScreen(); }, 'replay-screen');
+      void s;
+    };
+    controls();
+  }
+
   private pauseMenu() {
     const r = this.runner;
     if (!r) return;
@@ -468,12 +663,15 @@ export class App {
       <h2>Pausa</h2>
       <div class="muted" style="margin-bottom:14px">${esc(m.teams[0].data.name)} ${m.teams[0].stats.goals} - ${m.teams[1].stats.goals} ${esc(m.teams[1].data.name)} · ${m.clockText}</div>
       <div class="menu-list">
-        ${r.online ? `<div class="muted online-pause-note" style="margin:-6px 0 10px">${r.pauseSecondsLeft >= 0 ? `Partido pausado para los dos · se reanuda solo en <b class="ps-left">${r.pauseSecondsLeft}</b> s · te quedan ${r.pausesLeft} pausas` : 'Ya no te quedan pausas: el partido sigue en juego'}</div>` : ''}
+        ${r.online?.spectator ? '<div class="muted" style="margin:-6px 0 10px">👁 Estás mirando como espectador: el partido sigue.</div>' : ''}
+        ${r.online && !r.online.spectator ? `<div class="muted online-pause-note" style="margin:-6px 0 10px">${r.pauseSecondsLeft >= 0 ? `Partido pausado para los dos · se reanuda solo en <b class="ps-left">${r.pauseSecondsLeft}</b> s · te quedan ${r.pausesLeft} pausas` : 'Ya no te quedan pausas: el partido sigue en juego'}</div>` : ''}
         <button class="menu-item" data-act="resume">Reanudar</button>
-        ${r.online ? '<button class="menu-item" data-act="chat">Mensajes rápidos<small>Para tu rival</small></button>' : '<button class="menu-item" data-act="restart">Reiniciar partido</button>'}
+        ${r.online?.spectator ? '' : r.online ? '<button class="menu-item" data-act="chat">Mensajes rápidos<small>Para tu rival</small></button>' : '<button class="menu-item" data-act="restart">Reiniciar partido</button>'}
         ${r.localTeam >= 0 && !m.config.training && !r.online ? `<button class="menu-item" data-act="tactics">Tácticas<small>${esc(m.teams[r.localTeam as 0 | 1].formation)} · ${MENTALITY_NAMES[m.teams[r.localTeam as 0 | 1].mentality + 2]}</small></button>` : ''}
         ${r.localTeam >= 0 && !m.config.training ? `<button class="menu-item" data-act="subs">Cambios<small>${m.teams[r.localTeam as 0 | 1].subsUsed}/${MAX_SUBS} realizados</small></button>` : ''}
         <button class="menu-item" data-act="stats">Estadísticas</button>
+        ${!r.online ? '<button class="menu-item" data-act="photo">📷 Modo foto<small>Cámara libre y captura</small></button>' : ''}
+        ${m.replay.length > 30 && !m.config.training ? '<button class="menu-item" data-act="savePlay">💾 Guardar jugada<small>Los últimos 8 segundos</small></button>' : ''}
         <button class="menu-item" data-act="mute">${this.settings.muted ? '🔊 Activar sonido' : '🔇 Silenciar'}<small>Tecla M</small></button>
         <button class="menu-item" data-act="settings">Configuración</button>
         <button class="menu-item" data-act="controls">Controles</button>
@@ -486,6 +684,11 @@ export class App {
       mute: () => { this.toggleMute(); close(); this.pauseMenu(); },
       subs: () => { close(); this.subsMenu(); },
       tactics: () => { close(); this.tacticsMenu(); },
+      photo: () => { close(); this.photoMode(); },
+      savePlay: (b) => {
+        const ok = this.saveLastPlay();
+        b.innerHTML = ok ? '✅ Jugada guardada<small>Menú principal → Repeticiones</small>' : '⚠ No hay espacio para guardarla';
+      },
       chat: () => {
         close();
         const items = QUICK_CHAT.map((t, i) => `<button class="menu-item" data-act="say" data-i="${i}">${esc(t)}</button>`).join('');
@@ -734,6 +937,25 @@ export class App {
     // al refrescar la lista no se repite la animación de entrada
     setTimeout(() => screen.root.classList.add('no-anim'), 250);
     this.overlay = screen;
+  }
+
+  /** Calidad automática: si los FPS no llegan, baja la resolución y luego las sombras (y lo guarda). */
+  private attachAutoQuality(runner: MatchRunner) {
+    const aq = new AutoQuality({ resolutionScale: this.settings.resolutionScale, shadows: this.settings.shadows });
+    runner.autoQuality = aq;
+    runner.onQualityStep = (step) => {
+      if (step === 'resolution') {
+        this.settings.resolutionScale = aq.resolutionScale;
+        this.onResize();
+      } else {
+        this.settings.shadows = false;
+        runner.view.setShadows(false);
+      }
+      saveSettings(this.settings);
+      const t = el('div', 'mute-toast', `⚙ Calidad ajustada para ir más fluido <small>(${step === 'resolution' ? `resolución ${Math.round(aq.resolutionScale * 100)}%` : 'sin sombras'})</small>`);
+      this.ui.appendChild(t);
+      setTimeout(() => t.remove(), 2200);
+    };
   }
 
   private applyLiveSettings() {
@@ -1061,11 +1283,17 @@ export class App {
       <input class="text-in code-in" id="on-code" maxlength="5" autocomplete="off" autocapitalize="characters" placeholder="ABCDE" data-enter="go">
       ${error ? `<div class="sub-msg" style="margin-top:10px">${esc(error)}</div>` : ''}
       <div style="margin-top:12px">${this.onlineTeamStepper()}</div>
-      <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn primary" data-act="go">Unirse</button></div></div>`, {
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn" data-act="watch">👁 Mirar</button><button class="btn primary" data-act="go">Unirse</button></div>
+      <div class="muted" style="font-size:12px;margin-top:8px">Con <b>Mirar</b> ves como espectador un partido de sala privada que ya empezó.</div></div>`, {
       go: () => {
         const code = ((sc.root.querySelector('#on-code') as HTMLInputElement)?.value ?? '').trim().toUpperCase();
         if (code.length < 4) return;
         net.send({ t: 'join', code, team: TEAMS[this.onlineTeam].id });
+      },
+      watch: () => {
+        const code = ((sc.root.querySelector('#on-code') as HTMLInputElement)?.value ?? '').trim().toUpperCase();
+        if (code.length < 4) return;
+        net.send({ t: 'watch', code });
       },
       back: () => this.onlineHub(),
       teamPrev: () => { this.onlineTeam = (this.onlineTeam + BUILTIN_TEAM_COUNT - 1) % BUILTIN_TEAM_COUNT; this.onlineJoin(error); },
@@ -1126,6 +1354,25 @@ export class App {
           this.onlineNotice('Tu rival se fue', 'Tu rival abandonó el partido: ganas 3-0.', true);
         }
         break;
+      case 'spectators': {
+        const n = Number((m as unknown as { n: number }).n) || 0;
+        if (runner?.online) {
+          const t = el('div', 'mute-toast', n > 0 ? `👁 ${n} ${n === 1 ? 'espectador' : 'espectadores'} mirando` : '👁 Sin espectadores');
+          this.ui.appendChild(t);
+          setTimeout(() => t.remove(), 2000);
+        }
+        break;
+      }
+      case 'watchEnd':
+        if (runner?.online?.spectator && !runner.match.finished) {
+          runner.dispose();
+          this.runner = null;
+          this.overlay?.dispose();
+          this.overlay = null;
+          window.clearInterval(this.onlineWatch);
+          this.onlineNotice('Fin de la transmisión', (m as unknown as { forfeit: boolean }).forfeit ? 'Uno de los jugadores abandonó el partido.' : 'El partido terminó.');
+        }
+        break;
       case 'final':
         this.onlineFinal = m as unknown as FinalMsg;
         this.showOnlineFinal();
@@ -1161,7 +1408,7 @@ export class App {
     const away = teamOf(st.away);
     const cfg: MatchConfig = {
       home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away),
-      humanTeam: st.role === 'host' ? 0 : 1,
+      humanTeam: st.role === 'host' ? 0 : st.role === 'guest' ? 1 : -1,
       halfLengthSec: Math.max(2, Math.min(10, st.half)) * 60,
       difficulty: 'pro', extraTime: false, penalties: false, seed: st.seed,
       // el mismo clima para los dos (sale de la semilla del partido)
@@ -1169,12 +1416,21 @@ export class App {
     };
     const ctx: MatchContext = { mode: 'online', start: st };
     const opp = st.role === 'host' ? st.away : st.home;
-    const link: OnlineLink = { role: st.role, send: (d) => net.relay(d), opponentName: opp.name };
+    const link: OnlineLink = st.role === 'spectator'
+      ? { role: 'guest', spectator: true, send: () => {}, opponentName: `${st.home.name} - ${st.away.name}` }
+      : { role: st.role, send: (d) => net.relay(d), opponentName: opp.name };
     this.playMatch(cfg, this.stadiumForCtx(ctx), ctx, link);
     // el invitado comprueba que siguen llegando datos del anfitrión
     window.clearInterval(this.onlineWatch);
+    let lastTick = performance.now();
     this.onlineWatch = window.setInterval(() => {
       const r = this.runner;
+      const now = performance.now();
+      // si la propia página estuvo congelada (cargando la escena, en segundo plano…), los datos que llegaron
+      // mientras tanto aún no se procesaron: no cuenta como silencio del rival
+      const frozen = now - lastTick > 2500;
+      lastTick = now;
+      if (r?.guestSync && frozen) r.guestSync.lastRecv = Math.max(r.guestSync.lastRecv, now);
       if (!r || !r.guestSync || r.inIntro || r.match.finished || r.halted) return;
       if (r.guestSync.received > 0 && performance.now() - r.guestSync.lastRecv > 12000) {
         window.clearInterval(this.onlineWatch);
@@ -1294,11 +1550,14 @@ export class App {
     const roundFx = next ? st.fixtures.filter((f) => f.round === next.round) : [];
     const history = st.history.map((h) => `<div class="row"><span>Temporada ${h.season}</span><span>Campeón: ${esc(lookup(h.champion).name)} · Tu posición: ${h.userPosition}.º</span></div>`).join('');
     this.show(`
-      <div class="screen-header"><div><div class="crumb">CARRERA · TEMPORADA ${st.season} · ${esc(c.user.name)}</div><h2>Liga Élite</h2></div></div>
+      <div class="screen-header"><div><div class="crumb">CARRERA · TEMPORADA ${st.season} · ${esc(c.user.name)} · PRESUPUESTO ${(st.budget ?? 0).toFixed(1)} M</div><h2>${c.division === 1 ? 'Primera División' : 'Segunda División'}</h2></div></div>
       <div class="screen-body">
         ${st.seasonOver ? `<div class="panel" style="margin-bottom:16px"><b>¡Temporada terminada!</b> Campeón: ${esc(lookup(table[0].team).name)}. Tu equipo terminó ${myPos}.º.</div>` : ''}
         <div class="grid2">
-          <div class="panel"><h3>Clasificación</h3>${this.tableHTML(table, st.userTeam, lookup)}</div>
+          <div><div class="panel"><h3>Clasificación</h3>${this.tableHTML(table, st.userTeam, lookup)}<div class="muted" style="font-size:12px;margin-top:6px">${c.division === 1 ? 'Los 2 últimos descienden a Segunda.' : 'Los 2 primeros ascienden a Primera.'}</div></div>
+            ${st.divisions ? `<details class="panel" style="margin-top:16px"><summary>${c.division === 1 ? 'Segunda División' : 'Primera División'}${st.otherTable ? ' · temporada anterior' : ''}</summary>${st.otherTable ? this.tableHTML(st.otherTable, st.userTeam, lookup) : c.divisionTeams(c.division === 1 ? 2 : 1).map((id) => `<div class="row"><span>${esc(lookup(id).name)}</span><span class="muted">${lookup(id).rating}</span></div>`).join('')}</details>` : ''}
+            ${st.news?.length ? `<div class="panel" style="margin-top:16px"><h3>Noticias</h3>${st.news.slice(0, 6).map((n) => `<div class="muted" style="font-size:13px;margin-bottom:4px">${esc(n)}</div>`).join('')}</div>` : ''}
+          </div>
           <div>
             ${next ? `<div class="panel" style="margin-bottom:16px"><div class="crumb">${esc(next.stage)} DE ${c.totalRounds}</div>${this.fixtureHTML(next, st.userTeam, lookup)}<div class="muted" style="margin-top:8px">Resto de la jornada:</div>${roundFx.filter((f) => f !== next).map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('')}</div>` : ''}
             <div class="panel"><h3>Últimos resultados</h3>${recent.map((f) => `<div class="muted" style="font-size:11px">${esc(f.stage)}</div>${this.fixtureHTML(f, st.userTeam, lookup)}`).join('') || '<span class="muted">Aún no se jugó ningún partido.</span>'}</div>
@@ -1310,16 +1569,19 @@ export class App {
         <button class="btn" data-act="back">Menú</button>
         <button class="btn danger" data-act="abandon">Abandonar carrera</button>
         <button class="btn" data-act="squad">Plantilla y alineación</button>
+        <button class="btn" data-act="market">Mercado</button>
         ${st.seasonOver ? '<button class="btn primary" data-act="nextSeason">Nueva temporada</button>' : next ? '<button class="btn primary" data-act="play">Jugar partido</button>' : ''}
       </div>`, {
       back: () => this.mainMenu(),
       abandon: () => { Career.clear(); this.career = null; this.careerHub(); },
       squad: () => this.squadScreen(),
+      market: () => this.marketScreen(),
       nextSeason: () => {
         const res = c.startNextSeason();
+        const moveMsg = res.userMove === 'up' ? '<p style="color:var(--accent)"><b>¡Ascenso! El año que viene juegas en Primera.</b></p>' : res.userMove === 'down' ? '<p style="color:var(--danger)"><b>Descenso: el año que viene juegas en Segunda.</b></p>' : '';
         const ch = res.changes.slice(0, 12).map((x) => `<div class="row"><span>${esc(x.name)}</span><span style="color:${x.delta > 0 ? 'var(--accent)' : 'var(--danger)'}">${x.delta > 0 ? '+' : ''}${x.delta}</span></div>`).join('');
         this.show(`<div class="screen-header"><div><div class="crumb">FIN DE TEMPORADA</div><h2>Temporada ${st.season}</h2></div></div>
-          <div class="screen-body"><div class="grid2"><div class="panel"><p>Campeón: <b>${esc(lookup(res.champion).name)}</b></p><p>Tu posición final: <b>${res.position}.º</b></p></div>
+          <div class="screen-body"><div class="grid2"><div class="panel"><p>Campeón: <b>${esc(lookup(res.champion).name)}</b></p><p>Tu posición final: <b>${res.position}.º</b></p>${moveMsg}<p>Suben a Primera: ${res.promoted.map((id) => esc(lookup(id).name)).join(', ')}</p><p>Bajan a Segunda: ${res.relegated.map((id) => esc(lookup(id).name)).join(', ')}</p><p>Ingresos de la temporada: <b>+${res.income} M</b> (presupuesto: ${(st.budget ?? 0).toFixed(1)} M)</p></div>
           <div class="panel"><h3>Evolución de tu plantilla</h3>${ch || '<span class="muted">Sin cambios</span>'}</div></div></div>
           <div class="screen-footer"><button class="btn primary" data-act="ok">Continuar</button></div>`, { ok: () => this.careerHub() }, () => this.careerHub());
       },
@@ -1337,6 +1599,43 @@ export class App {
         }, this.stadiumForCtx({ mode: 'career', fixture: next }), { mode: 'career', fixture: next });
       },
     }, () => this.mainMenu());
+  }
+
+  /** Mercado de fichajes del modo carrera: comprar a otros clubes y vender jugadores propios. */
+  private marketScreen(msg = '', tab: 'buy' | 'sell' = 'buy', pos: 'ALL' | 'GK' | 'DEF' | 'MID' | 'FWD' = 'ALL') {
+    const c = this.career;
+    if (!c) return;
+    const st = c.state;
+    const POS = ['ALL', 'GK', 'DEF', 'MID', 'FWD'] as const;
+    const POSN = { ALL: 'Todos', GK: 'Arqueros', DEF: 'Defensas', MID: 'Medios', FWD: 'Delanteros' } as const;
+    const posLabel = (p: PlayerData) => (p.position === 'GK' ? 'POR' : p.position === 'DEF' ? 'DEF' : p.position === 'MID' ? 'MED' : 'DEL');
+    const budget = st.budget ?? 0;
+    let rows = '';
+    if (tab === 'buy') {
+      rows = marketOffers(c).filter((o) => pos === 'ALL' || o.player.position === pos).slice(0, 40).map((o) => `<div class="row market-row ${o.price > budget ? 'expensive' : ''}"><span><span class="pos ${o.player.position}">${posLabel(o.player)}</span> ${esc(o.player.name)} <span class="muted">${o.age} años · ${esc(o.team.short)}</span></span><span class="ovr">${playerOverall(o.player)}</span><span class="price">${o.price.toFixed(1)} M</span><button class="btn" data-act="buy" data-id="${o.player.id}">Fichar</button></div>`).join('');
+    } else {
+      rows = c.user.players.filter((p) => pos === 'ALL' || p.position === pos).map((p) => {
+        const age = st.ages[p.id] ?? 25;
+        return `<div class="row market-row"><span><span class="pos ${p.position}">${posLabel(p)}</span> ${esc(p.name)} <span class="muted">${age} años${st.lineup.includes(p.id) ? ' · titular' : ''}</span></span><span class="ovr">${playerOverall(p)}</span><span class="price">${(playerPrice(p, age) * 0.9).toFixed(1)} M</span><button class="btn danger" data-act="sell" data-id="${p.id}">Vender</button></div>`;
+      }).join('');
+    }
+    this.show(`
+      <div class="screen-header"><div><div class="crumb">MERCADO · ${esc(c.user.name)} · ${c.user.players.length}/${SQUAD_MAX} jugadores</div><h2>Presupuesto: ${budget.toFixed(1)} M</h2></div></div>
+      <div class="screen-body"><div class="panel">
+        ${msg ? `<div class="editor-msg">${esc(msg)}</div>` : ''}
+        ${this.stepper('Ver', tab === 'buy' ? 'Comprar (otros clubes)' : 'Vender (tu plantilla)', 'tab')}
+        ${this.stepper('Puesto', POSN[pos], 'pos')}
+        <div class="market-list">${rows || '<span class="muted">No hay jugadores.</span>'}</div>
+        <p class="muted" style="font-size:12px;margin-top:8px">Los precios dependen de la media y la edad. Al vender recibes el 90 %. La plantilla debe tener entre ${SQUAD_MIN} y ${SQUAD_MAX} jugadores. Cada temporada ingresas dinero según tu posición (más en Primera).</p>
+      </div></div>
+      <div class="screen-footer"><button class="btn primary" data-act="back">Volver</button></div>`, {
+      tabPrev: () => this.marketScreen('', tab === 'buy' ? 'sell' : 'buy', pos), tabNext: () => this.marketScreen('', tab === 'buy' ? 'sell' : 'buy', pos),
+      posPrev: () => this.marketScreen('', tab, POS[(POS.indexOf(pos) + POS.length - 1) % POS.length]),
+      posNext: () => this.marketScreen('', tab, POS[(POS.indexOf(pos) + 1) % POS.length]),
+      buy: (el) => { const err = buyPlayer(c, el.dataset.id!); this.marketScreen(err ?? 'Fichaje cerrado', tab, pos); },
+      sell: (el) => { const err = sellPlayer(c, el.dataset.id!); this.marketScreen(err ?? 'Venta cerrada', tab, pos); },
+      back: () => this.careerHub(),
+    }, () => this.careerHub());
   }
 
   private squadScreen() {
@@ -1438,6 +1737,7 @@ export class App {
   settingsScreen(back: () => void, inMatch = false) {
     const st = this.settings;
     const Q = ['low', 'medium', 'high'] as const;
+    const LANGS = ['es', 'en', 'pt'] as const;
     const QL = { low: 'Baja', medium: 'Media', high: 'Alta' };
     const CAMS = ['broadcast', 'tele', 'wide'] as const;
     const CL = { broadcast: 'Transmisión', tele: 'Tele', wide: 'Panorámica' };
@@ -1447,10 +1747,12 @@ export class App {
       <div class="screen-header"><div><div class="crumb">CONFIGURACIÓN</div><h2>Opciones</h2></div></div>
       <div class="screen-body"><div class="grid3">
         <div class="panel"><h3>Gráficos</h3>
+          ${this.stepper('Idioma / Language', LANG_NAMES[st.language], 'lang')}
           ${this.stepper('Calidad', QL[st.quality] + (inMatch ? ' (próximo partido)' : ''), 'qual')}
           ${toggle('Sombras', 'shadows')}
           ${this.stepper('Escala de resolución', pct(st.resolutionScale), 'res')}
           ${toggle('Antialiasing (reiniciar)', 'antialias')}
+          ${toggle('Calidad automática (según FPS)', 'autoQuality')}
           ${this.stepper('Cámara', CL[st.cameraStyle], 'cam')}
           ${this.stepper('Zoom de cámara', st.cameraZoom.toFixed(1) + 'x', 'zoom')}
           ${toggle('Radar', 'showRadar')}
@@ -1497,6 +1799,8 @@ export class App {
     };
     const h: Handlers = {
       tog: (t) => { const k = t.dataset.key as keyof GameSettings; (st as any)[k] = !st[k]; apply(); },
+      langPrev: () => { st.language = cycleArr(LANGS, st.language, -1); setLang(st.language); apply(); },
+      langNext: () => { st.language = cycleArr(LANGS, st.language, 1); setLang(st.language); apply(); },
       qualPrev: () => { st.quality = cycleArr(Q, st.quality, -1); apply(); },
       qualNext: () => { st.quality = cycleArr(Q, st.quality, 1); apply(); },
       resPrev: () => step('resolutionScale', -1, 0.5, 1, 0.1), resNext: () => step('resolutionScale', 1, 0.5, 1, 0.1),

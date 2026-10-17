@@ -27,6 +27,8 @@ jobs:
         run: npx playwright-core install chromium
       - name: Jugar sin servidor (doble clic en index.html tras descargar el ZIP)
         run: node scripts/e2e-file.mjs index.html
+      - name: Audio por análisis de señal (cada sonido suena, sin saturar; paneo 3D)
+        run: node scripts/e2e-audio.mjs
       - name: Aviso si jugar.html está desactualizado
         run: git diff --quiet -- jugar.html || echo "::warning file=jugar.html::jugar.html no coincide con el código. Ejecuta 'npm run build' y súbelo para que el ZIP del repositorio funcione con doble clic."
       - name: Servidor online (arranca y responde)
@@ -61,10 +63,20 @@ jobs:
       - name: Comprimir
         shell: pwsh
         run: Compress-Archive -Path release/FootballElite3D-win32-x64 -DestinationPath FootballElite3D-Windows.zip
+      - name: Instalador (.exe con accesos directos y desinstalador)
+        shell: pwsh
+        run: |
+          $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+          if (-not $iscc) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc installer\windows.iss
+          Copy-Item release\FootballElite3D-Setup.exe FootballElite3D-Setup.exe
       - uses: actions/upload-artifact@v4
         with:
           name: FootballElite3D-Windows
-          path: FootballElite3D-Windows.zip
+          path: |
+            FootballElite3D-Windows.zip
+            FootballElite3D-Setup.exe
       - name: Publicar ZIP de Windows y juego en un solo archivo (Release "latest")
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         shell: bash
@@ -73,8 +85,39 @@ jobs:
         run: |
           cp dist/jugar.html FootballElite3D.html
           gh release edit latest --title "Football Elite 3D — descargas más recientes" --latest \
-            --notes "Compilado automáticamente desde la rama main. Android: instala FootballElite3D.apk (permite \"orígenes desconocidos\"). Windows: descarga FootballElite3D-Windows.zip, extráelo y abre FootballElite3D.exe. Cualquier PC: abre FootballElite3D.html con doble clic en Chrome, Edge o Firefox."
-          gh release upload latest FootballElite3D-Windows.zip FootballElite3D.html --clobber
+            --notes "Compilado automáticamente desde la rama main. Android: instala FootballElite3D.apk (permite \"orígenes desconocidos\"). Windows: instala con FootballElite3D-Setup.exe (o descarga FootballElite3D-Windows.zip, extráelo y abre FootballElite3D.exe). macOS: FootballElite3D-macOS.zip (la primera vez, clic derecho → Abrir). Cualquier PC: abre FootballElite3D.html con doble clic en Chrome, Edge o Firefox."
+          gh release upload latest FootballElite3D-Windows.zip FootballElite3D-Setup.exe FootballElite3D.html --clobber
+
+  macos:
+    name: Aplicación de macOS
+    runs-on: macos-latest
+    # después del APK: así el Release "latest" ya existe cuando se sube la app
+    needs: [test-web, android]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Compilar y empaquetar con Electron (Intel y Apple Silicon)
+        run: npm run package
+        env:
+          PLATFORMS: darwin
+          ARCH: universal
+      - name: Comprimir
+        run: ditto -c -k --keepParent "release/FootballElite3D-darwin-universal/FootballElite3D.app" FootballElite3D-macOS.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FootballElite3D-macOS
+          path: FootballElite3D-macOS.zip
+      - name: Publicar app de macOS (Release "latest")
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload latest FootballElite3D-macOS.zip --clobber
 
   android:
     name: APK de Android

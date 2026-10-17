@@ -16,6 +16,9 @@ function clean(name) {
   return s || 'Jugador';
 }
 
+/** Espectadores como máximo por partido de sala privada. */
+const MAX_SPECTATORS = 10;
+
 export class Lobby {
   /**
    * @param {{ get(id: string): any, set(id: string, rec: any): void, top(n: number): any[] }} store
@@ -31,6 +34,8 @@ export class Lobby {
     this.queues = { friendly: [], rivals: [] };
     /** salas privadas por código */
     this.rooms = new Map();
+    /** Partidos de sala privada que se pueden mirar como espectador (código de la sala → partido). */
+    this.watchable = new Map();
     /** partidos en curso por id */
     this.matches = new Map();
     this.nextMatch = 1;
@@ -38,7 +43,7 @@ export class Lobby {
 
   /** Nueva conexión (ws: objeto con send(str), close() y on('message'|'close')). */
   connect(ws) {
-    const c = { ws, id: null, name: 'Jugador', team: null, state: 'idle', queuedAt: 0, mode: null, match: null, room: null, alive: true };
+    const c = { ws, id: null, name: 'Jugador', team: null, state: 'idle', queuedAt: 0, mode: null, match: null, room: null, watching: null, alive: true };
     this.clients.add(c);
     ws.on('message', (raw) => {
       let msg;
@@ -50,7 +55,7 @@ export class Lobby {
       if (msg && typeof msg.t === 'string') this.handle(c, msg);
     });
     ws.on('close', () => this.disconnect(c));
-    ws.on('pong', () => { c.alive = true; });
+    ws.on('pong', () => { c.alive = true; c.missed = 0; });
     return c;
   }
 
@@ -131,7 +136,28 @@ export class Lobby {
         c.team = typeof msg.team === 'string' ? msg.team.slice(0, 24) : null;
         this.rooms.delete(code);
         room.host.room = null;
-        this.startMatch(room.host, c, 'friendly', room.half);
+        const m = this.startMatch(room.host, c, 'friendly', room.half);
+        m.code = code;
+        this.watchable.set(code, m);
+        break;
+      }
+      case 'watch': {
+        const code = String(msg.code ?? '').toUpperCase().trim();
+        const m = this.watchable.get(code);
+        if (!m || m.over) {
+          this.send(c, { t: 'error', text: 'No hay ningún partido en juego con ese código' });
+          return;
+        }
+        if (m.spectators.size >= MAX_SPECTATORS) {
+          this.send(c, { t: 'error', text: 'Ese partido ya tiene el máximo de espectadores' });
+          return;
+        }
+        this.leaveAll(c);
+        m.spectators.add(c);
+        c.watching = m;
+        c.state = 'watch';
+        this.send(c, { ...m.start, role: 'spectator' });
+        for (const p of [m.host, m.guest]) this.send(p, { t: 'spectators', n: m.spectators.size });
         break;
       }
       case 'relay': {
@@ -139,6 +165,8 @@ export class Lobby {
         if (!m || m.over) return;
         const other = m.host === c ? m.guest : m.host;
         this.send(other, { t: 'relay', d: msg.d });
+        // los espectadores reciben las instantáneas del anfitrión
+        if (m.host === c && m.spectators.size && msg.d && msg.d.k === 's') for (const s of m.spectators) this.send(s, { t: 'relay', d: msg.d });
         break;
       }
       case 'result':
@@ -197,15 +225,17 @@ export class Lobby {
     this.removeFromQueues(guest);
     const id = `m${this.nextMatch++}`;
     const seed = Math.floor(this.random() * 1e9);
-    const m = { id, mode, host, guest, seed, half, startedAt: this.now(), results: new Map(), over: false, timer: null };
+    const m = { id, mode, host, guest, seed, half, startedAt: this.now(), results: new Map(), over: false, timer: null, spectators: new Set(), code: null, start: null };
     this.matches.set(id, m);
     for (const c of [host, guest]) {
       c.state = 'match';
       c.match = m;
     }
     const base = { t: 'match', id, mode, seed, half, home: this.profile(host), away: this.profile(guest) };
+    m.start = base;
     this.send(host, { ...base, role: 'host' });
     this.send(guest, { ...base, role: 'guest' });
+    return m;
   }
 
   /** Resultado de un partido. En Rivals se exige que coincida el de los dos (o el del que queda). */
@@ -224,6 +254,13 @@ export class Lobby {
     m.over = true;
     if (m.timer) clearTimeout(m.timer);
     this.matches.delete(m.id);
+    if (m.code) this.watchable.delete(m.code);
+    for (const s of m.spectators) {
+      s.watching = null;
+      s.state = 'idle';
+      this.send(s, { t: 'watchEnd', forfeit: !!forfeiter });
+    }
+    m.spectators.clear();
     const players = [m.host, m.guest];
     let outcome = null;
     if (forfeiter) {
@@ -273,6 +310,12 @@ export class Lobby {
   /** Sale de colas, salas y partidos (abandonar un partido en curso = derrota en Rivals). */
   leaveAll(c) {
     this.removeFromQueues(c);
+    if (c.watching) {
+      const w = c.watching;
+      w.spectators.delete(c);
+      c.watching = null;
+      if (!w.over) for (const p of [w.host, w.guest]) this.send(p, { t: 'spectators', n: w.spectators.size });
+    }
     if (c.room) {
       this.rooms.delete(c.room);
       c.room = null;
@@ -297,7 +340,9 @@ export class Lobby {
   /** Comprueba conexiones muertas (llamar cada ~15 s). */
   heartbeat() {
     for (const c of this.clients) {
-      if (!c.alive) {
+      // se tolera un latido sin respuesta (p. ej. un móvil que cargó la escena con la página congelada)
+      if (!c.alive) c.missed = (c.missed ?? 0) + 1;
+      if (!c.alive && c.missed >= 2) {
         try {
           c.ws.terminate?.();
         } catch {

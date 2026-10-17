@@ -4,7 +4,7 @@ import { makeMatch } from './helpers';
 import { DIVISIONS, divisionIndex, divisionInfo, rivalsDelta } from '../server/divisions.mjs';
 // @ts-expect-error módulo JS del servidor (sin tipos)
 import { Lobby } from '../server/lobby.mjs';
-import { GuestSync, HostSync } from '../src/net/NetSync';
+import { GuestSync, HostSync, adaptiveDelay } from '../src/net/NetSync';
 import { RemoteInput, captureFrame, mergeFrames, type InputFrame } from '../src/net/RemoteInput';
 import { HumanController } from '../src/control/HumanController';
 import { Input } from '../src/input/Input';
@@ -102,6 +102,50 @@ describe('Servidor online (sala de espera)', () => {
     expect(b.last('match').mode).toBe('friendly');
   });
 
+  it('espectadores: miran un partido de sala privada con su código', () => {
+    const lobby = new Lobby(memStore());
+    const a = hello(lobby, 'Ana');
+    const b = hello(lobby, 'Beto');
+    const c = hello(lobby, 'Caro');
+    a.msg({ t: 'create', team: 'marea', half: 3 });
+    const code = a.last('room').code;
+    c.msg({ t: 'watch', code });
+    expect(c.last('error')).toBeTruthy(); // todavía no empezó
+    b.msg({ t: 'join', code });
+    c.msg({ t: 'watch', code: code.toLowerCase() });
+    const m = c.last('match');
+    expect(m.role).toBe('spectator');
+    expect(m.seed).toBe(a.last('match').seed);
+    expect(a.last('spectators').n).toBe(1);
+    // recibe las instantáneas del anfitrión, pero no lo que manda el invitado
+    a.msg({ t: 'relay', d: { k: 's', x: 7 } });
+    expect(c.last('relay').d.x).toBe(7);
+    b.msg({ t: 'relay', d: { k: 'i', f: [] } });
+    expect(c.last('relay').d.k).toBe('s');
+    // sus resultados no cuentan; al terminar se le avisa
+    c.msg({ t: 'result', home: 9, away: 0 });
+    a.msg({ t: 'result', home: 1, away: 0 });
+    b.msg({ t: 'result', home: 1, away: 0 });
+    expect(a.last('final').outcome.home).toBe(1);
+    expect(c.last('watchEnd')).toBeTruthy();
+    c.msg({ t: 'watch', code });
+    expect(c.last('error').text).toMatch(/No hay/);
+  });
+
+  it('latido: tolera un ping sin respuesta y desconecta tras dos', () => {
+    const lobby = new Lobby(memStore());
+    const a = hello(lobby, 'Ana');
+    const b = hello(lobby, 'Beto');
+    lobby.heartbeat(); // ping
+    b.handlers.pong(); // Beto responde, Ana no
+    lobby.heartbeat(); // Ana: primer latido perdido (se tolera)
+    expect(lobby.clients.size).toBe(2);
+    b.handlers.pong();
+    lobby.heartbeat(); // Ana: segundo latido perdido → fuera
+    expect(lobby.clients.size).toBe(1);
+    void a;
+  });
+
   it('en Rivals no empareja divisiones muy distintas enseguida', () => {
     const store = memStore();
     let now = 0;
@@ -144,6 +188,41 @@ describe('Sincronización online', () => {
     expect(guest.ball.pos.distanceTo(host.ball.pos)).toBeLessThan(0.6);
     expect(guest.phase).toBe(host.phase);
     expect(guest.teams[1].subsUsed).toBe(1);
+  });
+
+  it('colchón adaptativo: corto con conexión regular, más largo con tirones', () => {
+    expect(adaptiveDelay(1 / 30, 0.002)).toBeLessThan(0.07);
+    expect(adaptiveDelay(1 / 30, 0.04)).toBeGreaterThan(0.14);
+    expect(adaptiveDelay(0.5, 0.3)).toBe(0.25);
+  });
+
+  it('predicción del invitado: su jugador se adelanta en la dirección del stick y vuelve al soltarlo', () => {
+    const host = makeMatch({ seed: 22 });
+    const guest = makeMatch({ seed: 22 });
+    const input = new Input(undefined, false);
+    const hc = new HumanController(input, { right: new Vector3(1, 0, 0), forward: new Vector3(0, 0, -1) }, { autoSwitch: true, passAssist: 1, powerBarTime: 1, showAimAssist: true, assist: false });
+    const sync = new HostSync(host, hc, 1);
+    const gs = new GuestSync(guest);
+    let t = 0;
+    host.simulate(3);
+    host.phase = 'play';
+    for (let i = 0; i < 30; i++) {
+      host.step(); host.events.length = 0;
+      const s = sync.step(1 / 60);
+      if (s) gs.push(JSON.parse(JSON.stringify(s)), (t += 1000 / 30));
+    }
+    gs.update(t);
+    guest.phase = 'play';
+    guest.gkHolding = null;
+    const p = guest.teams[1].players[8];
+    guest.teams[1].controlled = p;
+    guest.owner = null;
+    const base = p.pos.clone();
+    for (let i = 0; i < 30; i++) { p.pos.copy(base); gs.predict(1, { x: 1, z: 0 }, 1 / 60); }
+    expect(p.pos.x - base.x).toBeGreaterThan(0.4);
+    expect(Math.abs(p.pos.z - base.z)).toBeLessThan(0.05);
+    for (let i = 0; i < 60; i++) { p.pos.copy(base); gs.predict(1, { x: 0, z: 0 }, 1 / 60); }
+    expect(p.pos.distanceTo(base)).toBeLessThan(0.05);
   });
 
   it('mandos remotos: pulsaciones breves no se pierden aunque lleguen juntas', () => {

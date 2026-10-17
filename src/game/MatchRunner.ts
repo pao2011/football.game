@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AutoQuality, type QualityStep } from './AutoQuality';
 import { SIM_DT } from '../config/constants';
 import type { GameSettings } from '../config/Settings';
 import { HumanController } from '../control/HumanController';
@@ -26,6 +27,8 @@ export interface OnlineLink {
   send(d: object): void;
   /** Nombre del rival (para los avisos). */
   opponentName?: string;
+  /** Espectador: recibe el partido del anfitrión pero no manda nada ni controla a nadie. */
+  spectator?: boolean;
 }
 
 /** Pausas por jugador en un partido online y duración máxima de cada una. */
@@ -96,6 +99,11 @@ export class MatchRunner {
   private pendingTip: string | null = null;
   /** Velocidad de simulación (para pruebas automáticas). */
   timeScale = 1;
+  /** Calidad automática según los FPS (la pone App si está activada). */
+  autoQuality: AutoQuality | null = null;
+  /** Duración real del último fotograma (sin el recorte que usa la simulación). */
+  private realDt = 0;
+  onQualityStep: (s: QualityStep) => void = () => {};
   /** Equipo del jugador local (0 local, 1 visitante, -1 ninguno). */
   readonly localTeam: 0 | 1 | -1;
   /** Partido online: el anfitrión simula; el invitado dibuja lo que recibe. */
@@ -197,7 +205,7 @@ export class MatchRunner {
       this.achievements.onUnlock = (a) => this.hud.showBanner(`🏆 ${a.icon} ${escapeHtml(a.name)}`, `Logro desbloqueado · ${escapeHtml(a.desc)}`, '#ffd23f', 3.2);
     }
     this.commentary = settings.commentary !== false && !config.training ? new Commentary(uiRoot, this.match, !!settings.commentaryVoice) : null;
-    this.touch = wantTouch && (this.controller || isGuest) ? new TouchControls(uiRoot, input) : null;
+    this.touch = wantTouch && (this.controller || (isGuest && !online?.spectator)) ? new TouchControls(uiRoot, input) : null;
     document.body.classList.toggle('touch', !!this.touch);
     if (this.touch) {
       // consejo de uso las primeras partidas
@@ -241,7 +249,8 @@ export class MatchRunner {
     const loop = (now: number) => {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(loop);
-      const dt = Math.min(0.1, (now - this.last) / 1000);
+      this.realDt = (now - this.last) / 1000;
+      const dt = Math.min(0.1, this.realDt);
       this.last = now;
       this.frame(dt);
     };
@@ -344,6 +353,10 @@ export class MatchRunner {
       if (pt !== -1 || m.phase !== 'play') this.touch.setContext(pt === team.index || m.gkHolding?.team === team.index || (m.phase !== 'play' && m.restart?.team === team.index));
       this.touch.setVisible(!this.paused && !this.inIntro && m.phase !== 'replay' && !m.finished);
     }
+    if (this.autoQuality && !this.paused) {
+      const step = this.autoQuality.sample(this.realDt);
+      if (step) this.onQualityStep(step);
+    }
     this.view.render();
 
     if (m.finished && !this.finishedNotified) {
@@ -426,6 +439,12 @@ export class MatchRunner {
     if (steps >= 8) this.acc = 0;
     if (this.guestFrames.length >= 2) this.online!.send({ k: 'i', f: this.guestFrames.splice(0) });
     for (const e of this.guestSync!.update(performance.now())) this.handleEvent(e);
+    // predicción local de mi jugador (menos sensación de retraso)
+    if (this.localTeam >= 0 && !this.paused) {
+      const mv = this.input.move();
+      const dir = { x: this.guestRight.x * mv.x + this.guestForward.x * mv.y, z: this.guestRight.z * mv.x + this.guestForward.z * mv.y };
+      this.guestSync!.predict(this.localTeam as 0 | 1, dir, dt);
+    }
   }
 
   /** Partido online detenido por una pausa (mía o del rival). */
@@ -556,8 +575,8 @@ export class MatchRunner {
     this.paused = true;
     if (this.online) {
       this.input.suppressed = true;
-      // la pausa detiene el partido para los dos (un número limitado de veces)
-      if (!this.inIntro && !this.localHalt && this.pausesLeft > 0) {
+      // la pausa detiene el partido para los dos (un número limitado de veces); el espectador solo abre el menú
+      if (!this.online.spectator && !this.inIntro && !this.localHalt && this.pausesLeft > 0) {
         this.pausesLeft--;
         this.localHalt = true;
         this.haltStarted = performance.now();

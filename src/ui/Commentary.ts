@@ -3,6 +3,7 @@
 import type { Match } from '../sim/Match';
 import type { MatchEvent } from '../sim/types';
 import { esc } from './dom';
+import { getLang, tr } from '../i18n';
 
 type Line = { text: string; prio: number };
 
@@ -24,7 +25,8 @@ export class Commentary {
     if (speak && typeof window !== 'undefined' && 'speechSynthesis' in window) {
       const choose = () => {
         const vs = window.speechSynthesis.getVoices();
-        this.voice = vs.find((v) => v.lang.toLowerCase().startsWith('es')) ?? null;
+        const code = getLang();
+        this.voice = vs.find((v) => v.lang.toLowerCase().startsWith(code)) ?? null;
       };
       choose();
       window.speechSynthesis.onvoiceschanged = choose;
@@ -135,8 +137,8 @@ export class Commentary {
     const synth = window.speechSynthesis;
     if (line.prio >= 4) synth.cancel();
     else if (synth.speaking) return;
-    const u = new SpeechSynthesisUtterance(line.text.replace(/¡|!/g, ''));
-    u.lang = 'es-ES';
+    const u = new SpeechSynthesisUtterance(tr(line.text).replace(/¡|!/g, ''));
+    u.lang = ({ es: 'es-ES', en: 'en-GB', pt: 'pt-BR' } as const)[getLang()];
     if (this.voice) u.voice = this.voice;
     u.rate = line.prio >= 4 ? 1.15 : 1.05;
     u.pitch = line.prio >= 5 ? 1.25 : 1;

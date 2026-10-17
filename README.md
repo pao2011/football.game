@@ -61,7 +61,11 @@ Todos los recursos (modelos, animaciones, estadio, público, texturas, escudos, 
 
 > **¿Pantalla en blanco?** Antes pasaba porque `index.html` carga el código fuente TypeScript, que el navegador no puede ejecutar sin el servidor de desarrollo. Ahora redirige a `jugar.html`. Si aun así ves la pantalla en blanco, comprueba que **extrajiste** el ZIP (no lo abras desde dentro) y que usas un navegador actualizado con WebGL2 (Chrome, Edge o Firefox).
 
-**Ejecutable de Windows:** [descarga `FootballElite3D-Windows.zip`](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D-Windows.zip), extráelo y abre `FootballElite3D.exe` (si Windows SmartScreen avisa, pulsa *Más información → Ejecutar de todas formas*: el ejecutable no está firmado). GitHub Actions lo compila en cada push y lo publica en [Releases → latest](https://github.com/pao2011/football.game/releases/latest) cuando se actualiza `main`; en otras ramas queda como artefacto **FootballElite3D-Windows** en la pestaña *Actions*.
+**Instalador de Windows:** [descarga `FootballElite3D-Setup.exe`](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D-Setup.exe): instala el juego con acceso directo en el menú Inicio (y en el escritorio si quieres) y se desinstala desde *Configuración → Aplicaciones*.
+
+**macOS:** [descarga `FootballElite3D-macOS.zip`](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D-macOS.zip) (Intel y Apple Silicon), descomprímelo y arrastra la app a *Aplicaciones*. No está firmada: la primera vez, **clic derecho → Abrir**.
+
+**Ejecutable de Windows sin instalar:** [descarga `FootballElite3D-Windows.zip`](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D-Windows.zip), extráelo y abre `FootballElite3D.exe` (si Windows SmartScreen avisa, pulsa *Más información → Ejecutar de todas formas*: el ejecutable no está firmado). GitHub Actions lo compila en cada push y lo publica en [Releases → latest](https://github.com/pao2011/football.game/releases/latest) cuando se actualiza `main`; en otras ramas queda como artefacto **FootballElite3D-Windows** en la pestaña *Actions*.
 
 ### Desde el código fuente
 
@@ -299,6 +303,12 @@ Se puede jugar entre PC, móvil (APK o navegador) y mando: cada uno usa sus prop
 - **Bocina del estadio** después de cada gol.
 - **Sonido 3D**: los sonidos del balón (golpeos, botes, rodar, postes, red, guantes) se panean a la izquierda o la derecha según dónde ocurren respecto a la cámara, y suenan algo más bajos cuanto más lejos. Volúmenes separados para **balón** y **árbitro** en *Configuración → Sonido*, y **M** para silenciarlo todo.
 - Audio procedural original: golpeos, botes, postes, red, silbato, ambiente de estadio, gritos de gol, "¡uy!", aplausos, abucheos, sonidos de interfaz y música de menú.
+- **Idiomas**: español, inglés y portugués (Brasil); se elige en *Configuración* (por defecto, el del navegador). El comentarista también habla en el idioma elegido.
+- **Modo foto**: desde la pausa, cámara libre (arrastrar para girar, rueda o pellizco para acercar, WASD para mover) y captura en PNG.
+- **Repeticiones guardadas**: en la pausa, *Guardar jugada* conserva los últimos 8 segundos; en *Menú → Repeticiones* se ven en bucle (pausa, cámara lenta o rápida, modo foto) y se borran.
+- **Calidad automática**: si el equipo no llega a 40 FPS, el juego baja la resolución y después las sombras, y lo recuerda para el siguiente partido (se desactiva en *Configuración → Gráficos*).
+- **Pantallas de celular**: los menús, la configuración, la pausa y las tarjetas de equipo se reorganizan para que todo entre tanto en horizontal como en vertical.
+- **Online**: espectadores en las salas privadas (con el código de la sala, hasta 10), colchón de interpolación que se adapta a la conexión y predicción local del jugador del invitado (responde al instante).
 - Menús animados navegables con ratón, teclado y mando; pantalla de carga con consejos; pausa; configuración de gráficos (calidad baja/media/alta, sombras, escala de resolución, antialiasing, radar, ayudas, repeticiones), sonido y jugabilidad. Todo se guarda en el almacenamiento local.
 
 ## 7. Arquitectura
@@ -331,15 +341,17 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 | Prueba | Comando | Resultado |
 |---|---|---|
 | Comprobación de tipos (TypeScript estricto) | `npx tsc --noEmit` | ✅ sin errores |
-| Unitarias y de simulación | `npm test` | ✅ **173/173** |
+| Unitarias y de simulación | `npm test` | ✅ **218/218** |
 | Extremo a extremo en Chromium real | `npm run build && npm run test:e2e` | ✅ **15/15** |
 | Extremo a extremo con mando (mando estándar simulado) | `npm run build && npm run test:e2e:gamepad` | ✅ **7/7** |
 | Extremo a extremo móvil (emulación táctil 844×390) | `npm run build && npm run test:e2e:mobile` | ✅ **17/17** |
-| Online: servidor real + dos navegadores jugando entre sí | `npm run build && npm run test:e2e:online` | ✅ **12/12** |
+| Online: servidor real + dos navegadores jugando entre sí y un espectador | `npm run build && npm run test:e2e:online` | ✅ **13/13** |
+| Audio por análisis de señal (OfflineAudioContext en Chromium) | `npm run build && npm run test:audio` | ✅ **29/29** |
 | Jugar sin servidor (doble clic en `index.html` → `jugar.html`, `file://`) | `npm run build && npm run test:e2e:file` | ✅ pantalla de inicio sin errores |
 | Ejecutable de Linux bajo Xvfb | — | ✅ sin errores (detalle abajo) |
 
-**Unitarias y de simulación (173 pruebas)**
+**Unitarias y de simulación (218 pruebas)**
+- **Nuevas en esta versión**: calidad automática (4), repeticiones guardadas (codificación compacta, lista con máximo), liga con dos divisiones (ascensos, descensos, mercado), logros, editor de equipos, online (colchón adaptativo, predicción del invitado, espectadores, latido tolerante).
 - **Arquero con los pies (3)**: juega el balón enseguida, despeja sin pensarlo con un rival encima y sale a recibir una cesión. **Ley de la ventaja (3)**: el juego sigue si se conserva el balón, se vuelve atrás si se pierde enseguida y no hay ventaja sin un compañero libre.
 - **Balones aéreos (8)**: control con el pecho y con el muslo (el balón queda en los pies), pelotazo demasiado fuerte que rebota, elección del remate según altura y orientación, volea de la IA con un centro bajo, y volea, tijera y chilena del jugador controlado con TIRO (el balón va al arco y el jugador se levanta tras caer).
 - **Sonidos (3)**: cada evento suena con el suyo (golpeo, cabezazo, saque con la mano, control, blocaje, despeje, gol con bocina), el balón rueda y el que conduce da toques al ritmo de la carrera, y la simulación avisa de los controles y blocajes.
@@ -377,7 +389,9 @@ La simulación es determinista con semilla y funciona sin gráficos, así que se
 
 **Móvil (17 pruebas)**: animación de inicio, valores por defecto para móvil, menús con toques, tiro libre (cámara del lanzador, trayectoria, botones de efecto y disparo, sin avisos emergentes), controles táctiles visibles, saque con PASE, movimiento con el joystick, tiro con potencia con TIRO, vaselina deslizando sobre TIRO, botones ROSCA / VASELINA / RASO / POTENTE y combinación POTENTE + RASO (sin botón de sprint), regate deslizando en la zona libre, botones propios de defensa con indicador DEFENSA y CAMBIAR funcionando, pausa táctil, sin aviso de orientación, PWA (manifiesto, service worker y **carga sin conexión**), pase y tiro asistidos con toque rápido, presentación del partido (se salta con un toque), cámara que mantiene visible el juego junto a la banda inferior, y ningún error de JavaScript.
 
-**Online (12 pruebas, servidor real y dos navegadores)**: conexión de los dos, sala privada con código (los dos con el mismo club: se ven los 22 jugadores), pausa compartida, el invitado ve el partido del anfitrión, los mandos del invitado llegan al anfitrión, cambio pedido por el invitado, mensaje rápido, final del amistoso con el mismo marcador en los dos, Division Rivals (emparejamiento, resultado y puntos), abandono (el rival gana 3-0), clasificación y ningún error de JavaScript.
+**Online (13 pruebas, servidor real y tres navegadores)**: conexión de los dos, **un tercero mira el partido como espectador**, sala privada con código (los dos con el mismo club: se ven los 22 jugadores), pausa compartida, el invitado ve el partido del anfitrión, los mandos del invitado llegan al anfitrión, cambio pedido por el invitado, mensaje rápido, final del amistoso con el mismo marcador en los dos, Division Rivals (emparejamiento, resultado y puntos), abandono (el rival gana 3-0), clasificación y ningún error de JavaScript.
+
+**Audio (29 pruebas)**: cada sonido (golpeos, cabezazo, botes, poste, red, guantes, silbatos, bocina, público, cánticos, fuegos artificiales, lluvia, interfaz y música del menú) produce señal audible sin saturar ni NaN; el volumen del balón a 0 lo silencia y un golpeo a la derecha de la cámara suena en el canal derecho.
 
 **Ejecutable de Linux**: se lanzó bajo Xvfb, se inició un partido desde el menú sin errores y no hizo ninguna conexión de red externa (se desactivaron las conexiones en segundo plano de Chromium y la descarga de diccionarios).
 
@@ -389,14 +403,15 @@ El plan de mejoras futuras está en **[ROADMAP.md](ROADMAP.md)**.
 
 - **Rendimiento en GPU real no medido.** El entorno de desarrollo no tiene tarjeta gráfica y todo se probó con renderizado por software (SwiftShader), que da pocos FPS. Por diseño (unas 250 llamadas de dibujo, mallas de entre 1.600 y 5.000 vértices por jugador, público instanciado), una GPU integrada moderna debería mantener 60 FPS en calidad media, pero no está verificado. Si va lento, baja la calidad, desactiva las sombras o reduce la escala de resolución en *Configuración*.
 - **Audio procedural** (sintetizado, sin grabaciones): se verificó por análisis de señal (sin silencios, sin saturación y con espectros correctos), pero no se escuchó.
-- **Reglas no implementadas**: mano, faltas del arquero en sus estiradas a los pies y saque de banda mal ejecutado. En un tiro libre indirecto se acepta un gol directo.
-- **Online**: el anfitrión simula el partido, así que **el invitado juega con un pequeño retraso** (su ping + 0,1 s de colchón para que se vea fluido): con buena conexión apenas se nota, con mala se nota en los controles. El anfitrión debe **mantener el juego en primer plano** (si minimiza la ventana el navegador frena el partido para los dos). El servidor gratuito de Render **se duerme** tras 15 min sin uso (la primera conexión tarda hasta 1 minuto) y **puede perder la clasificación de Division Rivals al reiniciarse** (su disco es temporal; cada jugador guarda su última división en su dispositivo). La validación de resultados es básica: en Rivals solo cuenta si los dos jugadores informan el mismo marcador. Se probó con dos navegadores en el mismo ordenador (`npm run test:e2e:online`), no con dos dispositivos por Internet. El servidor público por defecto **no existe hasta que alguien publique el Blueprint** de `render.yaml`.
+- **Reglas no implementadas**: faltas del arquero en sus estiradas a los pies y saque de banda mal ejecutado. En un tiro libre indirecto se acepta un gol directo.
+- **Online**: el anfitrión simula el partido, así que **el invitado juega con un pequeño retraso** (su ping + un colchón de 0,06 a 0,25 s según la conexión). Su propio jugador se mueve al instante gracias a la predicción local, pero el balón y los rivales llegan con ese retraso. No hay torneos online. El anfitrión debe **mantener el juego en primer plano** (si minimiza la ventana el navegador frena el partido para los dos). El servidor gratuito de Render **se duerme** tras 15 min sin uso (la primera conexión tarda hasta 1 minuto) y **puede perder la clasificación de Division Rivals al reiniciarse** (su disco es temporal; cada jugador guarda su última división en su dispositivo). La validación de resultados es básica: en Rivals solo cuenta si los dos jugadores informan el mismo marcador. Se probó con dos navegadores en el mismo ordenador (`npm run test:e2e:online`), no con dos dispositivos por Internet. El servidor público por defecto **no existe hasta que alguien publique el Blueprint** de `render.yaml`.
 - **Partidos no jugados por el usuario** en torneo y carrera: se resuelven con un modelo estadístico (Poisson según la media de cada equipo), no con la simulación completa.
-- **Sin multijugador local en el mismo dispositivo** (dos humanos con dos mandos); el multijugador es online.
 - **Equipación del visitante**: en el partido rápido se puede elegir (automática, titular o suplente); en torneo, carrera y online sigue siendo automática.
 - **Animaciones procedurales**: más simples que una captura de movimiento real; las caras son estilizadas.
-- **IA**: tiende a jugar mucho por el centro del campo y a generar pocas ocasiones claras en dificultades bajas. Es funcional y táctica, pero mejorable.
+- **IA**: genera pocas ocasiones claras en dificultades bajas. Es funcional y táctica, pero mejorable.
 - Los ejecutables de Windows se generaron pero **solo se probó el de Linux** (no había Windows disponible). El ZIP de Windows lo compila GitHub Actions en `windows-latest` y se publica en *Releases*; no está firmado, así que SmartScreen puede avisar la primera vez. `jugar.html` se probó abriéndolo como archivo (`file://`) en Chromium para Linux, no en un PC con Windows.
-- **`jugar.html` hay que regenerarlo** (`npm run build`) y subirlo después de cambiar el código; si no, el ZIP del repositorio trae la versión anterior.
+- **`jugar.html`** se regenera solo al hacer commit (hook de pre-commit, se instala con `npm install`); si se sube código sin ese hook, CI avisa de que está desactualizado.
+- **Traducción**: se traduce lo que aparece en pantalla; algunos textos quedan en español (la confirmación al borrar un equipo, los carteles dibujados en el estadio y alguna frase que se arma con varias piezas mantiene el orden del español).
+- El **instalador de Windows** y la **app de macOS** se compilan en GitHub Actions pero no se probaron en un PC real; la app de macOS no está firmada ni notarizada.
 - **Vibración del mando**: usa la API `vibrationActuator` de Chrome/Edge; Firefox y Safari no la admiten (no vibra, pero no da error).
 - **Móvil**: probado con emulación táctil en Chromium, no en un teléfono físico. El APK **no se pudo compilar en el entorno de desarrollo**: la política de red bloquea la descarga del Android SDK (dl.google.com). Se compila en GitHub Actions o con Android Studio. El rendimiento en teléfonos de gama baja no está medido; si va lento, reduce la escala de resolución.

@@ -118,6 +118,7 @@ input[type=range] { width: 170px; accent-color: var(--accent); }
 /* ---------- Selección de equipos ---------- */
 .team-picker { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 20px; }
 .team-picker .side { font-family: var(--display); letter-spacing: 0.3em; color: var(--muted); font-weight: 700; }
+.team-picker .crest svg { width: 100%; height: 100%; }
 .team-picker .crest { width: clamp(90px, 12vw, 150px); height: clamp(90px, 12vw, 150px); filter: drop-shadow(0 10px 20px rgba(0,0,0,0.5)); }
 .team-picker .tname { font-family: var(--display); font-size: clamp(22px, 2.6vw, 34px); font-weight: 700; text-align: center; }
 .team-picker .stars { color: var(--warn); letter-spacing: 3px; }
@@ -521,3 +522,126 @@ body.touch .commentary { bottom: auto; top: 84px; font-size: 14px; padding: 6px 
 .squad-edit { max-height: 46vh; overflow-y: auto; margin-top: 8px; }
 .squad-edit .row { display: flex; align-items: center; gap: 8px; }
 .squad-edit input { flex: 1; min-width: 0; }
+.market-list { max-height: 52vh; overflow-y: auto; margin-top: 8px; }
+.market-row { display: flex; align-items: center; gap: 10px; }
+.market-row > span:first-child { flex: 1; min-width: 0; }
+.market-row .price { width: 64px; text-align: right; font-weight: 700; color: #ffd23f; }
+.market-row.expensive .price { color: #ff6b76; }
+.market-row .btn { padding: 4px 10px; font-size: 12px; }
+
+/* ---------- Celular: que todo entre en la pantalla ---------- */
+/* Apaisado (poca altura): cabeceras en una línea, menú en dos columnas y controles más compactos */
+@media (max-height: 520px) {
+  .screen { padding: max(8px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
+  .screen-header { margin-bottom: 6px; }
+  .screen-header > div { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .screen-header .crumb { font-size: 10px; letter-spacing: 0.14em; }
+  .screen-header h2 { font-size: 18px; }
+  .screen-footer { margin-top: 6px; gap: 8px; }
+  .btn { padding: 7px 14px; font-size: 13px; }
+  .panel { padding: 10px 12px; }
+  .panel h3 { margin: 0 0 4px; font-size: 15px; }
+  .grid2, .grid3 { gap: 10px; }
+  .row { padding: 3px 0; gap: 8px; }
+  .row label { font-size: 12px; }
+  .stepper { gap: 4px; }
+  .stepper button { width: 32px; height: 32px; font-size: 16px; }
+  .stepper .val { min-width: 84px; font-size: 14px; }
+  .toggle { width: 44px; height: 24px; }
+  .toggle::after { width: 18px; height: 18px; }
+  .toggle.on::after { left: 23px; }
+  input[type=range] { width: 120px; }
+  /* menú principal: dos columnas de botones bajos, sin el logo grande */
+  .main-menu { grid-template-columns: 1fr; gap: 0; align-content: center; height: 100%; overflow: auto; }
+  .menu-hero { display: none; }
+  .main-menu .menu-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .main-menu .menu-item { padding: 6px 12px; font-size: 14px; min-height: 0; }
+  .main-menu .menu-item small { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .version-tag { bottom: 4px; font-size: 10px; }
+  body.touch .version-tag { display: none; }
+  .team-picker { padding: 6px; gap: 4px; }
+  .team-picker .crest, .team-picker .crest svg { width: 54px; height: 54px; }
+  .team-picker .tname { font-size: 17px; }
+  .kits svg { width: 30px; height: 30px; }
+  .modal { max-height: calc(100vh - 16px); overflow: auto; padding: 12px 16px; }
+  .modal h2 { font-size: 20px; }
+  .overlay .menu-list { gap: 5px; }
+  .overlay .menu-item { padding: 6px 14px; font-size: 14px; }
+  /* tarjeta de equipo apaisada: escudo con flechas a la izquierda, datos a la derecha */
+  .team-picker { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto; column-gap: 10px; row-gap: 0; align-items: center; justify-items: start; text-align: left; }
+  .team-picker > .side { grid-column: 1 / -1; justify-self: center; font-size: 11px; letter-spacing: 0.2em; }
+  .team-picker > .nav { grid-column: 1; grid-row: 2 / span 4; gap: 6px; }
+  .team-picker > :not(.side):not(.nav) { grid-column: 2; }
+  .team-picker .nav button { width: 34px; height: 34px; font-size: 17px; }
+  .team-picker .muted { font-size: 12px; }
+  .vs { font-size: 22px; }
+  .versus { gap: 8px; }
+  /* pausa: botones en dos columnas */
+  .overlay .modal { width: min(720px, 94vw); }
+  .overlay .modal > .menu-list { display: grid; grid-template-columns: 1fr 1fr; }
+  .overlay .modal > .menu-list > .muted { grid-column: 1 / -1; }
+}
+@media (max-height: 330px) {
+  .main-menu .menu-item small { display: none; }
+  .main-menu .menu-item { padding: 9px 12px; }
+}
+/* Vertical (poco ancho): una columna, paneles apilados y pasos más estrechos */
+@media (max-width: 520px) {
+  .screen { padding: max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom)); }
+  .screen-header h2 { font-size: 22px; }
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+  .main-menu { height: auto; max-height: 100%; overflow: auto; align-items: start; }
+  .main-menu .menu-item { padding: 9px 14px; font-size: 16px; }
+  .stepper .val { min-width: 90px; font-size: 14px; }
+  .row label { flex: 0 1 38%; min-width: 0; }
+  .row .stepper { flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
+  .stepper .val { min-width: 70px; flex: 0 1 auto; font-size: 13px; line-height: 1.15; }
+  .versus { grid-template-columns: 1fr; gap: 6px; }
+  .vs { font-size: 20px; justify-self: center; }
+  .team-picker { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; row-gap: 0; align-items: center; justify-items: start; text-align: left; padding: 8px 10px; }
+  .team-picker > .side { grid-column: 1 / -1; justify-self: center; font-size: 11px; }
+  .team-picker > .nav { grid-column: 1; grid-row: 2 / span 4; gap: 4px; }
+  .team-picker > :not(.side):not(.nav) { grid-column: 2; }
+  .team-picker .crest, .team-picker .crest svg { width: 56px; height: 56px; }
+  .team-picker .nav button { width: 32px; height: 32px; font-size: 16px; }
+  .team-picker .tname { font-size: 18px; }
+  .kits svg { width: 30px; height: 30px; }
+  .screen-footer .btn { flex: 1; }
+  .modal { max-width: calc(100vw - 20px); max-height: calc(100vh - 20px); overflow: auto; }
+}
+
+/* en pantallas táctiles el botón enfocado no se desplaza (se saldría de la pantalla) */
+@media (hover: none) { .menu-item:hover, .menu-item.focus { transform: none; } }
+/* Pantallas medianas (portátiles, tabletas apaisadas): menú en dos columnas para que entren todas las opciones */
+@media (max-height: 820px) and (min-height: 521px) and (min-width: 761px) {
+  .main-menu { grid-template-columns: minmax(460px, 680px) 1fr; }
+  .main-menu .menu-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .main-menu .menu-item { padding: 10px 16px; font-size: clamp(15px, 1.6vw, 20px); }
+  .main-menu .menu-item small { font-size: 11px; }
+}
+
+/* ---------- Modo foto ---------- */
+.photo-mode { position: fixed; inset: 0; z-index: 20; }
+.photo-mode .pm-surface { position: absolute; inset: 0; cursor: grab; touch-action: none; }
+.photo-mode .pm-surface:active { cursor: grabbing; }
+.photo-mode .pm-bar { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); display: flex; gap: 10px; }
+.photo-mode .pm-hint { position: absolute; left: 50%; top: max(10px, env(safe-area-inset-top)); transform: translateX(-50%); padding: 6px 14px; border-radius: 14px; background: rgba(8,12,22,0.7); color: #cfd8ee; font-size: 12px; white-space: nowrap; max-width: 94vw; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.photo-mode.flash::after { content: ''; position: absolute; inset: 0; background: #fff; pointer-events: none; animation: pmFlash 0.35s ease-out forwards; }
+@keyframes pmFlash { from { opacity: 0.85; } to { opacity: 0; } }
+
+/* ---------- Repeticiones guardadas ---------- */
+.replay-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+.replay-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; }
+.replay-item .ri-teams { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.replay-item .ri-teams small { display: block; font-size: 11px; }
+.replay-item .ri-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.replay-screen { background: none; pointer-events: none; padding: 0; }
+.replay-bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 10px max(14px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); background: linear-gradient(transparent, rgba(4,8,16,0.85)); pointer-events: auto; }
+.replay-bar .rb-title { display: flex; align-items: center; gap: 8px; font-family: var(--display); letter-spacing: 0.04em; }
+.replay-bar .rb-btns { display: flex; gap: 6px; }
+.replay-bar .btn { padding: 8px 14px; }
+/* Selectores (‹ valor ›) que no desbordan su panel en pantallas medianas */
+.row > label { min-width: 0; }
+.row > .stepper { min-width: 0; flex-shrink: 1; }
+.stepper .val { min-width: clamp(70px, 9vw, 150px); }
