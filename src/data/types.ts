@@ -78,6 +78,8 @@ export interface StadiumData {
   grassHue: number;
   /** Rasgos de la cancha real (si falta, el estadio estándar con techo y dos bandejas altas). */
   look?: StadiumLook;
+  /** Cancha con espectáculo especial en el minuto 68 (humo, bengalas, fuegos, láseres y luces): la de Belgrano. */
+  show?: boolean;
   /** Estadio propio de un club: el torneo y la carrera lo usan cuando ese equipo juega de local. */
   homeTeam?: string;
   /** Estadio pequeño (sin grada alta ni techo, con torres de luz). */

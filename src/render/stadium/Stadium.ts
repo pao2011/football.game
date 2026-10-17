@@ -37,6 +37,8 @@ const QUALITY: Record<GfxQuality, QualitySettings> = {
  * Coordinate system follows src/config/constants.ts (x along length, z across, y up).
  * Draw calls are kept to ~20 by merging all static geometry per material.
  */
+const HAZE_COLOR = new THREE.Color('#8fd3ff');
+
 export class Stadium {
   readonly group: THREE.Group;
   readonly keyLight: THREE.DirectionalLight;
@@ -212,7 +214,7 @@ export class Stadium {
     this.textures.push(this.crowd.atlas);
     this.materials.push(this.crowd.material);
     this.group.add(...this.crowd.meshes);
-    this.fans = new FanEffects(this.crowd.spots, { homeColor, awayColor, seed, quality, homeName: names[0], awayName: names[1] });
+    this.fans = new FanEffects(this.crowd.spots, { homeColor, awayColor, seed, quality, homeName: names[0], awayName: names[1], show: data.show });
     this.group.add(this.fans.group);
 
     // ---- sky
@@ -265,6 +267,26 @@ export class Stadium {
     this.keyLight.target.updateMatrixWorld();
   }
 
+  private baseFog: { color: THREE.Color; near: number; far: number } | null = null;
+  private hazeApplied = 0;
+
+  /** Bruma celeste del espectáculo: tiñe y acerca la niebla de la escena para que cubra toda la cancha (0 = sin bruma). */
+  private applyHaze(h: number): void {
+    const fog = this.scene?.fog;
+    if (!(fog instanceof THREE.Fog)) return;
+    if (!this.baseFog) {
+      if (h <= 0.001) return;
+      this.baseFog = { color: fog.color.clone(), near: fog.near, far: fog.far };
+    }
+    if (Math.abs(h - this.hazeApplied) < 0.004 && h > 0.001) return;
+    this.hazeApplied = h;
+    const b = this.baseFog;
+    fog.color.copy(b.color).lerp(HAZE_COLOR, 0.85 * h);
+    fog.near = b.near + (22 - b.near) * h;
+    fog.far = b.far + (190 - b.far) * h;
+    if (h <= 0.001) this.baseFog = null;
+  }
+
   attachTo(scene: THREE.Scene): void {
     this.scene = scene;
     if (this.group.parent !== scene) scene.add(this.group);
@@ -299,6 +321,7 @@ export class Stadium {
     this.flags.update(this.time);
     this.nets.update(d);
     this.fans.update(d, camera, viewH, this.excite);
+    this.applyHaze(this.fans.hazeLevel);
     camera.getWorldPosition(this.sky.position);
   }
 

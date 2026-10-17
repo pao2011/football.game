@@ -131,6 +131,8 @@ export class StadiumChants {
   }
 
   private targetLevel(): number {
+    // el tema especial (minuto 68) sube y baja con la línea de tiempo y llega más fuerte que cualquier cántico
+    if (this.specialBusy) return Math.max(FLOOR * 2, 1.7 * this.specialLevel);
     const boosted = this.ctx.currentTime < this.boostUntil ? this.boostAmt : 0;
     return Math.min(1.25, 0.5 + 0.4 * this.excitement + 0.45 * boosted);
   }
@@ -255,8 +257,10 @@ export class StadiumChants {
   private specialPlayed = false;
   /** El tema especial está por sonar o sonando: nada lo pisa. */
   private specialBusy = false;
+  /** Volumen 0..1 del tema especial (lo manda la línea de tiempo del partido). */
+  private specialLevel = 0;
 
-  /** Corta lo que suene con un fundido rápido y empieza el tema especial desde el principio (una vez). */
+  /** Corta lo que suene con un fundido y empieza el tema especial, en bucle y desde silencio (una vez por partido). */
   playSpecial(): void {
     if (!this.running || !this.special || this.specialPlayed) return;
     this.specialPlayed = true;
@@ -271,32 +275,62 @@ export class StadiumChants {
       this.isPlaying = false;
       this.level.gain.cancelScheduledValues(t);
       this.level.gain.setValueAtTime(Math.max(FLOOR, this.level.gain.value), t);
-      this.level.gain.exponentialRampToValueAtTime(FLOOR, t + 0.5);
+      this.level.gain.exponentialRampToValueAtTime(FLOOR, t + 1.2);
       setTimeout(() => {
         try {
           old.stop();
         } catch {
           /* ya parado */
         }
-      }, 600);
+      }, 1300);
     }
-    // la hinchada se enciende: el tema entra fuerte
-    this.boostAmt = 1;
-    this.boostUntil = t + 60;
     this.specialBusy = true;
-    setTimeout(() => this.playTrack(this.special!, false), old ? 450 : 0);
+    setTimeout(() => this.playTrack(this.special!, false, true), old ? 1250 : 0);
   }
 
-  private playTrack(track: ChantTrack, randomStart: boolean): void {
+  /** Volumen del tema especial según el minuto del partido. */
+  setSpecialLevel(a: number): void {
+    this.specialLevel = Math.max(0, Math.min(1, a));
+    if (this.specialBusy) this.applyLevel(0.6);
+  }
+
+  /** Fin del momento: el tema se apaga con un fundido y vuelve la rotación de cánticos. */
+  endSpecial(): void {
+    if (!this.specialBusy) return;
+    const src = this.source;
+    const t = this.ctx.currentTime;
+    this.specialBusy = false;
+    this.specialLevel = 0;
+    if (src && this.level) {
+      src.onended = null;
+      src.loop = false;
+      this.source = null;
+      this.isPlaying = false;
+      this.level.gain.cancelScheduledValues(t);
+      this.level.gain.setValueAtTime(Math.max(FLOOR, this.level.gain.value), t);
+      this.level.gain.exponentialRampToValueAtTime(FLOOR, t + 2.5);
+      setTimeout(() => {
+        try {
+          src.stop();
+        } catch {
+          /* ya parado */
+        }
+      }, 2600);
+    }
+    this.queue(3);
+  }
+
+  private playTrack(track: ChantTrack, randomStart: boolean, loop = false): void {
     const ctx = this.ctx;
     if (ctx.state !== 'running') ctx.resume().catch(() => undefined);
     this.decode(track.url)
       .then((buf) => {
         if (!this.running || !this.input || !this.level) return;
         // un tema nuevo no pisa al especial mientras suena
-        if (this.isPlaying || (this.specialBusy && track !== this.special)) return;
+        if (this.isPlaying || (this.specialBusy && track !== this.special) || (track === this.special && !this.specialBusy)) return;
         const src = ctx.createBufferSource();
         src.buffer = buf;
+        src.loop = loop;
         src.connect(this.input);
         // empezar en un punto al azar de la canción, como si ya la estuvieran cantando
         const offset = randomStart && buf.duration > 40 && Math.random() < 0.5 ? Math.random() * buf.duration * 0.4 : 0;

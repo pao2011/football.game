@@ -155,7 +155,7 @@ export class AudioEngine {
   /** Cánticos grabados: si hay, sustituyen a los cánticos y bombos sintetizados. */
   private chantTracks: ChantTrack[] = [];
   private real: StadiumChants | null = null;
-  private specialChant: { minute: number; track: ChantTrack } | null = null;
+  private specialChant: { track: ChantTrack } | null = null;
   /** Gritos de gol y silbidos grabados de la tribuna. */
   private crowdUrls: CrowdSampleUrls | null = null;
   private samples: CrowdSamples | null = null;
@@ -224,19 +224,29 @@ export class AudioEngine {
   }
 
   /** Grabaciones de cánticos de cancha que suenan en las tribunas durante los partidos. */
-  setChantTracks(tracks: ChantTrack[], special?: { minute: number; track: ChantTrack }): void {
+  setChantTracks(tracks: ChantTrack[], special?: { track: ChantTrack }): void {
     this.chantTracks = tracks.slice();
     this.specialChant = special ?? null;
   }
 
-  /** Minuto en que suena el tema especial del estadio (null si no tiene). */
-  get specialChantMinute(): number | null {
-    return this.specialChant?.minute ?? null;
+  /** El estadio tiene un tema especial (el del minuto 68 de Belgrano). */
+  get hasSpecialChant(): boolean {
+    return !!this.specialChant;
   }
 
-  /** Corta el cántico en curso y hace sonar el tema especial (una sola vez por partido). */
+  /** Corta el cántico en curso y hace sonar el tema especial en bucle, desde silencio (una sola vez por partido). */
   playSpecialChant(): void {
     this.run(() => this.real?.playSpecial());
+  }
+
+  /** Volumen 0..1 del tema especial (sigue el reloj del partido). */
+  setSpecialChantLevel(a: number): void {
+    this.run(() => this.real?.setSpecialLevel(a));
+  }
+
+  /** El tema especial se apaga con un fundido y vuelve la rotación de cánticos. */
+  endSpecialChant(): void {
+    this.run(() => this.real?.endSpecial());
   }
 
   setCrowdSamples(urls: CrowdSampleUrls): void {
