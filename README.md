@@ -46,6 +46,7 @@ Los recursos (modelos, animaciones, estadio, público, texturas, escudos, músic
 ### Sonido de cancha y relator
 
 - **Cánticos reales** ("Bombo y repique", "Vamos que tenemos que ganar", "A ver si ponen huevos", "La vida es un carnaval", "Que esta tarde tenemos que ganar"): se turnan durante el partido y no suenan "pegados" encima del juego: pasan por una cadena de estadio (`src/audio/StadiumChants.ts`) con micrófono lejano (filtros), anchura de tribuna (efecto Haas), coro, ecos de la tribuna de enfrente y la reverb del estadio. Suben con la emoción del partido, en el recibimiento y tras cada gol. Volumen: *Configuración → Sonido → Público y cánticos*.
+- **Tribuna grabada** (`src/audio/CrowdSamples.ts`, `src/assets/crowd/`): dos gritos de gol reales (solo la parte del grito; uno al azar en cada gol) y un loop sin costura de silbidos del público que suena mientras el **visitante** tiene el balón (entra y sale con fundido, con histéresis para que no parpadee). Si todavía no cargaron, se usan los sonidos sintetizados.
 - **Relator con voz** (`src/audio/Commentary.ts`): narra el arranque, remates, atajadas, palos, faltas, tarjetas, córners, penales, cambios, el descuento, el entretiempo y el final, y grita los goles con el nombre del goleador. Usa la mejor voz en castellano del sistema (prioriza rioplatense y voces naturales/neuronales: en Edge *Microsoft Tomás Online (Natural)*, en Chrome *Google español*, en Android el TTS de Google). Volumen: *Configuración → Sonido → Narrador* (al cambiarlo dice una frase de prueba).
 
 ## 2. Ubicación
