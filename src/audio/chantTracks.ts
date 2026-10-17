@@ -50,6 +50,8 @@ for (const [path, url] of Object.entries(CLUB_FILES).sort(([a], [b]) => a.locale
 }
 // Belgrano: además de su compilado, los temas de la tribuna sacados de videos
 CLUB_CHANTS.belgrano = [...BELGRANO_CHANTS, ...(CLUB_CHANTS.belgrano ?? [])];
+// Boca: sus dos temas más los genéricos (hay pocas grabaciones propias)
+CLUB_CHANTS.boca = [...(CLUB_CHANTS.boca ?? []), ...GENERIC_CHANTS];
 
 export interface StadiumChantSet {
   tracks: ChantTrack[];
