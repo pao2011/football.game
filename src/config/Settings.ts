@@ -23,6 +23,8 @@ export interface GameSettings {
   musicVolume: number;
   sfxVolume: number;
   crowdVolume: number;
+  /** Voz del relator (0 = sin narración). */
+  commentaryVolume: number;
   /** Vibración del mando (gamepad) y del móvil en golpeos, entradas y goles. */
   vibration: boolean;
   // Controles
@@ -62,6 +64,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   musicVolume: 0.5,
   sfxVolume: 0.9,
   crowdVolume: 0.7,
+  commentaryVolume: 0.9,
   vibration: true,
   bindings: structuredClone(FIFA_CLASSIC),
   preset: 'fifa',

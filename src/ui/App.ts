@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
+import { CHANT_TRACKS } from '../audio/chantTracks';
+import { getSpeech } from '../audio/Speech';
 import { DIFFICULTY_LABELS } from '../ai/Difficulty';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
@@ -99,6 +101,7 @@ export class App {
     this.renderer = this.createRenderer();
     this.bg = el('div', 'menu-bg', '<div class="pitch-lines"></div>');
     document.body.insertBefore(this.bg, ui);
+    this.audio.setChantTracks(CHANT_TRACKS);
     this.applyAudio();
     this.quick = { home: 0, away: 1, stadium: 0, half: HALF_OPTIONS.indexOf(this.settings.halfMinutes), difficulty: DIFFS.indexOf(this.settings.difficulty), side: 0, formation: null };
     if (this.quick.half < 0) this.quick.half = 2;
@@ -117,6 +120,25 @@ export class App {
     r.toneMapping = THREE.ACESFilmicToneMapping;
     r.toneMappingExposure = 1.0;
     return r;
+  }
+
+  /** Frase de prueba al cambiar el volumen del narrador. */
+  private sampleCommentary() {
+    const sp = getSpeech();
+    const vol = this.settings.commentaryVolume * this.settings.masterVolume;
+    if (vol <= 0) {
+      sp.cancel();
+      return;
+    }
+    if (!sp.available) {
+      document.querySelector('.pad-toast')?.remove();
+      const t = el('div', 'pad-toast', '🎙️ <b>Sin voz de narrador</b><small>Este dispositivo no tiene voces del sistema: prueba con Chrome o Edge.</small>');
+      document.body.appendChild(t);
+      setTimeout(() => t.classList.add('out'), 3200);
+      setTimeout(() => t.remove(), 3700);
+      return;
+    }
+    sp.speak('¡Así suena el relator! ¡Gooooool!', { rate: 1.1, pitch: 1.05, volume: Math.min(1, vol) });
   }
 
   private applyAudio() {
@@ -1222,7 +1244,8 @@ export class App {
           ${this.stepper('Volumen general', pct(st.masterVolume), 'vmaster')}
           ${this.stepper('Música', pct(st.musicVolume), 'vmusic')}
           ${this.stepper('Efectos', pct(st.sfxVolume), 'vsfx')}
-          ${this.stepper('Público', pct(st.crowdVolume), 'vcrowd')}
+          ${this.stepper('Público y cánticos', pct(st.crowdVolume), 'vcrowd')}
+          ${this.stepper('Narrador', st.commentaryVolume > 0 ? pct(st.commentaryVolume) : 'Sin voz', 'vcomm')}
           ${toggle('Vibración (mando y móvil)', 'vibration')}
         </div>
         <div class="panel"><h3>Jugabilidad</h3>
@@ -1264,6 +1287,8 @@ export class App {
       vmusicPrev: () => step('musicVolume', -1, 0, 1, 0.1), vmusicNext: () => step('musicVolume', 1, 0, 1, 0.1),
       vsfxPrev: () => step('sfxVolume', -1, 0, 1, 0.1), vsfxNext: () => step('sfxVolume', 1, 0, 1, 0.1),
       vcrowdPrev: () => step('crowdVolume', -1, 0, 1, 0.1), vcrowdNext: () => step('crowdVolume', 1, 0, 1, 0.1),
+      vcommPrev: () => { step('commentaryVolume', -1, 0, 1, 0.1); this.sampleCommentary(); },
+      vcommNext: () => { step('commentaryVolume', 1, 0, 1, 0.1); this.sampleCommentary(); },
       diffPrev: () => { st.difficulty = cycleArr(DIFFS, st.difficulty, -1); apply(); },
       diffNext: () => { st.difficulty = cycleArr(DIFFS, st.difficulty, 1); apply(); },
       halfPrev: () => { st.halfMinutes = cycleArr(HALF_OPTIONS, st.halfMinutes, -1); apply(); },

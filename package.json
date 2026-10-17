@@ -25,6 +25,7 @@
     "test:e2e:file": "node scripts/e2e-file.mjs index.html"
   },
   "dependencies": {
+    "@capacitor-community/text-to-speech": "^4.1.1",
     "@capacitor/android": "^6.2.0",
     "@capacitor/core": "^6.2.0",
     "three": "^0.170.0",

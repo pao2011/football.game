@@ -2,6 +2,7 @@
 // Carga la compilación de dist/ como aplicación nativa a pantalla completa.
 const { app, BrowserWindow, Menu, session } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 // Sin conexiones en segundo plano ni telemetría del motor Chromium
 app.commandLine.appendSwitch('disable-background-networking');
@@ -30,7 +31,10 @@ function createWindow() {
     },
   });
   Menu.setApplicationMenu(null);
-  win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+  // jugar.html lleva todo incrustado (también los cánticos): desde file:// el navegador no deja
+  // leer otros archivos con fetch, así que es la versión que suena completa
+  const single = path.join(__dirname, '..', 'dist', 'jugar.html');
+  win.loadFile(fs.existsSync(single) ? single : path.join(__dirname, '..', 'dist', 'index.html'));
   // F11 alterna pantalla completa
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && input.key === 'F11') {
