@@ -150,7 +150,7 @@ function pressCarrier(m: Match, p: Player, team: Team, dt: number) {
   const footZ = p.pos.z + f.z * 0.7;
   const ballToFoot = Math.hypot(ball.x - footX, ball.z - footZ);
   const facingBall = Math.abs(angleDiff(Math.atan2(ball.x - p.pos.x, ball.z - p.pos.z), p.facing)) < 0.6;
-  const eager = (team.human ? 1.2 : m.diff.tackleEagerness) * (0.5 + p.data.attrs.defending / 100);
+  const eager = (team.human ? 1.2 : m.diff.tackleEagerness) * (0.5 + p.data.attrs.defending / 100) * (1 + m.heat * 0.9);
   // el balón se moverá durante la preparación de la entrada: anticipar su posición
   const bx = ball.x + m.ball.vel.x * 0.17;
   const bz = ball.z + m.ball.vel.z * 0.17;

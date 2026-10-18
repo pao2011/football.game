@@ -1,6 +1,7 @@
 import type { StadiumData } from './types';
+import { EXTRA_LEAGUES } from './leagues/index';
 
-export const STADIUMS: StadiumData[] = [
+const BASE_STADIUMS: StadiumData[] = [
   { id: 'coliseo', name: 'Coliseo Aurora', capacity: 62000, timeOfDay: 'night', standColor: '#2a2f3a', roofColor: '#c9ced8', grassHue: 0.29 },
   { id: 'brasero', name: 'Estadio El Brasero', capacity: 48000, timeOfDay: 'sunset', standColor: '#4a2a22', roofColor: '#8a8f99', grassHue: 0.27 },
   { id: 'bahia', name: 'Arena Bahía', capacity: 35000, timeOfDay: 'day', standColor: '#1f3f66', roofColor: '#e8eef5', grassHue: 0.3 },
@@ -40,6 +41,9 @@ export const STADIUMS: StadiumData[] = [
   { id: 'quince-abril', name: '15 de Abril', capacity: 22800, timeOfDay: 'night', standColor: '#8a1a24', roofColor: '#cfd6de', grassHue: 0.28, homeTeam: 'union', look: { roof: 'none', upper: 'none', seats: ['#d0102a', '#ffffff'] } },
   { id: 'amalfitani', name: 'José Amalfitani', capacity: 49500, timeOfDay: 'night', standColor: '#1a3a7a', roofColor: '#cfd6de', grassHue: 0.28, homeTeam: 'velez', look: { roof: 'sides', upper: 'both', seats: ['#1a4fa0', '#ffffff'] } },
 ];
+
+/** Estadios de todas las ligas: los de la Liga Profesional van primero y los de las demás ligas después. */
+export const STADIUMS: StadiumData[] = [...BASE_STADIUMS, ...Object.values(EXTRA_LEAGUES).flatMap((l) => l.stadiums)];
 
 /** Estadios genéricos (sin club propio): los que se reparten entre los demás equipos. */
 export const GENERIC_STADIUMS = STADIUMS.filter((s) => !s.homeTeam);

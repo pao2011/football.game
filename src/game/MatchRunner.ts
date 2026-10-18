@@ -226,9 +226,11 @@ export class MatchRunner {
       }
     }
     // cada cancha tiene los cánticos de su hinchada (solo suenan ahí)
-    const chants = chantsForStadium(stadium);
+    // (en una sede neutral no suenan los de ningún club)
+    const neutral = !!this.match.config.neutral;
+    const chants = chantsForStadium(neutral ? { id: stadium.id } : stadium);
     audioEngine.setChantTracks(chants.tracks, chants.special);
-    this.stadiumShow = !!stadium.show;
+    this.stadiumShow = !!stadium.show && !neutral;
     this.audio = new MatchAudio(audioEngine, this.match);
     this.audio.start();
     this.narrator = new Narrator(getSpeech(), this.match, stadium.name);

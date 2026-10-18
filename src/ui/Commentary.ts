@@ -94,6 +94,11 @@ export class Commentary {
       case 'card':
         if (e.kind === 'yellow') return { text: pick([`Amarilla para ${e.text}`, `Tarjeta amarilla a ${e.text}`]), prio: 3 };
         return { text: pick([`¡Roja! ${e.text} se va a la calle`, `¡Expulsado ${e.text}!`]), prio: 4 };
+      case 'scuffle':
+        return { text: pick([`Roces entre jugadores: empuja ${e.text}`, `Se calienta el partido: ${e.text} empuja a un rival`, 'Empujones y reclamos, el árbitro interviene']), prio: 2 };
+      case 'brawl':
+        if (e.kind === 'start') return { text: pick(['¡Se arma el tumulto! Se juntan los jugadores de los dos equipos', '¡Pelea en el campo! El árbitro intenta separarlos']), prio: 4 };
+        return { text: `Vuelve la calma. Sancionados: ${e.text}`, prio: 3 };
       case 'warning':
         return { text: `El árbitro le llama la atención a ${e.text}`, prio: 1 };
       case 'offside':

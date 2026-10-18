@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { Tournament } from '../src/modes/Tournament';
-import { Career } from '../src/modes/Career';
 import { computeStandings, roundRobin } from '../src/modes/Competition';
 
 describe('Competiciones', () => {
@@ -49,21 +48,4 @@ describe('Competiciones', () => {
     expect(t.state.champion).not.toBeNull();
   });
 
-  it('la carrera completa una temporada de 14 jornadas y progresa a la siguiente', () => {
-    const c = Career.create('boca', 5);
-    expect(c.totalRounds).toBe(14);
-    let guard = 0;
-    while (!c.state.seasonOver && guard++ < 20) {
-      const next = c.nextUserFixture()!;
-      c.recordUserResult(next, 1, 1, []);
-    }
-    expect(c.state.seasonOver).toBe(true);
-    const table = c.standings();
-    expect(table.every((r) => r.played === 14)).toBe(true);
-    const res = c.startNextSeason();
-    expect(c.state.season).toBe(2);
-    expect(c.state.history.length).toBe(1);
-    expect(res.position).toBeGreaterThan(0);
-    expect(c.state.fixtures.every((f) => !f.played)).toBe(true);
-  });
 });

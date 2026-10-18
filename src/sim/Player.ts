@@ -27,7 +27,7 @@ export interface KickRequest {
   aerial?: import('./Aerial').AerialKind;
 }
 
-export type ActionKind = 'none' | 'kick' | 'tackle' | 'slide' | 'header' | 'dive' | 'fallen' | 'getup' | 'celebrate' | 'dejected' | 'hold' | 'throw' | 'trap' | 'skill';
+export type ActionKind = 'none' | 'kick' | 'tackle' | 'slide' | 'header' | 'dive' | 'fallen' | 'getup' | 'celebrate' | 'dejected' | 'hold' | 'throw' | 'trap' | 'skill' | 'scuffle';
 
 export interface PlayerAction {
   kind: ActionKind;
@@ -189,6 +189,7 @@ export class Player {
       // terminando un control con el pecho o el muslo: no se aleja del balón que cae
       else if (this.action.kind === 'trap' && this.action.variant > 0) maxS = Math.min(maxS, 2.2);
       if (this.action.kind === 'tackle' || this.action.kind === 'header') maxS *= 0.6;
+      if (this.action.kind === 'scuffle') maxS *= 0.35;
       const dv = this.desiredVel;
       const dl = Math.hypot(dv.x, dv.z);
       let tx = dv.x;

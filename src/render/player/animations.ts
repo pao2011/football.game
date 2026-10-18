@@ -1165,9 +1165,45 @@ function referee(c: Ctx, p: Pose) {
   }
 }
 
+/** Roce / pelea: empujón con las dos manos, brazos abiertos reclamando o agarrón (variant 0..2). */
+function shove(c: Ctx, p: Pose) {
+  const v = ((c.variant % 3) + 3) % 3;
+  const v0 = c.v;
+  c.v = Math.min(c.v, 1.2);
+  base(c, p);
+  c.v = v0;
+  const e = sstep(0, 0.12, c.n) * (1 - sstep(0.92, 1, c.n));
+  const pump = 0.5 + 0.5 * Math.sin(c.t * 13 + c.seed);
+  if (v === 0) {
+    // empuja con las dos manos, inclinado hacia el rival
+    p.rot(BONE.uarmL, -68 - 26 * pump * e, 6, 14);
+    p.rot(BONE.uarmR, -68 - 26 * pump * e, -6, -14);
+    p.rot(BONE.farmL, -22 + 14 * pump * e);
+    p.rot(BONE.farmR, -22 + 14 * pump * e);
+    p.addRot(BONE.chest, (9 + 9 * pump) * e, 0, 0);
+    p.addRot(BONE.head, -6 * e, 0, 0);
+  } else if (v === 1) {
+    // brazos abiertos, pecho adelante ("¿qué te pasa?")
+    p.rot(BONE.uarmL, -22 - 8 * pump * e, 0, 74 + 10 * pump * e);
+    p.rot(BONE.uarmR, -22 - 8 * pump * e, 0, -74 - 10 * pump * e);
+    p.rot(BONE.farmL, -36 * e);
+    p.rot(BONE.farmR, -36 * e);
+    p.addRot(BONE.chest, (7 + 4 * pump) * e, 0, 0);
+    p.addRot(BONE.head, (6 + 4 * Math.sin(c.t * 9)) * e, 0, 0);
+  } else {
+    // agarrón: un brazo adelante tirando, el otro doblado, el torso girando
+    p.rot(BONE.uarmR, -82 - 14 * pump * e, -10, -8);
+    p.rot(BONE.farmR, -48 * e);
+    p.rot(BONE.uarmL, -40 * e, 0, 28);
+    p.rot(BONE.farmL, -85 * e);
+    p.addRot(BONE.chest, 8 * e, (10 - 20 * pump) * e, 0);
+    p.addRot(BONE.spine, 4 * e, (6 - 12 * pump) * e, 0);
+  }
+}
+
 // ------------------------------------------------------------------ despacho
 const DEFAULT_DUR: Partial<Record<AnimState, number>> = {
-  pass: 0.45, lob: 0.55, shoot: 0.55, header: 0.75, volley: 0.55, scissor: 0.85, bicycle: 1.05, diving: 0.95, scorpion: 1.0, backheel: 0.5, tackle: 0.6, slide: 1.0, getup: 1.2, throwin: 1.0, trap: 0.4, skill: 0.6,
+  pass: 0.45, lob: 0.55, shoot: 0.55, header: 0.75, volley: 0.55, scissor: 0.85, bicycle: 1.05, diving: 0.95, scorpion: 1.0, backheel: 0.5, tackle: 0.6, slide: 1.0, getup: 1.2, throwin: 1.0, trap: 0.4, skill: 0.6, shove: 0.9,
   gk_dive_left: 1.1, gk_dive_right: 1.1, gk_catch: 0.5, gk_throw: 0.8, gk_kick: 0.85,
 };
 
@@ -1254,6 +1290,8 @@ function evalState(c: Ctx, p: Pose) {
       return celebrate(c, p);
     case 'dejected':
       return dejected(c, p);
+    case 'shove':
+      return shove(c, p);
     case 'ref_card':
     case 'ref_warn':
     case 'ref_point':
@@ -1273,6 +1311,7 @@ function blendTime(from: AnimState | '', to: AnimState) {
   if (to === 'volley' || to === 'scissor' || to === 'bicycle' || to === 'diving' || to === 'scorpion' || to === 'backheel') return 0.1;
   if ((from === 'bicycle' || from === 'scissor' || from === 'diving' || from === 'scorpion') && to === 'getup') return 0.2;
   if (to === 'celebrate' || to === 'dejected' || to === 'throwin') return 0.3;
+  if (to === 'shove' || from === 'shove') return 0.14;
   if ((from === 'locomotion' || from === 'dribble') && (to === 'locomotion' || to === 'dribble')) return 0.25;
   return 0.16;
 }

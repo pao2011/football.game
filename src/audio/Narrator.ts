@@ -59,6 +59,14 @@ export class Narrator {
     this.welcomed = true;
     const [h, a] = this.match.teams;
     const where = this.stadiumName ? ` desde el ${this.stadiumName}` : '';
+    const classic = this.match.config.classic;
+    if (classic) {
+      this.say(pick([
+        `¡Muy buenas tardes${where}! ¡Se juega el ${classic}! ${h.data.name} contra ${a.data.name}, un partido que se juega con el corazón. ¡Se vienen los roces!`,
+        `¡Bienvenidos${where}! ¡${classic}! ${h.data.name} y ${a.data.name}: acá nadie regala nada. Ambiente caliente.`,
+      ]), Pri.Big, 0.6);
+      return;
+    }
     this.say(pick([
       `¡Muy buenas tardes${where}! Hoy se enfrentan ${h.data.name} y ${a.data.name}. ¡Qué clima, señores!`,
       `¡Bienvenidos${where}! ${h.data.name} contra ${a.data.name}. La hinchada ya está cantando.`,
@@ -123,6 +131,13 @@ export class Narrator {
         break;
       case 'foul':
         if (this.fresh('foul', 7)) this.say(pick([`Falta de ${name}.`, 'Cobra infracción el árbitro.', `Foul de ${name}.`, 'Falta. Juego peligroso.']), Pri.Play, 0.35);
+        break;
+      case 'scuffle':
+        if (this.fresh('scuffle', 10)) this.say(pick([`¡Se calientan los ánimos! ${name} empuja a un rival.`, 'Hay roces, hay empujones. El árbitro tiene que poner orden.', `Se picó el partido, ${name} no se quedó callado.`, '¡Qué clima, señores! Se pegó la tensión.']), Pri.Play, 0.6);
+        break;
+      case 'brawl':
+        if (e.kind === 'start') this.say(pick([`¡Se arma la gresca! ¡Se van a las manos! Empezó ${name}.`, '¡Lío, lío, lío! ¡Se armó el tumulto en el campo!', '¡Se pudrió todo! ¡Se enfrentan los dos equipos!']), Pri.Goal, 0.9);
+        else this.say(pick([`Vuelve la calma. El árbitro sanciona a ${e.text}.`, `Terminó el tumulto. Tarjetas para ${e.text}.`]), Pri.Big, 0.55);
         break;
       case 'card':
         if (e.kind === 'yellow') this.say(pick([`Amarilla para ${name}.`, `Tarjeta amarilla para ${name}, de ${team}.`]), Pri.Big, 0.45);

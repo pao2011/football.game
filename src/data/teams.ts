@@ -2,6 +2,8 @@ import { Rng } from '../util/math';
 import type { FormationId, KitData, PlayerData, Position, TeamData } from './types';
 import { CRESTS } from './crests';
 import { ROSTERS } from './rosters';
+import { EXTRA_LEAGUES } from './leagues/index';
+import { TM_ROSTERS } from './leagues/tmRosters';
 
 // Los 30 equipos de la Liga Profesional Argentina 2026 con sus colores, escudos y plantillas reales (rosters.ts).
 
@@ -37,6 +39,7 @@ export interface TeamSeed {
 }
 
 export interface RosterEntry {
+  /** Vacío = un nombre inventado (no se conoce el jugador real). */
   name: string;
   number: number;
   /** Ajuste del nivel del jugador respecto a la media del equipo. */
@@ -52,7 +55,7 @@ const GK_C = kit('#1fd18a', '#0f8a5a', 'solid', '#0f3a2a', '#1fd18a', '#0f3a2a')
 const GK_D = kit('#8a2be2', '#5a1aa0', 'solid', '#1a0a30', '#8a2be2', '#ffffff');
 
 /** Liga Profesional Argentina 2026: los 30 equipos de Primera División, con sus colores. */
-const SEEDS: TeamSeed[] = [
+const LPF_SEEDS: TeamSeed[] = [
   { id: 'aldosivi', name: 'Aldosivi', short: 'ALD', city: 'Mar del Plata', crest: crest('aldosivi', '#0b7a3a', '#f5d000'),
     home: kit('#0b7a3a', '#f5d000', 'stripes', '#0b7a3a', '#0b7a3a', '#ffffff'), away: kit('#ffffff', '#0b7a3a', 'solid', '#ffffff', '#ffffff', '#0b7a3a'), gkKit: GK_B, formation: '4-4-2', rating: 73, seed: 101 },
   { id: 'argentinos', name: 'Argentinos Juniors', short: 'ARG', city: 'La Paternal', crest: crest('argentinos', '#d7182a', '#ffffff'),
@@ -144,6 +147,9 @@ const SEEDS: TeamSeed[] = [
     home: kit('#ffffff', '#1a4fa0', 'vee', '#ffffff', '#ffffff', '#1a4fa0'), away: kit('#1a4fa0', '#ffffff', 'vee', '#1a4fa0', '#1a4fa0', '#ffffff'), gkKit: GK_B, formation: '4-3-3', rating: 80, seed: 129 },
 ];
 
+/** Todos los equipos del juego: la Liga Profesional y las demás ligas (Primera Nacional, Brasileirão, Chile, Colombia, Perú y Paraguay). */
+const SEEDS: TeamSeed[] = [...LPF_SEEDS, ...Object.values(EXTRA_LEAGUES).flatMap((l) => l.teams)];
+
 // Puestos de la plantilla: 11 titulares en el orden de la formación + 7 suplentes.
 const SQUAD_POSITIONS: Record<FormationId, Position[]> = {
   '4-3-3': ['GK', 'DEF', 'DEF', 'DEF', 'DEF', 'MID', 'MID', 'MID', 'FWD', 'FWD', 'FWD'],
@@ -161,7 +167,7 @@ const START_NUMBERS: Record<FormationId, number[]> = {
 
 function makePlayer(rng: Rng, teamId: string, idx: number, pos: Position, number: number, rating: number, usedNames: Set<string>, real?: RosterEntry): PlayerData {
   let name = real?.name ?? '';
-  for (let tries = 0; !real && tries < 50; tries++) {
+  for (let tries = 0; !name && tries < 50; tries++) {
     name = `${rng.pick(FIRST)} ${rng.pick(LAST)}`;
     if (!usedNames.has(name)) break;
   }
@@ -210,7 +216,11 @@ export function buildTeam(s: TeamSeed): TeamData {
 }
 
 // plantilla real de cada club (Clausura 2026); Belgrano trae la suya en la semilla
-export const TEAMS: TeamData[] = SEEDS.map((s) => buildTeam(!s.roster && ROSTERS[s.id] ? { ...s, ...ROSTERS[s.id] } : s));
+export const TEAMS: TeamData[] = SEEDS.map((s) => {
+  const tm = TM_ROSTERS[s.id];
+  if (tm) return buildTeam({ ...s, ...tm }); // las ligas de Transfermarkt traen formación, nivel y plantilla
+  return buildTeam(!s.roster && ROSTERS[s.id] ? { ...s, ...ROSTERS[s.id] } : s);
+});
 /** Equipos del juego (sin los creados en el editor): los únicos que se usan en el modo online. */
 export const BUILTIN_TEAM_COUNT = SEEDS.length;
 
