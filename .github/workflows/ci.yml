@@ -41,6 +41,8 @@ jobs:
 
   windows:
     name: Ejecutable de Windows (ZIP)
+    # solo a pedido (Run workflow): gasta el doble de minutos que Linux
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     # después del APK: así el Release "latest" ya existe cuando se sube el ZIP
     needs: [test-web, android]
@@ -89,6 +91,8 @@ jobs:
 
   macos:
     name: Aplicación de macOS
+    # solo a pedido (Run workflow): gasta diez veces los minutos de Linux
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
     # después del APK: así el Release "latest" ya existe cuando se sube la app
     needs: [test-web, android]
@@ -122,6 +126,8 @@ jobs:
 
   android:
     name: APK de Android
+    # en los PR no se compila (solo se publica desde main): ahorra minutos
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: test-web
     permissions:
