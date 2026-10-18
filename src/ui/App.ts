@@ -307,7 +307,7 @@ export class App {
           <button class="menu-item" data-act="online">Online<small>Division Rivals, amistosos y salas con amigos</small></button>
           <button class="menu-item" data-act="tournament">Copa Élite<small>Torneo: fase de grupos y eliminatorias</small></button>
           <button class="menu-item" data-act="continental">Copas internacionales<small>Libertadores, Sudamericana, Champions, Europa y Conference League</small></button>
-          <button class="menu-item" data-act="career">Carrera<small>11 ligas: Argentina (1.ª y 2.ª), Brasil y 8 países más</small></button>
+          <button class="menu-item" data-act="career">Carrera<small>21 ligas de Sudamérica y Europa</small></button>
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
           <button class="menu-item" data-act="editor">✏️ Editor de equipos<small>Crea tu equipo · exportar e importar</small></button>
@@ -1543,7 +1543,7 @@ export class App {
   /** Elegir la liga del modo carrera (con el logo de cada competencia). */
   private leaguePickScreen(onPick: (leagueId: string) => void, back: () => void) {
     const ls = LEAGUES.filter((l) => l.teamIds().length);
-    const item = (l: (typeof LEAGUES)[number]) => `<button class="menu-item" data-act="lg-${l.id}" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:10px 14px">${l.logo ? `<img src="${l.logo}" alt="" style="height:38px;width:38px;object-fit:contain;flex:none">` : '<span style="width:38px;flex:none"></span>'}<span style="font-size:15px">${esc(l.name)}<small>${esc(l.country)} · ${l.teamIds().length} equipos</small></span></button>`;
+    const item = (l: (typeof LEAGUES)[number]) => `<button class="menu-item" data-act="lg-${l.id}" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:10px 14px">${l.logo ? `<img src="${l.logo}" alt="" style="height:38px;width:38px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box;flex:none">` : '<span style="width:38px;flex:none"></span>'}<span style="font-size:15px">${esc(l.name)}<small>${esc(l.country)} · ${l.teamIds().length} equipos</small></span></button>`;
     const handlers: Handlers = { back };
     for (const l of ls) handlers[`lg-${l.id}`] = () => onPick(l.id);
     this.show(`
@@ -1682,7 +1682,7 @@ export class App {
       : st.phase === 'done' ? `<button class="btn primary" data-act="clausura">Empezar el ${esc(fmt.torneos[st.torneoIdx + 1] ?? 'siguiente torneo')}</button>`
       : next ? '<button class="btn primary" data-act="play">Jugar partido</button>' : '<button class="btn primary" data-act="simRest">Simular el resto</button>';
     this.show(`
-      <div class="screen-header"><div><div class="crumb">${esc(c.league.name.toUpperCase())} · TEMPORADA ${st.season} · ${esc(c.user.name)} · PRESUPUESTO ${(st.budget ?? 0).toFixed(1)} M${st.phase === 'regular' ? ` · ${zonePos}.º EN LA ZONA ${c.userZone}` : ''}</div><h2 style="display:flex;align-items:center;gap:12px">${c.league.logo ? `<img src="${c.league.logo}" alt="" style="height:46px;width:46px;object-fit:contain">` : ''}<span>${c.torneoName} · ${phaseName}</span></h2></div></div>
+      <div class="screen-header"><div><div class="crumb">${esc(c.league.name.toUpperCase())} · TEMPORADA ${st.season} · ${esc(c.user.name)} · PRESUPUESTO ${(st.budget ?? 0).toFixed(1)} M${st.phase === 'regular' ? ` · ${zonePos}.º EN LA ZONA ${c.userZone}` : ''}</div><h2 style="display:flex;align-items:center;gap:12px">${c.league.logo ? `<img src="${c.league.logo}" alt="" style="height:46px;width:46px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box">` : ''}<span>${c.torneoName} · ${phaseName}</span></h2></div></div>
       <div class="screen-body">
         ${this.stepper('Ver', VIEW_NAMES[view], 'view')}
         ${body}
@@ -1745,7 +1745,7 @@ export class App {
       for (const cup of ls) {
         handlers[`cup-${cup.id}`] = () => this.pickTeamScreen(`Elige tu club para la ${cup.name}`, 'COPAS INTERNACIONALES', (id) => { this.continental = Continental.create(cup.id, id); this.continentalView = 'grupo'; this.continentalHub(); }, () => this.continentalHub(), cupEligibleTeams(cup.id));
       }
-      const logo = (id: CupId) => `<img src="${leagueLogo(id) ?? ''}" alt="" style="height:46px;width:46px;object-fit:contain;flex:none">`;
+      const logo = (id: CupId) => `<img src="${leagueLogo(id) ?? ''}" alt="" style="height:46px;width:46px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box;flex:none">`;
       this.show(`
         <div class="screen-header"><div><div class="crumb">COPAS INTERNACIONALES</div><h2>Elige la copa</h2></div></div>
         <div class="screen-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:860px;margin:0 auto">${ls.map((cup) => `<button class="menu-item" data-act="cup-${cup.id}" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:12px 14px">${logo(cup.id)}<span>${esc(cup.name)}<small>${cup.size} clubes · ${cup.format === 'league' ? 'fase de liga' : '8 grupos'} · ida y vuelta · final neutral</small></span></button>`).join('')}</div></div>
@@ -1776,7 +1776,7 @@ export class App {
         : `<div class="panel"><p class="muted">${isLeague ? 'Los 8 primeros pasan a octavos y del 9.º al 24.º juegan un play-off a ida y vuelta' : 'Pasan los dos primeros de cada grupo'}: octavos, cuartos y semifinales a ida y vuelta (define el global, con prórroga y penales). La final es a partido único en cancha neutral.</p></div>`;
     }
     this.show(`
-      <div class="screen-header"><div><div class="crumb">COPAS INTERNACIONALES · ${esc(getTeam(st.userTeam).name)}</div><h2 style="display:flex;align-items:center;gap:12px"><img src="${leagueLogo(st.cup) ?? ''}" alt="" style="height:46px;width:46px;object-fit:contain"><span>${esc(c.def.name)}</span></h2></div></div>
+      <div class="screen-header"><div><div class="crumb">COPAS INTERNACIONALES · ${esc(getTeam(st.userTeam).name)}</div><h2 style="display:flex;align-items:center;gap:12px"><img src="${leagueLogo(st.cup) ?? ''}" alt="" style="height:46px;width:46px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box"><span>${esc(c.def.name)}</span></h2></div></div>
       <div class="screen-body">
         ${status}
         ${next ? `<div class="panel" style="margin-bottom:16px"><div class="crumb">PRÓXIMO PARTIDO · ${esc(next.stage.toUpperCase())}</div>${this.fixtureHTML(next, st.userTeam, lookup)}${next.venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(next.venue).name)}</div>` : ''}</div>` : ''}

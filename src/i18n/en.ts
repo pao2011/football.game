@@ -16,7 +16,7 @@ export const en: Dict = {
     'Torneo: fase de grupos y eliminatorias': 'Tournament: group stage and knockouts',
     'Carrera': 'Career',
     'Temporadas de liga con tu club': 'League seasons with your club',
-    '11 ligas: Argentina (1.ª y 2.ª), Brasil y 8 países más': '11 leagues: Argentina (1st and 2nd division), Brazil and 8 more countries',
+    '21 ligas de Sudamérica y Europa': '21 leagues from South America and Europe',
     'Elige la liga': 'Pick the league',
     'Copas internacionales': 'International cups',
     'Libertadores, Sudamericana, Champions, Europa y Conference League': 'Libertadores, Sudamericana, Champions, Europa and Conference League',
