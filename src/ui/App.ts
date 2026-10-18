@@ -11,6 +11,7 @@ import { deleteReplay, encodeFrames, lastSeconds, listReplays, MAX_SAVED_REPLAYS
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
 import { classicName, matchHeat } from '../data/classics';
+import { LEAGUES, getLeague } from '../data/leagues';
 import { GENERIC_STADIUMS, STADIUMS, getStadium, stadiumForHome } from '../data/stadiums';
 import { BUILTIN_TEAM_COUNT, TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
 import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
@@ -22,7 +23,7 @@ import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
 import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, versusDevicesLabel, type Action } from '../input/Input';
 import { MAX_SUBS, type MatchConfig } from '../sim/Match';
 import { manOfTheMatch, playerRatings } from '../sim/Ratings';
-import { Career, TORNEO_NAMES, SQUAD_MAX, SQUAD_MIN, buyPlayer, marketOffers, playerPrice, sellPlayer } from '../modes/Career';
+import { Career, SQUAD_MAX, SQUAD_MIN, buyPlayer, marketOffers, playerPrice, sellPlayer } from '../modes/Career';
 import { Tournament } from '../modes/Tournament';
 import type { Fixture, StandingRow } from '../modes/Competition';
 import { crestSVG, kitSVG } from './Crest';
@@ -78,6 +79,8 @@ interface QuickSetup {
   awayKit?: 'auto' | 'home' | 'away';
   /** Clima del partido rápido. */
   weather?: Weather | 'random';
+  /** Liga que filtra los equipos (id de data/leagues.ts; 'all' = todas). */
+  league?: string;
 }
 
 type MatchContext =
@@ -300,7 +303,7 @@ export class App {
           <button class="menu-item" data-act="quick">Partido rápido<small>Elige equipos, estadio y dificultad</small></button>
           <button class="menu-item" data-act="online">Online<small>Division Rivals, amistosos y salas con amigos</small></button>
           <button class="menu-item" data-act="tournament">Copa Élite<small>Torneo: fase de grupos y eliminatorias</small></button>
-          <button class="menu-item" data-act="career">Carrera<small>Liga de 30 equipos: Apertura, Clausura y playoffs</small></button>
+          <button class="menu-item" data-act="career">Carrera<small>7 ligas: Argentina, Brasil, Chile, Colombia, Perú y Paraguay</small></button>
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
           <button class="menu-item" data-act="editor">✏️ Editor de equipos<small>Crea tu equipo · exportar e importar</small></button>
@@ -363,6 +366,7 @@ export class App {
           ${this.teamCard(away, 'VISITANTE', 'away', `<div class="kits">${kitSVG(awayKit)}</div>`)}
         </div>
         <div class="panel" style="margin-top:16px">
+          ${this.stepper('Liga', q.league && q.league !== 'all' ? getLeague(q.league).name : 'Todas las ligas', 'lg')}
           ${this.stepper('Estadio', STADIUMS[q.stadium].name + ` · ${({ day: 'Día', sunset: 'Atardecer', night: 'Noche' } as const)[STADIUMS[q.stadium].timeOfDay]}`, 'stad')}
           ${this.stepper('Duración de cada parte', `${HALF_OPTIONS[q.half]} min`, 'half')}
           ${this.stepper('Dificultad', DIFFICULTY_LABELS[DIFFS[q.difficulty]], 'diff')}
@@ -384,11 +388,35 @@ export class App {
       const i = STADIUMS.findIndex((s) => s.homeTeam === TEAMS[q.home].id);
       if (i >= 0 && q.stadium !== i) { q.stadium = i; s.refresh(render()); }
     };
+    // equipos del filtro de liga (índices en TEAMS)
+    const pool = (): number[] => {
+      const ids = q.league && q.league !== 'all' ? new Set(getLeague(q.league).teamIds()) : null;
+      return TEAMS.map((_, i) => i).filter((i) => !ids || ids.has(TEAMS[i].id));
+    };
+    const step = (key: 'home' | 'away', d: number) => {
+      const p = pool();
+      let i = p.indexOf(q[key]);
+      i = i < 0 ? 0 : (i + d + p.length) % p.length;
+      q[key] = p[i];
+      if (q.home === q.away && p.length > 1) q[key] = p[(i + d + p.length) % p.length];
+      s.refresh(render());
+    };
+    const LG = ['all', ...LEAGUES.filter((l) => l.teamIds().length).map((l) => l.id)];
+    const league = (d: number) => {
+      q.league = LG[(LG.indexOf(q.league ?? 'all') + d + LG.length) % LG.length];
+      const p = pool();
+      q.home = p[0];
+      q.away = p[1] ?? p[0];
+      ownGround();
+      s.refresh(render());
+    };
     const handlers: Handlers = {
-      homePrev: () => { cycle('home', TEAMS.length, -1); if (q.home === q.away) cycle('home', TEAMS.length, -1); ownGround(); },
-      homeNext: () => { cycle('home', TEAMS.length, 1); if (q.home === q.away) cycle('home', TEAMS.length, 1); ownGround(); },
-      awayPrev: () => { cycle('away', TEAMS.length, -1); if (q.home === q.away) cycle('away', TEAMS.length, -1); },
-      awayNext: () => { cycle('away', TEAMS.length, 1); if (q.home === q.away) cycle('away', TEAMS.length, 1); },
+      lgPrev: () => league(-1),
+      lgNext: () => league(1),
+      homePrev: () => { step('home', -1); ownGround(); },
+      homeNext: () => { step('home', 1); ownGround(); },
+      awayPrev: () => step('away', -1),
+      awayNext: () => step('away', 1),
       stadPrev: () => cycle('stadium', STADIUMS.length, -1),
       stadNext: () => cycle('stadium', STADIUMS.length, 1),
       halfPrev: () => cycle('half', HALF_OPTIONS.length, -1),
@@ -1482,20 +1510,34 @@ export class App {
   // Torneo
   // ==================================================================
 
-  private pickTeamScreen(title: string, crumb: string, onPick: (id: string) => void, back: () => void) {
+  /** Elegir un equipo (opcionalmente solo entre los ids dados, p. ej. los de una liga). */
+  private pickTeamScreen(title: string, crumb: string, onPick: (id: string) => void, back: () => void, only?: string[]) {
+    const list = only ? TEAMS.filter((t) => only.includes(t.id)) : TEAMS;
     let idx = 0;
     const render = () => `
       <div class="screen-header"><div><div class="crumb">${crumb}</div><h2>${title}</h2></div></div>
       <div class="screen-body" style="display:flex;justify-content:center;align-items:center">
-        ${this.teamCard(TEAMS[idx], 'TU EQUIPO', 'team', `<div class="kits">${kitSVG(TEAMS[idx].home)}${kitSVG(TEAMS[idx].away)}</div>`)}
+        ${this.teamCard(list[idx], 'TU EQUIPO', 'team', `<div class="kits">${kitSVG(list[idx].home)}${kitSVG(list[idx].away)}</div>`)}
       </div>
       <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn primary" data-act="ok">Confirmar</button></div>`;
     const s = this.show(render(), {
-      teamPrev: () => { idx = (idx + TEAMS.length - 1) % TEAMS.length; s.refresh(render()); },
-      teamNext: () => { idx = (idx + 1) % TEAMS.length; s.refresh(render()); },
-      ok: () => onPick(TEAMS[idx].id),
+      teamPrev: () => { idx = (idx + list.length - 1) % list.length; s.refresh(render()); },
+      teamNext: () => { idx = (idx + 1) % list.length; s.refresh(render()); },
+      ok: () => onPick(list[idx].id),
       back,
     }, back);
+  }
+
+  /** Elegir la liga del modo carrera (con el logo de cada competencia). */
+  private leaguePickScreen(onPick: (leagueId: string) => void, back: () => void) {
+    const ls = LEAGUES.filter((l) => l.teamIds().length);
+    const item = (l: (typeof LEAGUES)[number]) => `<button class="menu-item" data-act="lg-${l.id}" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:10px 14px">${l.logo ? `<img src="${l.logo}" alt="" style="height:38px;width:38px;object-fit:contain;flex:none">` : '<span style="width:38px;flex:none"></span>'}<span style="font-size:15px">${esc(l.name)}<small>${esc(l.country)} · ${l.teamIds().length} equipos</small></span></button>`;
+    const handlers: Handlers = { back };
+    for (const l of ls) handlers[`lg-${l.id}`] = () => onPick(l.id);
+    this.show(`
+      <div class="screen-header"><div><div class="crumb">MODO CARRERA</div><h2>Elige la liga</h2></div></div>
+      <div class="screen-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:860px;margin:0 auto">${ls.map(item).join('')}</div></div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, handlers, back);
   }
 
   private tableHTML(rows: StandingRow[], me: string, teamLookup: (id: string) => TeamData) {
@@ -1574,17 +1616,22 @@ export class App {
     this.career = this.career ?? Career.load();
     const c = this.career;
     if (!c) {
-      this.pickTeamScreen('Elige el club que dirigirás en la Liga Profesional', 'MODO CARRERA', (id) => { this.career = Career.create(id); this.careerView = 'resumen'; this.careerHub(); }, () => this.mainMenu());
+      this.leaguePickScreen((lg) => {
+        const def = getLeague(lg);
+        this.pickTeamScreen(`Elige el club que dirigirás en ${def.name}`, 'MODO CARRERA', (id) => { this.career = Career.create(id, undefined, lg); this.careerView = 'resumen'; this.careerHub(); }, () => this.careerHub(), def.teamIds());
+      }, () => this.mainMenu());
       return;
     }
     const st = c.state;
     const lookup = (id: string) => c.team(id);
     const next = c.nextUserFixture();
-    const VIEWS = ['resumen', 'A', 'B', 'anual', 'playoffs'] as const;
-    const VIEW_NAMES = { resumen: 'Resumen', A: 'Zona A', B: 'Zona B', anual: 'Tabla anual', playoffs: 'Playoffs' } as const;
-    const view = this.careerView;
+    const fmt = c.fmt;
+    const VIEWS = (['resumen', ...(fmt.zones === 2 ? ['A', 'B'] : ['A']), ...(fmt.annual ? ['anual'] : []), ...(fmt.playoffs ? ['playoffs'] : [])] as ('resumen' | 'A' | 'B' | 'anual' | 'playoffs')[]);
+    const VIEW_NAMES = { resumen: 'Resumen', A: fmt.zones === 2 ? 'Zona A' : 'Tabla', B: 'Zona B', anual: 'Tabla anual', playoffs: 'Playoffs' } as const;
+    const view = VIEWS.includes(this.careerView) ? this.careerView : 'resumen';
     const zonePos = c.standings().findIndex((r) => r.team === st.userTeam) + 1;
-    const zoneNote = '<div class="muted" style="font-size:12px;margin-top:6px">Los 8 primeros de cada zona pasan a los playoffs.</div>';
+    const zoneNote = fmt.playoffs ? `<div class="muted" style="font-size:12px;margin-top:6px">Los ${fmt.playoffs} primeros${fmt.zones === 2 ? ' de cada zona' : ''} pasan a los playoffs.</div>` : '';
+    const zoneTitle = (z: string) => (fmt.zones === 2 ? `Zona ${z}` : 'Tabla de posiciones');
     const fxLine = (f: Fixture) => {
       const cl = c.classicOf(f);
       return `${cl ? `<div class="crumb" style="color:var(--danger)">🔥 ${esc(cl.toUpperCase())}</div>` : ''}${this.fixtureHTML(f, st.userTeam, lookup)}`;
@@ -1592,9 +1639,9 @@ export class App {
     const phaseName = st.phase === 'regular' ? 'Fase regular' : st.phase === 'playoffs' ? 'Playoffs' : 'Torneo terminado';
     let body = '';
     if (view === 'A' || view === 'B') {
-      body = `<div class="panel"><h3>Zona ${view}</h3>${this.tableHTML(c.zoneStandings(view), st.userTeam, lookup)}${zoneNote}</div>`;
+      body = `<div class="panel"><h3>${zoneTitle(view)}</h3>${this.tableHTML(c.zoneStandings(view), st.userTeam, lookup)}${zoneNote}</div>`;
     } else if (view === 'anual') {
-      body = `<div class="panel"><h3>Tabla anual ${st.season}</h3>${this.tableHTML(c.annualStandings(), st.userTeam, lookup)}<div class="muted" style="font-size:12px;margin-top:6px">Suma los partidos de fase regular del Apertura y el Clausura (30 equipos).</div></div>`;
+      body = `<div class="panel"><h3>Tabla anual ${st.season}</h3>${this.tableHTML(c.annualStandings(), st.userTeam, lookup)}<div class="muted" style="font-size:12px;margin-top:6px">Suma los partidos de fase regular de todos los torneos de la temporada (${c.allTeams.length} equipos).</div></div>`;
     } else if (view === 'playoffs') {
       const rounds = [...new Set(c.playoffFx.map((f) => f.round))];
       body = rounds.length
@@ -1602,17 +1649,17 @@ export class App {
           const fx = c.playoffFx.filter((f) => f.round === r);
           return `<div class="panel" style="margin-bottom:12px"><h3>${esc(fx[0].stage)}</h3>${fx.map((f) => fxLine(f)).join('')}${fx[0].venue ? `<div class="muted" style="font-size:12px">Sede neutral: ${esc(getStadium(fx[0].venue).name)}</div>` : ''}</div>`;
         }).join('')
-        : '<div class="panel"><p class="muted">Los playoffs empiezan al terminar las 15 fechas: pasan los 8 primeros de cada zona (octavos, cuartos, semifinales y final en cancha neutral).</p></div>';
+        : `<div class="panel"><p class="muted">Los playoffs empiezan al terminar las ${c.totalRounds} fechas: pasan los ${fmt.playoffs} primeros${fmt.zones === 2 ? ' de cada zona' : ''}${fmt.neutralFinal ? ' y la final se juega en cancha neutral' : ''}.</p></div>`;
     } else {
       const roundFx = next ? st.fixtures.filter((f) => f.round === next.round && f !== next) : [];
       const recent = st.fixtures.filter((f) => f.played).slice(-8).reverse();
-      const history = st.history.map((h) => `<div class="row"><span>Temporada ${h.season}</span><span>Apertura: ${esc(lookup(h.apertura).short)} · Clausura: ${esc(lookup(h.clausura).short)} · Anual: ${esc(lookup(h.annual).short)} · Tu puesto: ${h.userPosition}.º</span></div>`).join('');
+      const history = st.history.map((h) => `<div class="row"><span>Temporada ${h.season}</span><span>${h.champions.map((ch, i) => `${esc(fmt.torneos[i] ?? 'Torneo')}: ${esc(lookup(ch).short)}`).join(' · ')}${fmt.annual ? ` · Anual: ${esc(lookup(h.champion).short)}` : ''} · Tu puesto: ${h.userPosition}.º</span></div>`).join('');
       const champ = c.torneoChampion;
       body = `<div class="grid2"><div>
-          <div class="panel"><h3>Zona ${c.userZone}</h3>${this.tableHTML(c.standings(), st.userTeam, lookup)}${zoneNote}</div>
+          <div class="panel"><h3>${zoneTitle(c.userZone)}</h3>${this.tableHTML(c.standings(), st.userTeam, lookup)}${zoneNote}</div>
           ${st.news?.length ? `<div class="panel" style="margin-top:16px"><h3>Noticias</h3>${st.news.slice(0, 6).map((n) => `<div class="muted" style="font-size:13px;margin-bottom:4px">${esc(n)}</div>`).join('')}</div>` : ''}
         </div><div>
-          ${champ ? `<div class="panel" style="margin-bottom:16px"><b>${TORNEO_NAMES[st.torneo]}: campeón ${esc(lookup(champ).name)}</b><br><span class="muted">${esc(c.userPlayoffResult())}</span></div>` : ''}
+          ${champ ? `<div class="panel" style="margin-bottom:16px"><b>${c.torneoName}: campeón ${esc(lookup(champ).name)}</b><br><span class="muted">${esc(c.userPlayoffResult())}</span></div>` : ''}
           ${next ? `<div class="panel" style="margin-bottom:16px"><div class="crumb">${esc(next.stage.toUpperCase())}${next.venue ? ' · CANCHA NEUTRAL' : ''}</div>${fxLine(next)}${next.venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(next.venue).name)}</div>` : ''}${roundFx.length ? '<div class="muted" style="margin-top:8px">Resto de la fecha:</div>' + roundFx.map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('') : ''}</div>`
             : st.phase !== 'done' ? `<div class="panel" style="margin-bottom:16px"><b>${c.userPlayoffResult()}</b><div class="muted">Simula el resto del torneo para seguir adelante.</div></div>` : ''}
           <div class="panel"><h3>Últimos resultados</h3>${recent.map((f) => `<div class="muted" style="font-size:11px">${esc(f.stage)}</div>${this.fixtureHTML(f, st.userTeam, lookup)}`).join('') || '<span class="muted">Aún no se jugó ningún partido.</span>'}</div>
@@ -1620,10 +1667,10 @@ export class App {
         </div></div>`;
     }
     const lastBtn = st.seasonOver ? '<button class="btn primary" data-act="nextSeason">Nueva temporada</button>'
-      : st.phase === 'done' ? '<button class="btn primary" data-act="clausura">Empezar el Clausura</button>'
+      : st.phase === 'done' ? `<button class="btn primary" data-act="clausura">Empezar el ${esc(fmt.torneos[st.torneoIdx + 1] ?? 'siguiente torneo')}</button>`
       : next ? '<button class="btn primary" data-act="play">Jugar partido</button>' : '<button class="btn primary" data-act="simRest">Simular el resto</button>';
     this.show(`
-      <div class="screen-header"><div><div class="crumb">CARRERA · TEMPORADA ${st.season} · ${esc(c.user.name)} · PRESUPUESTO ${(st.budget ?? 0).toFixed(1)} M${st.phase === 'regular' ? ` · ${zonePos}.º EN LA ZONA ${c.userZone}` : ''}</div><h2>${TORNEO_NAMES[st.torneo]} · ${phaseName}</h2></div></div>
+      <div class="screen-header"><div><div class="crumb">${esc(c.league.name.toUpperCase())} · TEMPORADA ${st.season} · ${esc(c.user.name)} · PRESUPUESTO ${(st.budget ?? 0).toFixed(1)} M${st.phase === 'regular' ? ` · ${zonePos}.º EN LA ZONA ${c.userZone}` : ''}</div><h2 style="display:flex;align-items:center;gap:12px">${c.league.logo ? `<img src="${c.league.logo}" alt="" style="height:46px;width:46px;object-fit:contain">` : ''}<span>${c.torneoName} · ${phaseName}</span></h2></div></div>
       <div class="screen-body">
         ${this.stepper('Ver', VIEW_NAMES[view], 'view')}
         ${body}
@@ -1647,12 +1694,12 @@ export class App {
         this.careerHub();
       },
       simRest: () => { c.simulateUntilUserOrEnd(); this.careerHub(); },
-      clausura: () => { c.startClausura(); this.careerView = 'resumen'; this.careerHub(); },
+      clausura: () => { c.startNextTorneo(); this.careerView = 'resumen'; this.careerHub(); },
       nextSeason: () => {
         const res = c.startNextSeason();
         const ch = res.changes.slice(0, 12).map((x) => `<div class="row"><span>${esc(x.name)}</span><span style="color:${x.delta > 0 ? 'var(--accent)' : 'var(--danger)'}">${x.delta > 0 ? '+' : ''}${x.delta}</span></div>`).join('');
         this.show(`<div class="screen-header"><div><div class="crumb">FIN DE TEMPORADA</div><h2>Temporada ${st.season - 1}</h2></div></div>
-          <div class="screen-body"><div class="grid2"><div class="panel"><p>Campeón del Apertura: <b>${esc(lookup(res.apertura).name)}</b></p><p>Campeón del Clausura: <b>${esc(lookup(res.clausura).name)}</b></p><p>Tabla anual: <b>${esc(lookup(res.annual).name)}</b></p><p>Tu puesto en la tabla anual: <b>${res.position}.º</b></p><p>Ingresos de la temporada: <b>+${res.income} M</b> (presupuesto: ${(st.budget ?? 0).toFixed(1)} M)</p></div>
+          <div class="screen-body"><div class="grid2"><div class="panel">${res.champions.map((ch, i) => `<p>${esc(fmt.torneos[i] ?? 'Torneo')}: <b>${esc(lookup(ch).name)}</b></p>`).join('')}<p>Campeón de la temporada: <b>${esc(lookup(res.champion).name)}</b></p><p>Tu puesto en la tabla: <b>${res.position}.º</b></p><p>Ingresos de la temporada: <b>+${res.income} M</b> (presupuesto: ${(st.budget ?? 0).toFixed(1)} M)</p></div>
           <div class="panel"><h3>Evolución de tu plantilla</h3>${ch || '<span class="muted">Sin cambios</span>'}</div></div></div>
           <div class="screen-footer"><button class="btn primary" data-act="ok">Continuar</button></div>`, { ok: () => { this.careerView = 'resumen'; this.careerHub(); } }, () => this.careerHub());
       },

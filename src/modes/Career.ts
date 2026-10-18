@@ -1,5 +1,6 @@
 import { FORMATIONS } from '../data/formations';
-import { LEAGUE_IDS, ZONE_A, ZONE_B, ZONE_PAIRS, classicName } from '../data/classics';
+import { ZONE_A, ZONE_B, ZONE_PAIRS, classicName } from '../data/classics';
+import { getLeague, leagueOfTeam, type LeagueDef } from '../data/leagues';
 import { STADIUMS } from '../data/stadiums';
 import { playerOverall, TEAMS } from '../data/teams';
 import type { FormationId, PlayerData, TeamData } from '../data/types';
@@ -9,47 +10,51 @@ import { computeStandings, quickSim, roundRobin, winnerOf, type Fixture, type St
 import { applyAfterMatch, emptyAvailability, fixLineup, type AvailabilityState, type Discipline } from './Availability';
 
 /**
- * Modo carrera: Liga Profesional de 30 equipos en dos zonas de 15. Cada temporada tiene dos torneos,
- * Apertura y Clausura: todos contra todos dentro de la zona (14 fechas) más un interzonal en la fecha libre
- * (los clásicos son el interzonal), y los 8 primeros de cada zona juegan los playoffs (octavos, cuartos,
- * semifinales y final a partido único; la final en cancha neutral). Además hay una tabla anual con los
- * dos torneos. El usuario gestiona alineación y formación, juega sus partidos y el resto se simula.
+ * Modo carrera: el usuario dirige un club en una de las ligas del juego (Liga Profesional de 30 equipos en dos
+ * zonas, Primera Nacional, Brasileirão, Chile, Colombia, Perú, Paraguay; ver data/leagues.ts). Cada temporada tiene
+ * uno o dos torneos (Apertura y Clausura); según la liga hay playoffs (final en cancha neutral) y tabla anual.
+ * El usuario gestiona alineación y formación, juega sus partidos y el resto se simula.
  */
-export type TorneoId = 'apertura' | 'clausura';
 export type LeaguePhase = 'regular' | 'playoffs' | 'done';
 
 export interface SeasonRecord {
   season: number;
-  apertura: string;
-  clausura: string;
-  annual: string;
-  /** Posición del usuario en la tabla anual. */
+  /** Campeón de cada torneo de la temporada. */
+  champions: string[];
+  /** Campeón de la temporada (el de la tabla anual si la liga la tiene; si no, el del último torneo). */
+  champion: string;
+  /** Posición del usuario en la tabla de la temporada. */
   userPosition: number;
 }
 
 export interface CareerState {
-  version: 2;
+  version: 3;
+  /** Liga (id de data/leagues.ts). */
+  league: string;
   userTeam: string;
   season: number;
   teams: TeamData[]; // copia propia: los atributos evolucionan
   ages: Record<string, number>;
   appearances: Record<string, number>;
   goals: Record<string, number>;
-  /** Zonas de la liga (ids). */
+  /** Zonas de la liga (ids); la B queda vacía en las ligas de una sola tabla. */
   zones: { A: string[]; B: string[] };
-  torneo: TorneoId;
+  /** Torneo en juego (índice en los torneos de la liga). */
+  torneoIdx: number;
   phase: LeaguePhase;
+  /** Fechas de la fase regular del torneo en juego. */
+  regularRounds: number;
   /** Partidos del torneo en juego (fase regular y playoffs). */
   fixtures: Fixture[];
-  /** Fase regular del Apertura ya terminado (cuenta para la tabla anual durante el Clausura). */
-  aperturaFixtures: Fixture[];
-  /** Campeón del Apertura de esta temporada. */
-  aperturaChampion?: string;
+  /** Fase regular de los torneos ya terminados de esta temporada (cuenta para la tabla anual). */
+  prevFixtures: Fixture[];
+  /** Campeones de los torneos ya terminados de esta temporada. */
+  torneoChampions: string[];
   formation: FormationId;
   lineup: string[]; // 11 ids en orden de la formación
   history: SeasonRecord[];
   seed: number;
-  /** Termino el Clausura: falta cerrar la temporada. */
+  /** Terminó el último torneo: falta cerrar la temporada. */
   seasonOver: boolean;
   /** Lesionados, sancionados y amarillas acumuladas del equipo del usuario. */
   availability?: AvailabilityState;
@@ -70,10 +75,12 @@ export function playerPrice(p: PlayerData, age: number): number {
 export const SQUAD_MIN = 16;
 export const SQUAD_MAX = 25;
 
-export const TORNEO_NAMES: Record<TorneoId, string> = { apertura: 'Torneo Apertura', clausura: 'Torneo Clausura' };
-/** Rondas de playoffs, de la primera a la final. */
-export const PLAYOFF_ROUNDS = ['Octavos de final', 'Cuartos de final', 'Semifinal', 'Final'];
-const REGULAR_ROUNDS = 15;
+/** Rondas de playoffs según cuántos clasifican (8 por zona en dos zonas = 16 equipos). */
+const PLAYOFF_NAMES: Record<number, string[]> = {
+  16: ['Octavos de final', 'Cuartos de final', 'Semifinal', 'Final'],
+  8: ['Cuartos de final', 'Semifinal', 'Final'],
+  4: ['Semifinal', 'Final'],
+};
 /** Estadios donde se juegan las finales (se elige el primero que no sea de un finalista). */
 const NEUTRAL_VENUES = ['kempes', 'madre-ciudades', 'gigante-arroyito', 'coloso', 'cilindro'];
 
@@ -82,38 +89,46 @@ const KEY = 'career';
 export class Career {
   constructor(public state: CareerState) {}
 
-  static create(userTeam: string, seed = Date.now() % 100000): Career {
+  static create(userTeam: string, seed = Date.now() % 100000, leagueId?: string): Career {
     const rng = new Rng(seed);
-    const zones = { A: ZONE_A.slice(), B: ZONE_B.slice() };
     const all = structuredClone(TEAMS);
-    // un equipo propio (del editor): ocupa el lugar del peor equipo sin clásico
-    if (!LEAGUE_IDS.includes(userTeam)) {
-      const classic = new Set(ZONE_PAIRS.filter((p) => p.classic).flatMap((p) => [p.a, p.b]));
-      const weakest = LEAGUE_IDS.filter((id) => !classic.has(id)).map((id) => all.find((t) => t.id === id)!).sort((a, b) => a.rating - b.rating)[0];
-      for (const z of [zones.A, zones.B]) { const i = z.indexOf(weakest.id); if (i >= 0) z[i] = userTeam; }
+    // liga: la elegida o la del equipo (un equipo propio del editor juega en la Liga Profesional)
+    const def: LeagueDef = leagueId ? getLeague(leagueId) : leagueOfTeam(userTeam) ?? getLeague('lpf');
+    let ids = def.teamIds().slice();
+    // un equipo propio (del editor): ocupa el lugar del peor equipo de la liga (sin clásico)
+    let swapped: string | null = null;
+    if (!ids.includes(userTeam)) {
+      const classic = new Set(def.id === 'lpf' ? ZONE_PAIRS.filter((p) => p.classic).flatMap((p) => [p.a, p.b]) : []);
+      const weakest = ids.filter((id) => !classic.has(id)).map((id) => all.find((t) => t.id === id)!).filter(Boolean).sort((a, b) => a.rating - b.rating)[0];
+      if (weakest) {
+        swapped = weakest.id;
+        ids = ids.map((id) => (id === swapped ? userTeam : id));
+      }
     }
-    const ids = new Set([...zones.A, ...zones.B]);
-    const teams = all.filter((t) => ids.has(t.id));
+    const swap = (id: string) => (id === swapped ? userTeam : id);
+    const zones = def.id === 'lpf' ? { A: ZONE_A.map(swap), B: ZONE_B.map(swap) } : splitZones(ids, def.format.zones, all);
+    const inLeague = new Set([...zones.A, ...zones.B]);
+    const teams = all.filter((t) => inLeague.has(t.id));
     const ages: Record<string, number> = {};
     for (const t of teams) for (const p of t.players) ages[p.id] = rng.int(18, 34);
     const ut = teams.find((t) => t.id === userTeam) ?? teams[0];
     const c = new Career({
-      version: 2, userTeam: ut.id, season: 1, teams, ages, appearances: {}, goals: {}, zones,
-      torneo: 'apertura', phase: 'regular', fixtures: [], aperturaFixtures: [],
-      formation: ut.formation, lineup: ut.players.slice(0, 11).map((p) => p.id),
+      version: 3, league: def.id, userTeam: ut.id, season: 1, teams, ages, appearances: {}, goals: {}, zones,
+      torneoIdx: 0, phase: 'regular', regularRounds: 0, prevFixtures: [], torneoChampions: [],
+      fixtures: [], formation: ut.formation, lineup: ut.players.slice(0, 11).map((p) => p.id),
       history: [], seed, seasonOver: false,
       budget: Math.round(15 + (ut.rating - 70) * 1.5),
       news: [],
     });
-    c.fixtures_new();
+    c.newTorneo();
     c.save();
     return c;
   }
 
   static load(): Career | null {
     const s = loadJSON<CareerState | null>(KEY, null);
-    // las carreras de antes de la liga de 30 equipos (version 1) no se pueden convertir
-    if (!s || s.version !== 2) return null;
+    // las carreras de versiones anteriores (una sola liga, formato distinto) no se pueden convertir
+    if (!s || s.version !== 3) return null;
     const c = new Career(s);
     s.budget ??= Math.round(15 + (c.user.rating - 70) * 1.5);
     s.news ??= [];
@@ -136,6 +151,25 @@ export class Career {
     return this.team(this.state.userTeam);
   }
 
+  /** Datos de la liga de esta carrera. */
+  get league(): LeagueDef {
+    return getLeague(this.state.league);
+  }
+
+  get fmt() {
+    return this.league.format;
+  }
+
+  /** Nombre del torneo en juego. */
+  get torneoName(): string {
+    return this.fmt.torneos[this.state.torneoIdx];
+  }
+
+  /** Es el último torneo de la temporada. */
+  get lastTorneo(): boolean {
+    return this.state.torneoIdx >= this.fmt.torneos.length - 1;
+  }
+
   /** Zona del usuario. */
   get userZone(): 'A' | 'B' {
     return this.state.zones.A.includes(this.state.userTeam) ? 'A' : 'B';
@@ -156,33 +190,48 @@ export class Career {
   }
 
   // ---------------------------------------------------------------- calendario
-  /** Calendario del torneo: zonas de 15 y, en la fecha libre de cada pareja, el interzonal. */
+  /** Calendario del torneo: zonas y, si son impares y hay dos, el interzonal en la fecha libre de cada pareja. */
   private regularFixtures(): Fixture[] {
     const st = this.state;
-    const rng = new Rng(st.seed + st.season * 101 + (st.torneo === 'clausura' ? 55 : 0));
-    // el orden de las parejas se mezcla igual en las dos zonas: las fechas libres de las parejas coinciden
-    const pairs = st.zones.A.map((a, i) => ({ a, b: st.zones.B[i] }));
-    for (let i = pairs.length - 1; i > 0; i--) { const j = Math.floor(rng.next() * (i + 1)); [pairs[i], pairs[j]] = [pairs[j], pairs[i]]; }
-    const tag = `S${st.season}${st.torneo === 'apertura' ? 'A' : 'C'}`;
+    const fmt = this.fmt;
+    const double = fmt.rr === 'double';
+    const rng = new Rng(st.seed + st.season * 101 + st.torneoIdx * 55);
+    const tag = `S${st.season}T${st.torneoIdx}`;
     const stage = (r: number) => `Fecha ${r}`;
-    const za = roundRobin(pairs.map((p) => p.a), false, stage, `${tag}a`);
-    const zb = roundRobin(pairs.map((p) => p.b), false, stage, `${tag}b`);
+    // el orden de los equipos se mezcla para que cada temporada tenga otro calendario
+    const shuffle = <T,>(a: T[]) => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(rng.next() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+    if (!st.zones.B.length) {
+      const fx = roundRobin(shuffle(st.zones.A), double, stage, tag);
+      st.regularRounds = Math.max(...fx.map((f) => f.round));
+      return fx;
+    }
+    // dos zonas: se mezclan las parejas (igual en las dos zonas: las fechas libres de las parejas coinciden)
+    const pairs = shuffle(st.zones.A.map((a, i) => ({ a, b: st.zones.B[i] })));
+    const za = roundRobin(pairs.map((p) => p.a), double, stage, `${tag}a`);
+    const zb = roundRobin(pairs.map((p) => p.b), double, stage, `${tag}b`);
     const out = [...za, ...zb];
-    // interzonal en la fecha libre; la localía se invierte de un torneo a otro
-    for (const p of pairs) {
-      const played = new Set(za.filter((f) => f.home === p.a || f.away === p.a).map((f) => f.round));
-      let bye = 1;
-      while (played.has(bye)) bye++;
-      const aHome = (pairs.indexOf(p) % 2 === 0) !== (st.torneo === 'clausura');
-      out.push({
-        id: `${tag}x-${p.a}`, home: aHome ? p.a : p.b, away: aHome ? p.b : p.a, round: bye, stage: classicName(p.a, p.b) ? `Fecha ${bye} · ${classicName(p.a, p.b)}` : `Fecha ${bye} · Interzonal`,
-        played: false, homeGoals: 0, awayGoals: 0, knockout: false,
-      });
+    const odd = pairs.length % 2 === 1;
+    st.regularRounds = pairs.length - (odd ? 0 : 1);
+    if (double) st.regularRounds *= 2;
+    if (odd && !double) {
+      for (const p of pairs) {
+        const played = new Set(za.filter((f) => f.home === p.a || f.away === p.a).map((f) => f.round));
+        let bye = 1;
+        while (played.has(bye)) bye++;
+        // la localía se alterna entre parejas y se invierte de un torneo a otro
+        const aHome = (pairs.indexOf(p) % 2 === 0) !== (st.torneoIdx % 2 === 1);
+        const cl = classicName(p.a, p.b);
+        out.push({
+          id: `${tag}x-${p.a}`, home: aHome ? p.a : p.b, away: aHome ? p.b : p.a, round: bye, stage: cl ? `Fecha ${bye} · ${cl}` : `Fecha ${bye} · Interzonal`,
+          played: false, homeGoals: 0, awayGoals: 0, knockout: false,
+        });
+      }
     }
     return out.sort((x, y) => x.round - y.round);
   }
 
-  private fixtures_new() {
+  /** Arma el calendario del torneo que empieza. */
+  private newTorneo() {
     this.state.fixtures = this.regularFixtures();
     this.state.phase = 'regular';
   }
@@ -205,23 +254,23 @@ export class Career {
     return this.zoneStandings(this.userZone);
   }
 
-  /** Tabla anual: los partidos de fase regular de los dos torneos de la temporada. */
+  /** Tabla de la temporada: fases regulares de todos los torneos (en dos zonas, también los interzonales). */
   annualStandings(): StandingRow[] {
-    return computeStandings(this.allTeams, [...this.state.aperturaFixtures, ...this.regularFx]);
+    return computeStandings(this.allTeams, [...this.state.prevFixtures, ...this.regularFx]);
   }
 
   nextUserFixture(): Fixture | null {
     return this.state.fixtures.find((f) => !f.played && (f.home === this.state.userTeam || f.away === this.state.userTeam)) ?? null;
   }
 
-  /** Rondas jugadas y totales para mostrar el avance del torneo. */
+  /** Fecha en juego. */
   get currentRound(): number {
     const f = this.state.fixtures.find((x) => !x.played);
-    return f ? f.round : this.state.phase === 'done' ? 19 : REGULAR_ROUNDS;
+    return f ? f.round : this.state.regularRounds;
   }
 
   get totalRounds(): number {
-    return REGULAR_ROUNDS;
+    return this.state.regularRounds;
   }
 
   /** Nombre de la ronda de playoffs de un partido. */
@@ -257,7 +306,7 @@ export class Career {
   }
 
   private rngFor(salt: number) {
-    return new Rng(this.state.seed + this.state.season * 7 + salt * 13 + (this.state.torneo === 'clausura' ? 3 : 0));
+    return new Rng(this.state.seed + this.state.season * 7 + salt * 13 + this.state.torneoIdx * 3);
   }
 
   setLineup(formation: FormationId, lineup: string[]) {
@@ -285,17 +334,25 @@ export class Career {
   /** Cuando se completa una etapa, arma la siguiente (playoffs o cierre del torneo). */
   private advance() {
     const st = this.state;
+    const q = this.fmt.playoffs;
     for (let guard = 0; guard < 8; guard++) {
       if (st.phase === 'done') return;
       if (st.fixtures.some((f) => !f.played)) return;
       if (st.phase === 'regular') {
-        const a = this.zoneOrder('A').slice(0, 8);
-        const b = this.zoneOrder('B').slice(0, 8);
-        // llave: cada zona contra la otra, el mejor sembrado contra el peor
-        const ties: [string, string][] = [
-          [a[0], b[7]], [a[3], b[4]], [b[1], a[6]], [b[2], a[5]],
-          [b[0], a[7]], [b[3], a[4]], [a[1], b[6]], [a[2], b[5]],
-        ];
+        if (!q) {
+          st.phase = 'done';
+          this.finishTorneo(this.zoneOrder('A')[0]);
+          return;
+        }
+        const a = this.zoneOrder('A').slice(0, q);
+        let ties: [string, string][];
+        if (st.zones.B.length) {
+          // llave: cada zona contra la otra, el mejor sembrado contra el peor
+          const b = this.zoneOrder('B').slice(0, q);
+          ties = [[a[0], b[7]], [a[3], b[4]], [b[1], a[6]], [b[2], a[5]], [b[0], a[7]], [b[3], a[4]], [a[1], b[6]], [a[2], b[5]]];
+        } else {
+          ties = [[a[0], a[7]], [a[3], a[4]], [a[1], a[6]], [a[2], a[5]]];
+        }
         st.phase = 'playoffs';
         this.addPlayoffRound(0, ties);
       } else {
@@ -309,7 +366,7 @@ export class Career {
         }
         const ties: [string, string][] = [];
         for (let i = 0; i < winners.length; i += 2) ties.push([winners[i], winners[i + 1]]);
-        this.addPlayoffRound(last - REGULAR_ROUNDS, ties);
+        this.addPlayoffRound(last - st.regularRounds, ties);
       }
     }
   }
@@ -322,19 +379,20 @@ export class Career {
 
   private addPlayoffRound(nameIdx: number, ties: [string, string][]) {
     const st = this.state;
-    const name = PLAYOFF_ROUNDS[nameIdx];
+    const qualified = this.fmt.playoffs * (st.zones.B.length ? 2 : 1);
+    const name = (PLAYOFF_NAMES[qualified] ?? PLAYOFF_NAMES[16])[nameIdx] ?? 'Final';
     const isFinal = ties.length === 1;
-    const round = REGULAR_ROUNDS + nameIdx + 1;
+    const round = st.regularRounds + nameIdx + 1;
     ties.forEach(([x, y], i) => {
       let home = x;
       let away = y;
       if (!isFinal && this.seedOf(y) < this.seedOf(x)) { home = y; away = x; }
       let venue: string | undefined;
-      if (isFinal) {
+      if (isFinal && this.fmt.neutralFinal) {
         venue = (NEUTRAL_VENUES.find((v) => { const s = STADIUMS.find((q) => q.id === v); return s && s.homeTeam !== home && s.homeTeam !== away; }) ?? NEUTRAL_VENUES[0]);
       }
       st.fixtures.push({
-        id: `S${st.season}${st.torneo === 'apertura' ? 'A' : 'C'}p${nameIdx}-${i}`, home, away, round, stage: isFinal ? 'Final · cancha neutral' : name,
+        id: `S${st.season}T${st.torneoIdx}p${nameIdx}-${i}`, home, away, round, stage: isFinal ? (venue ? 'Final · cancha neutral' : 'Final') : name,
         played: false, homeGoals: 0, awayGoals: 0, knockout: true, venue,
       });
     });
@@ -342,11 +400,11 @@ export class Career {
 
   private finishTorneo(champion: string) {
     const st = this.state;
+    st.torneoChampions[st.torneoIdx] = champion;
     const news = (st.news ??= []);
-    news.unshift(`${TORNEO_NAMES[st.torneo]} ${st.season}: campeón ${this.team(champion).name}`);
+    news.unshift(`${this.torneoName} ${st.season}: campeón ${this.team(champion).name}`);
     news.splice(12);
-    if (st.torneo === 'apertura') st.aperturaChampion = champion;
-    else st.seasonOver = true;
+    if (this.lastTorneo) st.seasonOver = true;
   }
 
   /** Registra el partido del usuario y simula el resto de la ronda. */
@@ -385,7 +443,7 @@ export class Career {
   /** Simula hasta terminar el torneo o hasta que el usuario tenga que jugar. */
   simulateUntilUserOrEnd() {
     let guard = 0;
-    while (this.state.phase !== 'done' && !this.nextUserFixture() && guard++ < 40) this.simulateRound();
+    while (this.state.phase !== 'done' && !this.nextUserFixture() && guard++ < 80) this.simulateRound();
   }
 
   /** El usuario sigue en carrera en los playoffs (no perdió una llave). */
@@ -395,13 +453,15 @@ export class Career {
 
   /** Campeón del torneo en juego (si terminó). */
   get torneoChampion(): string | null {
-    if (this.state.phase !== 'done') return null;
-    const fin = this.playoffFx.filter((f) => f.played).slice(-1)[0];
-    return fin ? winnerOf(fin) : null;
+    return this.state.phase === 'done' ? this.state.torneoChampions[this.state.torneoIdx] ?? null : null;
   }
 
-  /** Cuántas fases de playoffs superó el usuario / cómo le fue (para el resumen). */
+  /** Cómo le fue al usuario en el torneo (para el resumen). */
   userPlayoffResult(): string {
+    if (!this.fmt.playoffs) {
+      const pos = this.zoneStandings(this.userZone).findIndex((r) => r.team === this.state.userTeam) + 1;
+      return `Terminaste ${pos}.º`;
+    }
     const mine = this.playoffFx.filter((f) => f.home === this.state.userTeam || f.away === this.state.userTeam);
     if (!mine.length) return 'No clasificaste a los playoffs';
     const last = mine[mine.length - 1];
@@ -410,30 +470,30 @@ export class Career {
     return `Eliminado en ${last.stage.startsWith('Final') ? 'la final' : last.stage.toLowerCase()}`;
   }
 
-  /** Cierra el Apertura y arma el Clausura. */
-  startClausura() {
+  /** Cierra el torneo terminado y arma el siguiente de la temporada (p. ej. el Clausura). */
+  startNextTorneo() {
     const st = this.state;
-    if (st.torneo !== 'apertura' || st.phase !== 'done') return;
-    st.aperturaFixtures = this.regularFx;
-    st.torneo = 'clausura';
-    this.fixtures_new();
+    if (st.phase !== 'done' || this.lastTorneo) return;
+    st.prevFixtures = [...st.prevFixtures, ...this.regularFx];
+    st.torneoIdx++;
+    this.newTorneo();
     this.save();
   }
 
-  /** Cierra la temporada: historial, evolución de jugadores y nuevo Apertura. */
-  startNextSeason(): { apertura: string; clausura: string; annual: string; position: number; changes: { name: string; delta: number }[]; income: number } {
+  /** Cierra la temporada: historial, evolución de jugadores y nuevo primer torneo. */
+  startNextSeason(): { champions: string[]; champion: string; position: number; changes: { name: string; delta: number }[]; income: number } {
     const st = this.state;
-    const annual = this.annualStandings();
-    const position = annual.findIndex((r) => r.team === st.userTeam) + 1;
-    const apertura = st.aperturaChampion ?? annual[0].team;
-    const clausura = this.torneoChampion ?? annual[0].team;
-    st.history.push({ season: st.season, apertura, clausura, annual: annual[0].team, userPosition: position });
-    // dinero: premio por la tabla anual y por títulos
-    const titles = (apertura === st.userTeam ? 1 : 0) + (clausura === st.userTeam ? 1 : 0);
-    const income = Math.max(2, Math.round(30 - position * 0.8) + titles * 6);
+    const table = this.annualStandings();
+    const position = table.findIndex((r) => r.team === st.userTeam) + 1;
+    const champions = st.torneoChampions.slice();
+    const champion = this.fmt.annual ? table[0].team : champions[champions.length - 1];
+    st.history.push({ season: st.season, champions, champion, userPosition: position });
+    // dinero: premio por la tabla y por títulos
+    const titles = champions.filter((c) => c === st.userTeam).length;
+    const income = Math.max(2, Math.round(30 - position * (24 / Math.max(8, table.length)) ) + titles * 6);
     st.budget = Math.round(((st.budget ?? 0) + income) * 10) / 10;
     const news = (st.news ??= []);
-    news.unshift(`Temporada ${st.season}: tabla anual para ${this.team(annual[0].team).name}`);
+    news.unshift(`Temporada ${st.season}: campeón ${this.team(champion).name}`);
     news.splice(12);
     const rng = new Rng(st.seed + st.season * 977);
     const changes: { name: string; delta: number }[] = [];
@@ -462,19 +522,29 @@ export class Career {
     st.appearances = {};
     st.goals = {};
     st.seasonOver = false;
-    st.torneo = 'apertura';
-    st.aperturaFixtures = [];
-    st.aperturaChampion = undefined;
+    st.torneoIdx = 0;
+    st.prevFixtures = [];
+    st.torneoChampions = [];
     // nueva temporada: se borran las sanciones y las amarillas (las lesiones siguen)
     const av = st.availability;
     if (av) {
       av.yellows = {};
       for (const [id, o] of Object.entries(av.out)) if (o.reason === 'suspension') delete av.out[id];
     }
-    this.fixtures_new();
+    this.newTorneo();
     this.save();
-    return { apertura, clausura, annual: annual[0].team, position, changes, income };
+    return { champions, champion, position, changes, income };
   }
+}
+
+/** Reparte los equipos en zonas: una sola o dos (por nivel, en serpentina, para que sean parejas). */
+function splitZones(ids: string[], zones: 1 | 2, all: TeamData[]): { A: string[]; B: string[] } {
+  if (zones === 1) return { A: ids.slice(), B: [] };
+  const rated = ids.slice().sort((x, y) => (all.find((t) => t.id === y)?.rating ?? 0) - (all.find((t) => t.id === x)?.rating ?? 0));
+  const A: string[] = [];
+  const B: string[] = [];
+  rated.forEach((id, i) => ((i % 4 === 0 || i % 4 === 3) ? A : B).push(id));
+  return { A, B };
 }
 
 // ---------------------------------------------------------------- mercado de fichajes

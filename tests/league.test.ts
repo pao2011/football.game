@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Career, SQUAD_MIN, buyPlayer, marketOffers, sellPlayer } from '../src/modes/Career';
 import { TEAMS, playerOverall } from '../src/data/teams';
+import { LEAGUES } from '../src/data/leagues';
 import { ZONE_A, ZONE_B, ZONE_PAIRS, classicName, matchHeat } from '../src/data/classics';
 
 /** El usuario pierde todos sus partidos (3-0 en contra; en playoffs queda eliminado). */
@@ -60,9 +61,10 @@ describe('Liga Profesional de 30 equipos', () => {
     const octavos = po.slice(0, 8).flatMap((f) => [f.home, f.away]);
     expect(octavos.filter((id) => c.state.zones.A.includes(id)).length).toBe(8);
     expect(c.torneoChampion).toBeTruthy();
-    expect(c.state.aperturaChampion).toBe(c.torneoChampion);
-    c.startClausura();
-    expect(c.state.torneo).toBe('clausura');
+    expect(c.state.torneoChampions[0]).toBe(c.torneoChampion);
+    c.startNextTorneo();
+    expect(c.state.torneoIdx).toBe(1);
+    expect(c.torneoName).toBe('Torneo Clausura');
     expect(c.state.phase).toBe('regular');
     playTorneo(c);
     expect(c.state.seasonOver).toBe(true);
@@ -73,7 +75,7 @@ describe('Liga Profesional de 30 equipos', () => {
     expect(c.state.season).toBe(2);
     expect(c.state.history.length).toBe(1);
     expect(res.position).toBeGreaterThan(0);
-    expect(c.state.torneo).toBe('apertura');
+    expect(c.state.torneoIdx).toBe(0);
     expect(c.state.fixtures.every((f) => !f.played)).toBe(true);
   });
 
@@ -109,5 +111,44 @@ describe('Liga Profesional de 30 equipos', () => {
       expect(sellPlayer(c, p.id, () => 0)).toBe(null);
     }
     expect(sellPlayer(c, c.user.players.find((x) => x.position !== 'GK')!.id)).toMatch(/al menos/);
+  });
+
+  it('todas las ligas tienen equipos completos y se pueden jugar enteras', () => {
+    for (const l of LEAGUES) {
+      const ids = l.teamIds();
+      if (!ids.length) continue;
+      expect(new Set(ids).size, l.id).toBe(ids.length);
+      for (const id of ids) {
+        const t = TEAMS.find((x) => x.id === id);
+        expect(t, `${l.id}:${id}`).toBeTruthy();
+        expect(t!.players.length).toBe(18);
+        expect(new Set(t!.players.map((p) => p.number)).size).toBe(18);
+      }
+      const c = Career.create(ids[0], 11, l.id);
+      expect(c.allTeams.length).toBe(ids.length);
+      let guard = 0;
+      while (!c.state.seasonOver && guard++ < 200) {
+        if (c.state.phase === 'done') c.startNextTorneo();
+        else {
+          c.simulateUserFixture();
+          c.simulateUntilUserOrEnd();
+        }
+      }
+      expect(c.state.seasonOver, l.id).toBe(true);
+      const res = c.startNextSeason();
+      expect(res.champion, l.id).toBeTruthy();
+      expect(c.state.season).toBe(2);
+    }
+  });
+});
+
+describe('Datos de todas las ligas', () => {
+  it('ids de equipos y de estadios únicos, y cada estadio de club apunta a un equipo existente', async () => {
+    const { STADIUMS } = await import('../src/data/stadiums');
+    const teamIds = TEAMS.map((t) => t.id);
+    expect(new Set(teamIds).size).toBe(teamIds.length);
+    const sIds = STADIUMS.map((s) => s.id);
+    expect(new Set(sIds).size).toBe(sIds.length);
+    for (const s of STADIUMS) if (s.homeTeam) expect(teamIds, s.id).toContain(s.homeTeam);
   });
 });

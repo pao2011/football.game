@@ -1,3 +1,5 @@
+import { EXTRA_LEAGUES } from './leagues/index';
+
 /**
  * Clásicos entre equipos de Primera División y la estructura de zonas de la Liga Profesional.
  *
