@@ -85,7 +85,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cp dist/jugar.html FootballElite3D.html
-          gh release edit latest --title "Football Elite 3D — descargas más recientes" --latest \
+          gh release edit latest --title "Soffti's Football Game — descargas más recientes" --latest \
             --notes "Compilado automáticamente desde la rama main. Android: instala FootballElite3D.apk (permite \"orígenes desconocidos\"). Windows: instala con FootballElite3D-Setup.exe (o descarga FootballElite3D-Windows.zip, extráelo y abre FootballElite3D.exe). macOS: FootballElite3D-macOS.zip (la primera vez, clic derecho → Abrir). Cualquier PC: abre FootballElite3D.html con doble clic en Chrome, Edge o Firefox."
           gh release upload latest FootballElite3D-Windows.zip FootballElite3D-Setup.exe FootballElite3D.html --clobber
 
@@ -167,9 +167,9 @@ jobs:
           git tag -f latest
           git push -f origin latest
           if gh release view latest >/dev/null 2>&1; then
-            gh release edit latest --title "Football Elite 3D — descargas más recientes" --latest
+            gh release edit latest --title "Soffti's Football Game — descargas más recientes" --latest
           else
-            gh release create latest --title "Football Elite 3D — descargas más recientes" --latest \
+            gh release create latest --title "Soffti's Football Game — descargas más recientes" --latest \
               --notes "APK de Android compilado automáticamente desde la rama main. Descárgalo e instálalo (permite \"orígenes desconocidos\")."
           fi
           gh release upload latest FootballElite3D.apk --clobber

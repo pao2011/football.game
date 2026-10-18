@@ -1,4 +1,4 @@
-// Envoltorio de escritorio (Electron) para Football Elite 3D.
+// Envoltorio de escritorio (Electron) para Soffti's Football Game.
 // Carga la compilación de dist/ como aplicación nativa a pantalla completa.
 const { app, BrowserWindow, Menu, session } = require('electron');
 const path = require('path');
@@ -20,7 +20,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 540,
     backgroundColor: '#070b14',
-    title: 'Football Elite 3D',
+    title: 'Soffti's Football Game',
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,

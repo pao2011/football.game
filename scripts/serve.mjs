@@ -26,7 +26,7 @@ createServer(async (req, res) => {
   }
 }).listen(port, () => {
   const url = `http://localhost:${port}/`;
-  console.log(`Football Elite 3D disponible en ${url}  (Ctrl+C para salir)`);
+  console.log(`Soffti's Football Game disponible en ${url}  (Ctrl+C para salir)`);
   const cmd = process.platform === 'win32' ? `start ${url}` : process.platform === 'darwin' ? `open ${url}` : `xdg-open ${url}`;
   if (!process.env.NO_OPEN) exec(cmd, () => {});
 });

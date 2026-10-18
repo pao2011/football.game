@@ -11,7 +11,7 @@ import { deleteReplay, encodeFrames, lastSeconds, listReplays, MAX_SAVED_REPLAYS
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
 import { LEAGUE_IDS, classicName, matchHeat } from '../data/classics';
-import { LEAGUES, getLeague, leagueLogo } from '../data/leagues';
+import { LEAGUES, getLeague, leagueLogo, leagueOfTeam } from '../data/leagues';
 import { GENERIC_STADIUMS, STADIUMS, getStadium, stadiumForHome } from '../data/stadiums';
 import { BUILTIN_TEAM_COUNT, TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
 import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
@@ -222,7 +222,7 @@ export class App {
   start() {
     this.setMenuMode(true);
     const s = this.show(`
-      <div class="logo"><div class="l1">FOOTBALL ELITE</div><div class="l2">3D</div></div>
+      <div class="logo"><div class="l1">SOFFTI'S FOOTBALL</div><div class="l2">GAME</div></div>
       <button class="press btn" data-act="go" style="background:none;border:none">${isTouchDevice() ? 'TOCA PARA EMPEZAR' : 'PULSA ENTER PARA EMPEZAR'}</button>
       <div class="pad-hint">${gamepadBlocked()
         ? '🎮 El navegador bloquea el mando dentro de esta página incrustada. Abre el juego en su propia pestaña (enlace directo) para usarlo.'
@@ -270,7 +270,7 @@ export class App {
       <svg class="sp-goal" viewBox="0 0 200 100" preserveAspectRatio="none"><g class="sp-net">${net}</g><path class="sp-frame" d="M20 98V8h160v90"/></svg>
       <div class="sp-ball"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#fff" stroke="#111" stroke-width="1"/><path d="M12 6.5l4.2 3-1.6 5h-5.2l-1.6-5z" fill="#111"/><path d="M12 6.5V1.5M16.2 9.5l4.6-1.6M14.6 14.5l3 4M9.4 14.5l-3 4M7.8 9.5L3.2 7.9" stroke="#111" stroke-width="1"/></svg></div>
       <div class="sp-flash"></div>
-      <div class="sp-logo"><span class="s1">FOOTBALL ELITE</span><span class="s2">3D</span></div>
+      <div class="sp-logo"><span class="s1">SOFFTI'S FOOTBALL</span><span class="s2">GAME</span></div>
       <div class="sp-sub">11 contra 11 · IA táctica · física real</div>`;
     document.body.appendChild(el);
     let done = false;
@@ -318,7 +318,7 @@ export class App {
           ${isElectron ? '<button class="menu-item" data-act="quit">Salir</button>' : ''}
         </div>
         <div class="menu-hero">
-          <div class="logo"><div class="l1">FOOTBALL ELITE</div><div class="l2">3D</div></div>
+          <div class="logo"><div class="l1">SOFFTI'S FOOTBALL</div><div class="l2">GAME</div></div>
           <div class="crest-row">${crests}</div>
         </div>
       </div>
@@ -471,12 +471,21 @@ export class App {
   // Partido
   // ==================================================================
 
+  /** Competición que se muestra en el marcador: la copa en curso, la liga de ambos equipos o amistoso. */
+  private competitionFor(config: MatchConfig, ctx: MatchContext): string {
+    if (ctx.mode === 'continental') return Continental.load()?.state.cup ?? 'friendly';
+    if (ctx.mode === 'tournament') return 'tournament';
+    const lh = leagueOfTeam(config.home.id);
+    return lh && lh.id === leagueOfTeam(config.away.id)?.id ? lh.id : 'friendly';
+  }
+
   playMatch(config: MatchConfig, stadiumId: string, ctx: MatchContext, online: OnlineLink | null = null) {
     // los clásicos son partidos calientes en cualquier modo
     if (config.heat === undefined && !config.training) {
       const cl = classicName(config.home.id, config.away.id);
       if (cl) config = { ...config, heat: matchHeat(config.home.id, config.away.id), classic: cl };
     }
+    if (!config.competition) config = { ...config, competition: this.competitionFor(config, ctx) };
     this.lastMatch = { config, ctx };
     this.lastStadiumId = stadiumId;
     const home = config.home;
@@ -606,7 +615,7 @@ export class App {
       const url = view.capture();
       const a = document.createElement('a');
       a.href = url;
-      a.download = `football-elite-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
+      a.download = `soffti-football-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
       document.body.appendChild(a);
       a.click();
       a.remove();

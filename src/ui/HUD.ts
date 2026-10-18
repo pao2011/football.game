@@ -9,6 +9,7 @@ import type { Bindings } from '../input/Input';
 import { keyLabel } from '../input/Input';
 import type { StadiumData } from '../data/types';
 import { crestSVG } from './Crest';
+import { competitionStyle } from './competition';
 
 
 /** HUD del partido en DOM: marcador, reloj, radar, jugador controlado, potencia y avisos. */
@@ -18,6 +19,7 @@ export class HUD {
   private sbAway: HTMLElement;
   private sbScore: HTMLElement;
   private sbClock: HTMLElement;
+  private sbPeriod: HTMLElement;
   private sbAdded: HTMLElement;
   private banner: HTMLElement;
   private mentality: HTMLElement;
@@ -52,13 +54,16 @@ export class HUD {
     const r = document.createElement('div');
     r.className = 'hud';
     const [h, a] = match.teams;
+    const comp = competitionStyle(match.config);
+    for (const [k, v] of Object.entries(comp.vars)) r.style.setProperty(k, v);
     r.innerHTML = `
       <div class="scoreboard">
-        <div class="sb-team"><span class="chip" style="background:${h.kit.shirt}"></span><span class="h">${h.data.short}</span></div>
-        <div class="sb-score">0 - 0</div>
-        <div class="sb-team"><span class="a">${a.data.short}</span><span class="chip" style="background:${a.kit.shirt}"></span></div>
-        <div class="sb-clock">00:00</div>${match.weather !== 'clear' ? `<div class="sb-weather" title="${WEATHER_NAMES[match.weather]}">${WEATHER_ICONS[match.weather]}</div>` : ''}
-        <div class="sb-added hidden">+1</div>
+        <div class="sb-comp">${esc(comp.label)}</div>
+        <div class="sb-clock"><span class="sb-period">1T</span><span class="sb-time num">00:00</span></div>
+        <div class="sb-team sb-h"><span class="sb-crest">${crestSVG(h.data, 28)}</span><span class="h">${esc(h.data.short)}</span></div>
+        <div class="sb-mid"><i class="sb-tab" style="background:${h.kit.shirt}"></i><span class="sb-score num">0 - 0</span></div>
+        <div class="sb-team sb-a"><span class="a">${esc(a.data.short)}</span><span class="sb-crest">${crestSVG(a.data, 28)}</span></div>${match.weather !== 'clear' ? `<div class="sb-weather" title="${WEATHER_NAMES[match.weather]}">${WEATHER_ICONS[match.weather]}</div>` : ''}
+        <div class="sb-added num hidden">+1</div>
       </div>
       <div class="mentality hidden"></div>
       <div class="adv-badge hidden">VENTAJA ▶</div>
@@ -78,7 +83,8 @@ export class HUD {
     this.sbHome = q('.sb-team .h');
     this.sbAway = q('.sb-team .a');
     this.sbScore = q('.sb-score');
-    this.sbClock = q('.sb-clock');
+    this.sbClock = q('.sb-time');
+    this.sbPeriod = q('.sb-period');
     this.sbAdded = q('.sb-added');
     this.banner = q('.banner');
     this.mentality = q('.mentality');
@@ -275,6 +281,7 @@ export class HUD {
     const [h, a] = m.teams;
     this.setText(this.sbScore, `${h.stats.goals} - ${a.stats.goals}`);
     this.setText(this.sbClock, m.config.training ? 'ENTRENO' : m.clockText.split(' ')[0]);
+    this.setText(this.sbPeriod, m.config.training ? '' : m.phase === 'shootout' ? 'PEN' : ['1T', '2T', '1TE', '2TE'][m.half - 1] ?? '');
     const added = m.announcedAdded > 0 && m.matchSeconds >= m.halfEndSeconds;
     this.show(this.sbAdded, added);
     if (added) this.setText(this.sbAdded, `+${m.announcedAdded}`);
@@ -288,7 +295,7 @@ export class HUD {
     const c = human?.controlled;
     this.show(this.ptag, !!c && m.phase !== 'replay');
     if (c) {
-      this.setText(this.ptag.querySelector('.nm') as HTMLElement, `${c.data.number} · ${c.data.name}`);
+      this.setText(this.ptag.querySelector('.nm') as HTMLElement, `<span class="no">${c.data.number}</span> ${esc(c.data.name)}`, true);
       this.setText(this.ptag.querySelector('.meta') as HTMLElement, `${c.slot.role} · VEL ${c.data.attrs.speed} · PAS ${c.data.attrs.passing} · TIR ${c.data.attrs.shooting}`);
       (this.ptag.querySelector('.stamina > div') as HTMLElement).style.width = `${Math.round(c.stamina * 100)}%`;
     }

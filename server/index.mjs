@@ -1,4 +1,4 @@
-// Servidor online de Football Elite 3D (gratis: tu PC, la red local o un plan gratuito como Render).
+// Servidor online de Soffti's Football Game (gratis: tu PC, la red local o un plan gratuito como Render).
 //   npm run server            (tras `npm run build` sirve también el juego desde dist/)
 // Variables de entorno: PORT (8080), DATA_DIR (server/data).
 import http from 'node:http';
@@ -56,9 +56,9 @@ async function serve(req, res) {
   } catch {
     if (path === '/index.html') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      res.end(`<!doctype html><meta charset="utf-8"><title>Football Elite 3D</title>
+      res.end(`<!doctype html><meta charset="utf-8"><title>Soffti's Football Game</title>
         <body style="font-family:sans-serif;background:#07101f;color:#fff;padding:40px">
-        <h1>Servidor de Football Elite 3D en marcha ✅</h1>
+        <h1>Servidor de Soffti's Football Game en marcha ✅</h1>
         <p>Ejecuta <code>npm run build</code> para servir también el juego desde aquí.</p>
         <p>WebSocket: <code>ws://${String(req.headers.host).replace(/[<>"]/g, '')}/ws</code></p></body>`);
     } else {
@@ -87,7 +87,7 @@ server.on('error', (err) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`\n  Servidor online de Football Elite 3D en el puerto ${PORT}`);
+  console.log(`\n  Servidor online de Soffti's Football Game en el puerto ${PORT}`);
   console.log(`  · Este ordenador:  http://localhost:${PORT}`);
   for (const ip of lanIps()) console.log(`  · Red local:       http://${ip}:${PORT}   (en el juego: ONLINE → Servidor → ${ip}:${PORT})`);
   console.log('');

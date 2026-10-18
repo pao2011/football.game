@@ -43,6 +43,8 @@ export interface MatchConfig {
   awayLineup?: string[];
   /** Calor del partido 0..1 (clásicos): más roces, faltas, tarjetas, peleas y abucheos. */
   heat?: number;
+  /** Competición (id de liga o copa: define el rótulo y los colores del marcador). */
+  competition?: string;
   /** Nombre del clásico (para el marcador y el relator). */
   classic?: string;
   /** Sede neutral (final): no suenan los cánticos ni el espectáculo de ningún club. */
@@ -958,7 +960,7 @@ export class Match {
     const badAngle = Math.abs(Math.atan2(Math.sin(toBall - p.facing), Math.cos(toBall - p.facing))) > 1.4 ? 1.5 : 1;
     void f;
     const scale = req.errorScale * (1 + pressure * 0.35) * (req.aerial ? AERIAL_ERROR[req.aerial] : badAngle);
-    const baseAng = { pass: 0.035, through: 0.045, lob: 0.05, cross: 0.06, shoot: 0.05, finesse: 0.04, clear: 0.12, header: 0.09, throwin: 0.05, gkthrow: 0.04, punt: 0.08, penalty: 0.03, chip: 0.05 }[req.kind];
+    const baseAng = { pass: 0.024, through: 0.03, lob: 0.034, cross: 0.04, shoot: 0.05, finesse: 0.04, clear: 0.12, header: 0.09, throwin: 0.05, gkthrow: 0.04, punt: 0.08, penalty: 0.03, chip: 0.05 }[req.kind];
     const gauss = () => this.rng.gauss();
     const low = !!req.style?.low;
     applyKickError(v, baseAng * q * scale, 0.06 * q * scale, (req.kind === 'shoot' && !low ? 0.045 : 0.02) * q * scale, gauss);

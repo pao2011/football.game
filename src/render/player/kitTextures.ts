@@ -56,7 +56,7 @@ function shade(hex: string, k: number) {
   return '#' + c.getHexString();
 }
 
-const FONT = '"Arial Black", "Helvetica Neue", Inter, "DejaVu Sans", Arial, sans-serif';
+const FONT = '"Montserrat", "Arial Black", "Helvetica Neue", "DejaVu Sans", Arial, sans-serif';
 
 /** Dibuja un texto centrado en (cx, cy) con altura de mayúscula ~h px y compresión horizontal sx. */
 function drawText(

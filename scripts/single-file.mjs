@@ -32,7 +32,7 @@ const body = `<canvas id="game"></canvas>
 ${js}
 </script>`;
 
-const fragment = `<title>Football Elite 3D</title>
+const fragment = `<title>Soffti's Football Game</title>
 <style>
 ${css}
 </style>
@@ -46,7 +46,7 @@ const fullDoc = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#070b14" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>" />
-<title>Football Elite 3D</title>
+<title>Soffti's Football Game</title>
 <style>
 ${css}
 </style>

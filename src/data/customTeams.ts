@@ -89,7 +89,7 @@ export function importTeam(json: string): TeamData {
     throw new Error('El archivo no es un JSON válido');
   }
   const t = (data as { team?: TeamData })?.team ?? (data as TeamData);
-  if (!validTeam(t)) throw new Error('El archivo no contiene un equipo de Football Elite 3D');
+  if (!validTeam(t)) throw new Error('El archivo no contiene un equipo de Soffti\'s Football Game');
   const copy: TeamData = structuredClone(t);
   copy.id = `${CUSTOM_PREFIX}${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`;
   copy.players = copy.players.map((p, i) => ({ ...p, id: `${copy.id}-${i}` }));

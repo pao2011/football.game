@@ -1,6 +1,6 @@
-# ⚽ Football Elite 3D — v1.0.0
+# ⚽ Soffti's Football Game — v1.0.0
 
-![Football Elite 3D](docs/art/key-art.png)
+![Soffti's Football Game](docs/art/key-art.png)
 
 <p align="center">
   <a href="https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk"><img alt="Descargar APK" src="https://img.shields.io/badge/DESCARGAR%20APK-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white"></a>
@@ -428,3 +428,10 @@ El plan de mejoras futuras está en **[ROADMAP.md](ROADMAP.md)**.
 - El **instalador de Windows** y la **app de macOS** se compilan en GitHub Actions pero no se probaron en un PC real; la app de macOS no está firmada ni notarizada.
 - **Vibración del mando**: usa la API `vibrationActuator` de Chrome/Edge; Firefox y Safari no la admiten (no vibra, pero no da error).
 - **Móvil**: probado con emulación táctil en Chromium, no en un teléfono físico. El APK **no se pudo compilar en el entorno de desarrollo**: la política de red bloquea la descarga del Android SDK (dl.google.com). Se compila en GitHub Actions o con Android Studio. El rendimiento en teléfonos de gama baja no está medido; si va lento, reduce la escala de resolución.
+
+
+## Identidad gráfica y tipografías
+
+Marcador y placas siguen el estilo de las transmisiones del fútbol argentino (marcador horizontal compacto: competición · periodo y reloj · local · goles · visitante; colores propios de cada liga o copa en `src/ui/competition.ts`). Es un diseño propio inspirado en esas gráficas: **no es oficial ni implica afiliación con la AFA ni con ninguna liga**.
+
+Tipografías (todas SIL Open Font License 1.1, incluidas en `src/assets/fonts` con su licencia y declaradas en `src/ui/fonts.css`): **Barlow Condensed** (títulos, equipos, jugadores y placas), **Montserrat** (números: marcadores, reloj, tablas y estadísticas, con cifras tabulares) y **Barlow** (texto secundario). Las variables `--display`, `--num`, `--body` y la paleta (`--celeste`, `--navy`…) están en `src/ui/styles.css`.

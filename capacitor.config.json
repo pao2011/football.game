@@ -1,6 +1,6 @@
 {
   "appId": "com.footballelite3d.game",
-  "appName": "Football Elite 3D",
+  "appName": "Soffti's Football Game",
   "webDir": "dist",
   "android": {
     "backgroundColor": "#070b14",

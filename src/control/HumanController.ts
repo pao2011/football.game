@@ -800,7 +800,7 @@ export class HumanController implements TeamController {
           const target = p.pos.clone().addScaledVector(dir, 8 + b.power * 25);
           return buildGroundPass(m, p, target, b.power - 0.3, err);
         }
-        const target = q.pos.clone().addScaledVector(q.vel, 0.4);
+        const target = q.pos.clone().addScaledVector(q.vel, 0.25);
         const manual = this.settings.passAssist < 0.5;
         if (manual) {
           const d = 6 + b.power * 34;
@@ -812,8 +812,9 @@ export class HumanController implements TeamController {
       case 'through': {
         const q = this.pickReceiver(m, team, p, dir, true, !b.noStick);
         const run = new Vector3(team.attackDir, 0, 0).lerp(dir, 0.4).normalize();
-        const lead = 5 + b.power * 13;
-        const base = q ? q.pos : p.pos;
+        // el pase filtrado va al espacio inmediato del receptor (poco adelantado) para que llegue a controlarlo
+        const lead = 1.5 + b.power * 5;
+        const base = q ? q.pos.clone().addScaledVector(q.vel, 0.35) : p.pos;
         const target = base.clone().addScaledVector(run, lead);
         target.x = clamp(target.x, -HALF_LENGTH + 3, HALF_LENGTH - 3);
         target.z = clamp(target.z, -HALF_WIDTH + 2, HALF_WIDTH - 2);
@@ -844,11 +845,11 @@ export class HumanController implements TeamController {
             receiver = team.active.filter((x) => x !== p && !x.isGK).sort((x, y) => dist2D(x.pos, point) - dist2D(y.pos, point))[0] ?? null;
           }
           // la potencia corre el punto hacia el segundo palo (más) o el primero (menos)
-          point.addScaledVector(new Vector3(team.attackDir, 0, 0), (b.power - 0.5) * 3);
+          point.addScaledVector(new Vector3(team.attackDir, 0, 0), (b.power - 0.5) * 1.2);
           return buildCross(m, p, point, style, err, receiver);
         }
         const q = this.pickReceiver(m, team, p, dir, false, !b.noStick);
-        const target = q ? q.pos.clone().addScaledVector(q.vel, 0.9) : p.pos.clone().addScaledVector(dir, 15 + b.power * 35);
+        const target = q ? q.pos.clone().addScaledVector(q.vel, 0.5) : p.pos.clone().addScaledVector(dir, 15 + b.power * 35);
         if (q && this.settings.passAssist < 0.5) target.copy(p.pos).addScaledVector(dir, 12 + b.power * 40);
         // RB + X: pase elevado tenso (más bajo y rápido)
         return buildLob(m, p, target, b.finesse ? 17 + b.power * 5 : 28 + b.power * 10, err, q ?? undefined, 'lob');
@@ -872,7 +873,7 @@ export class HumanController implements TeamController {
       const gx = goal.x - q.pos.x;
       const gz = -q.pos.z * 0.6;
       const gl = Math.hypot(gx, gz) || 1;
-      const lead = Math.min(9, Math.max(4, gl - 6));
+      const lead = Math.min(5, Math.max(2, gl - 8));
       const point = new Vector3(q.pos.x + (gx / gl) * lead, 0, q.pos.z + (gz / gl) * lead);
       point.x = clamp(point.x, -HALF_LENGTH + 5, HALF_LENGTH - 5);
       q.duty = 'receive';
@@ -888,7 +889,9 @@ export class HumanController implements TeamController {
       const defs = m.otherTeam(team.index).active.filter((o) => !o.isGK).sort((x, y) => dist2D(x.pos, q.pos) - dist2D(y.pos, q.pos)).slice(0, 2);
       const gap = defs.length === 2 ? defs[0].pos.clone().add(defs[1].pos).multiplyScalar(0.5) : q.pos.clone();
       const ahead = new Vector3(team.attackDir, 0, 0);
-      const target = gap.lerp(q.pos, 0.35).addScaledVector(ahead, 5 + b.power * 6);
+      const target = gap.lerp(q.pos, 0.6).addScaledVector(ahead, 1.5 + b.power * 3.5);
+      // siempre al menos 1,5 m detrás de la línea de los dos centrales: pasa entre ellos y no se queda corto
+      if ((target.x - gap.x) * team.attackDir < 1.5) target.x = gap.x + team.attackDir * 1.5;
       target.x = clamp(target.x, -HALF_LENGTH + 3, HALF_LENGTH - 3);
       target.z = clamp(target.z, -HALF_WIDTH + 2, HALF_WIDTH - 2);
       q.duty = 'receive';
@@ -902,7 +905,7 @@ export class HumanController implements TeamController {
     if (b.combo === 'loftToFeet') {
       const q = this.pickReceiver(m, team, p, dir, false, !b.noStick);
       if (!q) return null;
-      return buildLob(m, p, q.pos.clone().addScaledVector(q.vel, 0.9), 46, err, q, 'lob');
+      return buildLob(m, p, q.pos.clone().addScaledVector(q.vel, 0.5), 46, err, q, 'lob');
     }
     return null;
   }

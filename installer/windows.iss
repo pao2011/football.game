@@ -2,7 +2,7 @@
 ; menú Inicio y (opcional) en el escritorio, y añade el desinstalador. Se compila en CI con:
 ;   iscc installer\windows.iss   (tras "npm run package" con PLATFORMS=win32)
 
-#define AppName "Football Elite 3D"
+#define AppName "Soffti's Football Game"
 #define AppExe "FootballElite3D.exe"
 #ifndef AppVersion
   #define AppVersion "1.0.0"
@@ -12,8 +12,8 @@
 AppId={{6F0E3B6A-5C2B-4C77-9C3E-6A3D1F0E7B21}
 AppName={#AppName}
 AppVersion={#AppVersion}
-AppPublisher=Football Elite 3D
-DefaultDirName={autopf}\Football Elite 3D
+AppPublisher=Soffti's Football Game
+DefaultDirName={autopf}\Soffti's Football Game
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequiredOverridesAllowed=dialog

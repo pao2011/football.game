@@ -1,0 +1,13 @@
+/* Tipografías del sistema gráfico (todas con licencia SIL OFL 1.1, incluidas en src/assets/fonts):
+   · Barlow Condensed → títulos, nombres de equipos y jugadores, placas
+   · Montserrat        → números: marcadores, reloj, estadísticas, tablas (cifras tabulares)
+   · Barlow            → texto secundario: descripciones, etiquetas, ayudas */
+@font-face { font-family: 'Barlow Condensed'; font-weight: 500; font-style: normal; font-display: swap; src: url('../assets/fonts/barlow-condensed-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-weight: 600; font-style: normal; font-display: swap; src: url('../assets/fonts/barlow-condensed-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-weight: 700; font-style: normal; font-display: swap; src: url('../assets/fonts/barlow-condensed-latin-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow Condensed'; font-weight: 800; font-style: normal; font-display: swap; src: url('../assets/fonts/barlow-condensed-latin-800-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow'; font-weight: 400; font-style: normal; font-display: swap; src: url('../assets/fonts/barlow-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow'; font-weight: 500; font-style: normal; font-display: swap; src: url('../assets/fonts/barlow-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Barlow'; font-weight: 600; font-style: normal; font-display: swap; src: url('../assets/fonts/barlow-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Montserrat'; font-weight: 700; font-style: normal; font-display: swap; src: url('../assets/fonts/montserrat-latin-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Montserrat'; font-weight: 800; font-style: normal; font-display: swap; src: url('../assets/fonts/montserrat-latin-800-normal.woff2') format('woff2'); }

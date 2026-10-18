@@ -1,3 +1,4 @@
+import './ui/fonts.css';
 import './ui/styles.css';
 import { App } from './ui/App';
 
@@ -11,11 +12,17 @@ function boot() {
   } catch (err) {
     console.error(err);
     ui.innerHTML = `<div class="screen" style="align-items:center;justify-content:center;text-align:center">
-      <h2>No se pudo iniciar Football Elite 3D</h2>
+      <h2>No se pudo iniciar Soffti's Football Game</h2>
       <p>Tu navegador o tarjeta gráfica no soporta WebGL2 o se produjo un error.</p>
       <pre style="white-space:pre-wrap;font-size:12px;max-width:80vw">${String((err as Error)?.message ?? err)}</pre></div>`;
   }
 }
+
+// Las tipografías deben estar cargadas antes de dibujar texturas en canvas (números de camisetas, carteles)
+const FONT_FACES = ['800 24px "Barlow Condensed"', '700 24px "Barlow Condensed"', '400 16px "Barlow"', '800 24px "Montserrat"'];
+const fontsReady = typeof document !== 'undefined' && document.fonts
+  ? Promise.race([Promise.all(FONT_FACES.map((f) => document.fonts.load(f))), new Promise((r) => setTimeout(r, 2500))]).catch(() => undefined)
+  : Promise.resolve();
 
 // Aplicación instalable (PWA) y juego sin conexión: solo en http(s) de producción (no en Electron ni en desarrollo)
 if ('serviceWorker' in navigator && location.protocol.startsWith('http') && import.meta.env.PROD) {
@@ -25,4 +32,4 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http') && impo
 }
 
 window.addEventListener('error', (e) => console.error('Error no controlado:', e.message));
-boot();
+fontsReady.then(boot);
