@@ -11,9 +11,7 @@ import { deleteReplay, encodeFrames, lastSeconds, listReplays, MAX_SAVED_REPLAYS
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
 import { LEAGUE_IDS, classicName, matchHeat } from '../data/classics';
-import sudamericanaLogo from '../assets/leagues/sudamericana.webp?url';
-import libertadoresLogo from '../assets/leagues/libertadores.webp?url';
-import { LEAGUES, getLeague } from '../data/leagues';
+import { LEAGUES, getLeague, leagueLogo } from '../data/leagues';
 import { GENERIC_STADIUMS, STADIUMS, getStadium, stadiumForHome } from '../data/stadiums';
 import { BUILTIN_TEAM_COUNT, TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
 import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
@@ -308,7 +306,7 @@ export class App {
           <button class="menu-item" data-act="quick">Partido rápido<small>Elige equipos, estadio y dificultad</small></button>
           <button class="menu-item" data-act="online">Online<small>Division Rivals, amistosos y salas con amigos</small></button>
           <button class="menu-item" data-act="tournament">Copa Élite<small>Torneo: fase de grupos y eliminatorias</small></button>
-          <button class="menu-item" data-act="continental">Copas CONMEBOL<small>Libertadores y Sudamericana con clubes de toda Sudamérica</small></button>
+          <button class="menu-item" data-act="continental">Copas internacionales<small>Libertadores, Sudamericana, Champions, Europa y Conference League</small></button>
           <button class="menu-item" data-act="career">Carrera<small>11 ligas: Argentina (1.ª y 2.ª), Brasil y 8 países más</small></button>
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
@@ -1742,15 +1740,15 @@ export class App {
     this.continental = this.continental ?? Continental.load();
     const c = this.continental;
     if (!c) {
-      const ls = (['libertadores', 'sudamericana'] as CupId[]).map((id) => CUPS[id]);
+      const ls = (Object.keys(CUPS) as CupId[]).map((id) => CUPS[id]);
       const handlers: Handlers = { back: () => this.mainMenu() };
       for (const cup of ls) {
-        handlers[`cup-${cup.id}`] = () => this.pickTeamScreen(`Elige tu club para la ${cup.name}`, 'COPAS CONMEBOL', (id) => { this.continental = Continental.create(cup.id, id); this.continentalView = 'grupo'; this.continentalHub(); }, () => this.continentalHub(), cupEligibleTeams());
+        handlers[`cup-${cup.id}`] = () => this.pickTeamScreen(`Elige tu club para la ${cup.name}`, 'COPAS INTERNACIONALES', (id) => { this.continental = Continental.create(cup.id, id); this.continentalView = 'grupo'; this.continentalHub(); }, () => this.continentalHub(), cupEligibleTeams(cup.id));
       }
-      const logo = (id: CupId) => `<img src="${id === 'sudamericana' ? sudamericanaLogo : libertadoresLogo}" alt="" style="height:46px;width:46px;object-fit:contain;flex:none">`;
+      const logo = (id: CupId) => `<img src="${leagueLogo(id) ?? ''}" alt="" style="height:46px;width:46px;object-fit:contain;flex:none">`;
       this.show(`
-        <div class="screen-header"><div><div class="crumb">COPAS CONMEBOL</div><h2>Elige la copa</h2></div></div>
-        <div class="screen-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:860px;margin:0 auto">${ls.map((cup) => `<button class="menu-item" data-act="cup-${cup.id}" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:12px 14px">${logo(cup.id)}<span>${esc(cup.name)}<small>32 clubes · 8 grupos · ida y vuelta · final neutral</small></span></button>`).join('')}</div></div>
+        <div class="screen-header"><div><div class="crumb">COPAS INTERNACIONALES</div><h2>Elige la copa</h2></div></div>
+        <div class="screen-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:860px;margin:0 auto">${ls.map((cup) => `<button class="menu-item" data-act="cup-${cup.id}" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:12px 14px">${logo(cup.id)}<span>${esc(cup.name)}<small>${cup.size} clubes · ${cup.format === 'league' ? 'fase de liga' : '8 grupos'} · ida y vuelta · final neutral</small></span></button>`).join('')}</div></div>
         <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, handlers, () => this.mainMenu());
       return;
     }
@@ -1758,15 +1756,16 @@ export class App {
     const next = c.nextUserFixture();
     const lookup = (id: string) => getTeam(id);
     const knock = st.fixtures.filter((f) => f.knockout);
-    const VIEWS = ['grupo', 'grupos', 'eliminatorias'] as const;
-    const NAMES = { grupo: 'Mi grupo', grupos: 'Todos los grupos', eliminatorias: 'Eliminatorias' } as const;
-    const view = this.continentalView;
+    const isLeague = c.def.format === 'league';
+    const VIEWS = (isLeague ? ['grupo', 'eliminatorias'] : ['grupo', 'grupos', 'eliminatorias']) as ('grupo' | 'grupos' | 'eliminatorias')[];
+    const NAMES = { grupo: isLeague ? 'Tabla de la fase de liga' : 'Mi grupo', grupos: 'Todos los grupos', eliminatorias: 'Eliminatorias' } as const;
+    const view = VIEWS.includes(this.continentalView) ? this.continentalView : 'grupo';
     const champion = st.champion ? getTeam(st.champion) : null;
     const status = champion
       ? `<div class="panel" style="text-align:center"><div class="crumb" style="color:var(--warn)">CAMPEÓN</div><div style="display:flex;justify-content:center;margin:10px">${crestSVG(champion, 110)}</div><h2>${esc(champion.name)}</h2>${champion.id === st.userTeam ? `<p>¡Has ganado la ${esc(c.def.name)}! 🏆</p>` : '<p class="muted">Mejor suerte la próxima vez.</p>'}</div>`
       : st.eliminated ? '<div class="panel"><b>Tu equipo quedó eliminado.</b> <span class="muted">Simula el resto para ver al campeón.</span></div>' : '';
     const groupFx = (g: number) => st.fixtures.filter((f) => !f.knockout && st.groups[g].includes(f.home));
-    const groupPanel = (g: number) => `<div class="panel" style="margin-bottom:12px"><h3>Grupo ${'ABCDEFGH'[g]}</h3>${this.tableHTML(c.standings(g), st.userTeam, lookup)}${view === 'grupo' ? `<div style="margin-top:10px">${groupFx(g).map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('')}</div>` : ''}</div>`;
+    const groupPanel = (g: number) => `<div class="panel" style="margin-bottom:12px"><h3>${isLeague ? 'Fase de liga' : `Grupo ${'ABCDEFGH'[g]}`}</h3>${this.tableHTML(c.standings(g), st.userTeam, lookup)}${isLeague ? '<div class="muted" style="font-size:12px;margin-top:6px">Los 8 primeros pasan directo a octavos; del 9.º al 24.º juegan el play-off a ida y vuelta.</div>' : ''}${view === 'grupo' ? `<div style="margin-top:10px">${(isLeague ? groupFx(g).filter((f) => f.home === st.userTeam || f.away === st.userTeam) : groupFx(g)).map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('')}</div>` : ''}</div>`;
     let body = '';
     if (view === 'grupo') body = groupPanel(c.userGroup);
     else if (view === 'grupos') body = st.groups.map((_, g) => groupPanel(g)).join('');
@@ -1774,10 +1773,10 @@ export class App {
       const rounds = [...new Set(knock.map((f) => f.round))];
       body = rounds.length
         ? rounds.map((r) => { const fx = knock.filter((f) => f.round === r); return `<div class="panel" style="margin-bottom:12px"><h3>${esc(fx[0].stage)}</h3>${fx.map((f) => this.fixtureHTML(f, st.userTeam, lookup) + (f.leg === 2 && f.played ? `<div class="muted" style="font-size:12px;text-align:center">Global: ${c.aggregate(f)[0]} - ${c.aggregate(f)[1]}</div>` : '')).join('')}${fx[0].venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(fx[0].venue).name)}</div>` : ''}</div>`; }).join('')
-        : '<div class="panel"><p class="muted">Pasan los dos primeros de cada grupo: octavos, cuartos y semifinales a ida y vuelta (define el global, con prórroga y penales). La final es a partido único en cancha neutral.</p></div>';
+        : `<div class="panel"><p class="muted">${isLeague ? 'Los 8 primeros pasan a octavos y del 9.º al 24.º juegan un play-off a ida y vuelta' : 'Pasan los dos primeros de cada grupo'}: octavos, cuartos y semifinales a ida y vuelta (define el global, con prórroga y penales). La final es a partido único en cancha neutral.</p></div>`;
     }
     this.show(`
-      <div class="screen-header"><div><div class="crumb">COPAS CONMEBOL · ${esc(getTeam(st.userTeam).name)}</div><h2 style="display:flex;align-items:center;gap:12px"><img src="${st.cup === 'sudamericana' ? sudamericanaLogo : libertadoresLogo}" alt="" style="height:46px;width:46px;object-fit:contain"><span>${esc(c.def.name)}</span></h2></div></div>
+      <div class="screen-header"><div><div class="crumb">COPAS INTERNACIONALES · ${esc(getTeam(st.userTeam).name)}</div><h2 style="display:flex;align-items:center;gap:12px"><img src="${leagueLogo(st.cup) ?? ''}" alt="" style="height:46px;width:46px;object-fit:contain"><span>${esc(c.def.name)}</span></h2></div></div>
       <div class="screen-body">
         ${status}
         ${next ? `<div class="panel" style="margin-bottom:16px"><div class="crumb">PRÓXIMO PARTIDO · ${esc(next.stage.toUpperCase())}</div>${this.fixtureHTML(next, st.userTeam, lookup)}${next.venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(next.venue).name)}</div>` : ''}</div>` : ''}

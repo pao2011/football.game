@@ -9,8 +9,18 @@ import { DATA as uruguay } from './uruguay';
 import { DATA as ecuador } from './ecuador';
 import { DATA as bolivia } from './bolivia';
 import { DATA as venezuela } from './venezuela';
+import { DATA as eng } from './eng';
+import { DATA as esp } from './esp';
+import { DATA as ita } from './ita';
+import { DATA as ger } from './ger';
+import { DATA as fra } from './fra';
+import { DATA as por } from './por';
+import { DATA as ned } from './ned';
+import { DATA as bel } from './bel';
+import { DATA as tur } from './tur';
+import { DATA as sco } from './sco';
 
-const RAW: Record<string, LeagueData> = { primeranacional, brasil, colombia, peru, chile, paraguay, uruguay, ecuador, bolivia, venezuela };
+const RAW: Record<string, LeagueData> = { primeranacional, brasil, colombia, peru, chile, paraguay, uruguay, ecuador, bolivia, venezuela, eng, esp, ita, ger, fra, por, ned, bel, tur, sco };
 
 /** Una liga necesita al menos esta cantidad de clubes con escudo para seguir funcionando. */
 const MIN_TEAMS = 8;
