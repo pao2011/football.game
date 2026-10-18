@@ -12,6 +12,8 @@ import { interceptCache } from '../ai/TeamAI';
 import { clamp, dist2D } from '../util/math';
 import { offsideLineU } from '../sim/Rules';
 import { solveCurvedKick } from '../sim/Kicks';
+import { AERIAL_NAMES, AERIAL_TIMING, angleTo, ballApproach, chooseAerial } from '../sim/Aerial';
+import { receiveApproach } from '../ai/PlayerAI';
 import type { Restart } from '../sim/Match';
 
 /** Orientación de la cámara para convertir el stick (pantalla) en direcciones del mundo. */
@@ -413,8 +415,13 @@ export class HumanController implements TeamController {
     const dz = ic.point.z - p.pos.z;
     const d = Math.hypot(dx, dz);
     if (d < 0.4) {
-      p.desiredVel.set(0, 0, 0);
-      p.desiredFacing = Math.atan2(m.ball.pos.x - p.pos.x, m.ball.pos.z - p.pos.z);
+      // en el punto de recepción: sale al encuentro del balón en vez de esperarlo quieto
+      const bx = m.ball.pos.x - p.pos.x;
+      const bz = m.ball.pos.z - p.pos.z;
+      const bl = Math.hypot(bx, bz);
+      const sp = air || bl > 15 || bl < 1e-3 ? 0 : receiveApproach(m, p, bl);
+      p.desiredVel.set((bx / Math.max(bl, 1e-3)) * sp, 0, (bz / Math.max(bl, 1e-3)) * sp);
+      p.desiredFacing = Math.atan2(bx, bz);
       return true;
     }
     const sp = Math.min(9, d * 3);
@@ -494,7 +501,9 @@ export class HumanController implements TeamController {
     const side: 1 | -1 = lat >= 0 ? 1 : -1;
     let kind: SkillKind;
     const diagonal = !!g && Math.abs(flick!.x) > 0.38 && Math.abs(flick!.y) > 0.38;
-    if (diagonal || (input.held('finesse') && Math.abs(along) < 0.6)) kind = 'elastico';
+    if (input.held('finesse') && along > 0.6) kind = 'nutmeg'; // RB + ↑: caño
+    else if (input.held('switch') && Math.abs(along) < 0.6) kind = 'croqueta'; // LB + ← →: croqueta
+    else if (diagonal || (input.held('finesse') && Math.abs(along) < 0.6)) kind = 'elastico';
     else if (along > 0.6) kind = 'rainbow';
     else if (along < -0.6) kind = 'dragback';
     else kind = 'stepover';
@@ -622,7 +631,7 @@ export class HumanController implements TeamController {
         }
         this.lastCharge = { action: a, value: power, at: m.time, label: style ? shotStyleName(style) : undefined };
         const crossZone = a === 'lob' && team.u(p.pos) > HALF_LENGTH - 30 && Math.abs(p.pos.z) > 12;
-        this.buffered = { action: a, power, finesse: input.held('finesse'), lb: input.held('switch'), l2: input.held('jockey'), until: m.time + (crossZone ? 1.0 : 0.7), dir, noStick: !hasStick, style, taps: 1, notBefore: crossZone ? m.time + 0.25 : undefined };
+        this.buffered = { action: a, power, finesse: input.held('finesse'), lb: input.held('switch'), l2: input.held('jockey'), until: m.time + (crossZone || (!m.owner && m.ball.pos.y > 0.4) ? 1.0 : 0.7), dir, noStick: !hasStick, style, taps: 1, notBefore: crossZone ? m.time + 0.25 : undefined };
         if (a === 'lob') this.lastLob = { b: { ...this.buffered }, at: m.time };
       }
     }
@@ -641,6 +650,16 @@ export class HumanController implements TeamController {
     const ball = m.ball.pos;
     const dH = dist2D(p.pos, ball);
     const isOwner = m.owner === p;
+    // Balón aéreo + TIRO: volea, tijera o chilena según la altura a la que llega y hacia dónde miras
+    if ((!isOwner || ball.y > 0.35) && b.action === 'shoot' && !m.ball.held && !m.gkHolding && !p.busy) {
+      const r = this.tryAerialShot(m, team, p, b);
+      if (r !== null) return r;
+    }
+    // Balón bajo cruzado cerca del arco + PASE (cabezazo): cabezazo en plancha
+    if (!isOwner && b.action === 'pass' && !m.ball.held && !m.gkHolding && !p.busy && dist2D(p.pos, team.attackGoal) < 22) {
+      const r = this.tryDivingHeader(m, team, p, b);
+      if (r !== null) return r;
+    }
     // Cabezazo
     if (!isOwner && ball.y > 1.2 && ball.y < 2.8 && dH < 1.6 && !p.busy) {
       const req = this.makeKick(m, team, p, b, true);
@@ -690,6 +709,59 @@ export class HumanController implements TeamController {
     team.controlled = rec;
     this.receiveLock = { player: rec, dir: this.stickWorld().clone(), until: m.time + 3.5 };
     this.switchCooldown = Math.max(this.switchCooldown, 1);
+  }
+
+  /**
+   * Remate acrobático del jugador controlado. Devuelve true/false si lo intentó (o no pudo), o null si el balón
+   * no le llega a una altura de volea, tijera o chilena (entonces se prueba el cabezazo o el golpeo normal).
+   * Espera (false) hasta que el balón está a punto de llegar, para que el pie coincida con él.
+   */
+  private tryAerialShot(m: Match, team: Team, p: Player, b: Buffered): boolean | null {
+    const ap = ballApproach(m.ball, p, 1.0, 0.05, 2.4);
+    if (!ap || ap.miss > 1.4) return null;
+    const gx = HALF_LENGTH * team.attackDir;
+    const backToGoal = angleTo(p, gx, 0) > 1.9;
+    const kind = chooseAerial(ap.y, backToGoal);
+    if (!kind) return null;
+    // taco de primera: solo a un balón que llega (no al que ya se tiene en los pies)
+    if (kind === 'backheel' && m.owner === p) return null;
+    if (ap.t > AERIAL_TIMING[kind].contact + 0.04) return false; // todavía no: se reintenta en el siguiente paso
+    const req = this.makeKick(m, team, p, b, false);
+    const { z, y } = this.shotAim(m, team, p, b.dir, b.power, false);
+    req.kind = 'shoot';
+    req.aerial = kind;
+    req.style = undefined;
+    req.spin.set(0, 0, 0);
+    req.targetId = undefined;
+    // la volea sale más tensa; la tijera y la chilena, algo más lentas
+    const hs = (kind === 'volley' ? 19 : kind === 'scissor' ? 17 : 16) + b.power * 8;
+    const h = Math.hypot(req.velocity.x, req.velocity.z) || 1;
+    req.velocity.set((req.velocity.x / h) * hs, 0, (req.velocity.z / h) * hs);
+    req.aimAt = new Vector3(gx, clamp(y * 0.8 + 0.25, 0.35, 2.1), z);
+    req.power = Math.max(0.6, b.power);
+    const ok = m.requestKick(p, req);
+    if (ok) this.lastCharge = { action: 'shoot', value: b.power, at: m.time, label: AERIAL_NAMES[kind].toUpperCase() };
+    return ok;
+  }
+
+  /** Cabezazo en plancha a un balón bajo que cruza por delante cerca del arco. */
+  private tryDivingHeader(m: Match, team: Team, p: Player, b: Buffered): boolean | null {
+    const ap = ballApproach(m.ball, p, 1.0, 0.3, 1.0);
+    if (!ap || ap.miss > 1.9 || ap.miss < 0.5) return null; // si le llega a los pies, mejor de volea o con el pie
+    if (ap.t > AERIAL_TIMING.diving.contact + 0.08) return false;
+    const gx = HALF_LENGTH * team.attackDir;
+    const { z } = this.shotAim(m, team, p, b.dir, 0.7, false);
+    const req = this.makeKick(m, team, p, b, true);
+    req.kind = 'header';
+    req.aerial = 'diving';
+    req.targetId = undefined;
+    req.spin.set(0, 0, 0);
+    const h = Math.hypot(req.velocity.x, req.velocity.z) || 1;
+    req.velocity.set((req.velocity.x / h) * 16, 0, (req.velocity.z / h) * 16);
+    req.aimAt = new Vector3(gx, 0.5, z);
+    const ok = m.requestKick(p, req);
+    if (ok) this.lastCharge = { action: 'pass', value: 0.6, at: m.time, label: 'EN PLANCHA' };
+    return ok;
   }
 
   private makeKick(m: Match, team: Team, p: Player, b: Omit<Buffered, 'until'>, header: boolean) {

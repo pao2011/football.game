@@ -1,3 +1,4 @@
+import { WEATHER_ICONS, WEATHER_NAMES } from '../sim/Weather';
 import { esc } from './dom';
 import { HALF_LENGTH, HALF_WIDTH } from '../config/constants';
 import type { HumanController } from '../control/HumanController';
@@ -43,6 +44,10 @@ export class HUD {
   private intro: HTMLElement | null = null;
   private lastHalf = 1;
 
+  private advBadge: HTMLElement;
+  /** Hasta cuándo se muestra el aviso de ventaja (por eventos: también funciona en el invitado online). */
+  private advUntil = -1;
+
   constructor(parent: HTMLElement, private match: Match, private ctrl: HumanController | null, private bindings: Bindings) {
     const r = document.createElement('div');
     r.className = 'hud';
@@ -52,10 +57,11 @@ export class HUD {
         <div class="sb-team"><span class="chip" style="background:${h.kit.shirt}"></span><span class="h">${h.data.short}</span></div>
         <div class="sb-score">0 - 0</div>
         <div class="sb-team"><span class="a">${a.data.short}</span><span class="chip" style="background:${a.kit.shirt}"></span></div>
-        <div class="sb-clock">00:00</div>
+        <div class="sb-clock">00:00</div>${match.weather !== 'clear' ? `<div class="sb-weather" title="${WEATHER_NAMES[match.weather]}">${WEATHER_ICONS[match.weather]}</div>` : ''}
         <div class="sb-added hidden">+1</div>
       </div>
       <div class="mentality hidden"></div>
+      <div class="adv-badge hidden">VENTAJA ▶</div>
       <div class="banner hidden"></div>
       <div class="toast hidden"></div>
       <div class="player-tag hidden"><div class="nm"></div><div class="meta"></div><div class="stamina"><div></div></div></div>
@@ -67,6 +73,7 @@ export class HUD {
       <div class="fps hidden"></div>`;
     parent.appendChild(r);
     this.root = r;
+    this.advBadge = r.querySelector('.adv-badge') as HTMLElement;
     const q = (s: string) => r.querySelector(s) as HTMLElement;
     this.sbHome = q('.sb-team .h');
     this.sbAway = q('.sb-team .a');
@@ -121,7 +128,7 @@ export class HUD {
         <b>${t.data.name}</b><small>${t.data.city} · ${t.formation}</small></div>`;
     el.innerHTML = `
       <div class="mi-bar mi-bar-h"></div><div class="mi-bar mi-bar-a"></div>
-      <div class="mi-top">${stadium.name.toUpperCase()}<small>${stadium.capacity.toLocaleString('es-ES')} espectadores</small></div>
+      <div class="mi-top">${this.match.config.classic ? `<span style="color:#ff5a4f">🔥 ${this.match.config.classic.toUpperCase()} 🔥</span><br>` : ''}${stadium.name.toUpperCase()}<small>${stadium.capacity.toLocaleString('es-ES')} espectadores${this.match.config.neutral ? ' · cancha neutral' : ''}</small></div>
       <div class="mi-row">${team(h, 'mi-home')}<div class="mi-vs">VS</div>${team(a, 'mi-away')}</div>
       <div class="mi-go">¡COMIENZA EL PARTIDO!</div>
       <div class="mi-skip">toca para saltar</div>`;
@@ -176,8 +183,26 @@ export class HUD {
         if (e.kind === 'shootout') this.showToast(`✋ ¡Atajado! (${e.text ?? ''})`, '#2fb4ff', 1.8);
         else if (e.kind === 'shot') this.showToast('¡Atajada!', '#2fb4ff', 1.4);
         break;
+      case 'advantage':
+        this.advUntil = this.match.time + 2.5;
+        break;
+      case 'whistle':
+        this.advUntil = -1;
+        break;
+      case 'injury':
+        this.showToast(`🚑 Lesionado: ${e.text ?? ''}`, '#ff6b76');
+        break;
+      case 'handball':
+        this.showToast(`✋ Mano de ${e.text ?? ''}`, '#ffcf3f');
+        break;
       case 'foul':
         this.showToast(`Falta de ${teamName(e.team)}`, '#ffcf3f');
+        break;
+      case 'scuffle':
+        this.showToast(`💢 Roce: ${e.text ?? ''} empuja a un rival`, '#ff9a3f', 1.8);
+        break;
+      case 'brawl':
+        if (e.kind === 'start') this.lowerThird('<span class="warn-icon">!</span>¡SE ARMÓ LA PELEA!', `${e.text ?? ''} · ${teamName(e.team)}`, 3);
         break;
       case 'card': {
         const col = e.kind === 'yellow' ? '#ffd400' : '#ff2b3b';
@@ -233,6 +258,7 @@ export class HUD {
 
   update(dt: number) {
     const m = this.match;
+    this.show(this.advBadge, m.time < this.advUntil);
     // mentalidad (cruceta ← → del mando)
     const ht = m.teams.find((t) => t.human);
     if (ht) {
@@ -377,10 +403,11 @@ export class HUD {
       for (const p of t.active) {
         g.fillStyle = t.kit.shirt;
         g.beginPath();
-        g.arc(sx(p.pos.x), sz(p.pos.z), p === t.controlled ? 4.5 : 3.2, 0, Math.PI * 2);
+        const mine = p === t.controlled || p === t.controlled2;
+        g.arc(sx(p.pos.x), sz(p.pos.z), mine ? 4.5 : 3.2, 0, Math.PI * 2);
         g.fill();
-        g.strokeStyle = p === t.controlled ? '#ffd23f' : 'rgba(0,0,0,0.7)';
-        g.lineWidth = p === t.controlled ? 2 : 1;
+        g.strokeStyle = p === t.controlled2 ? '#4dff7a' : mine ? '#ffd23f' : 'rgba(0,0,0,0.7)';
+        g.lineWidth = mine ? 2 : 1;
         g.stroke();
       }
     }

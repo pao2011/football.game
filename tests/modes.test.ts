@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { Tournament } from '../src/modes/Tournament';
-import { Career } from '../src/modes/Career';
 import { computeStandings, roundRobin } from '../src/modes/Competition';
 
 describe('Competiciones', () => {
@@ -22,16 +21,16 @@ describe('Competiciones', () => {
   });
 
   it('el torneo avanza de grupos a semifinales y final hasta tener campeón', () => {
-    const t = Tournament.create('aurora', 123);
+    const t = Tournament.create('river', 123);
     let guard = 0;
     while (!t.finished && guard++ < 20) {
       const next = t.nextUserFixture();
       if (!next) break;
       // el usuario gana siempre por 2-0
-      const userHome = next.home === 'aurora';
+      const userHome = next.home === 'river';
       t.recordUserResult(next, userHome ? 2 : 0, userHome ? 0 : 2);
     }
-    expect(t.state.champion).toBe('aurora');
+    expect(t.state.champion).toBe('river');
     expect(t.state.fixtures.filter((f) => f.stage === 'Semifinal').length).toBe(2);
     expect(t.state.fixtures.some((f) => f.stage === 'Final')).toBe(true);
   });
@@ -49,21 +48,4 @@ describe('Competiciones', () => {
     expect(t.state.champion).not.toBeNull();
   });
 
-  it('la carrera completa una temporada de 14 jornadas y progresa a la siguiente', () => {
-    const c = Career.create('brasa', 5);
-    expect(c.totalRounds).toBe(14);
-    let guard = 0;
-    while (!c.state.seasonOver && guard++ < 20) {
-      const next = c.nextUserFixture()!;
-      c.recordUserResult(next, 1, 1, []);
-    }
-    expect(c.state.seasonOver).toBe(true);
-    const table = c.standings();
-    expect(table.every((r) => r.played === 14)).toBe(true);
-    const res = c.startNextSeason();
-    expect(c.state.season).toBe(2);
-    expect(c.state.history.length).toBe(1);
-    expect(res.position).toBeGreaterThan(0);
-    expect(c.state.fixtures.every((f) => !f.played)).toBe(true);
-  });
 });

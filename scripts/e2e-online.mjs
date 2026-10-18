@@ -28,7 +28,7 @@ const browser = await chromium.launch({ executablePath: exe, args: ['--use-angle
 const errors = [];
 async function newPlayer(name) {
   // contextos separados = almacenamiento separado = jugadores distintos
-  const ctx = await browser.newContext({ viewport: { width: 640, height: 360 } });
+  const ctx = await browser.newContext({ viewport: { width: 640, height: 360 }, locale: 'es-ES' });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`${name}: ${m.text()}`); });
@@ -44,6 +44,7 @@ async function newPlayer(name) {
 const results = [];
 let A;
 let B;
+let roomCode = '';
 async function check(name, fn) {
   try {
     await fn();
@@ -91,6 +92,7 @@ await check('Sala privada: Ana crea, Beto se une con el código y empieza el par
   await A.click('[data-act=create]');
   await waitFor(A, () => /^[A-Z0-9]{5}$/.test(document.querySelector('.room-code')?.textContent ?? ''));
   const code = await A.textContent('.room-code');
+  roomCode = code;
   await B.click('[data-act=join]');
   await B.waitForSelector('#on-code');
   await B.fill('#on-code', code);
@@ -118,6 +120,29 @@ await check('El invitado recibe y dibuja el partido del anfitrión', async () =>
   }
   await B.screenshot({ path: join(OUT, 'online-guest.png') });
   await A.screenshot({ path: join(OUT, 'online-host.png') });
+});
+
+await check('Espectador: un tercero mira el partido de la sala con el código', async () => {
+  const C = await newPlayer('Caro');
+  try {
+    await toOnlineHub(C);
+    await C.click('[data-act=join]');
+    await C.waitForSelector('#on-code');
+    await C.fill('#on-code', roomCode);
+    await C.click('[data-act=watch]');
+    await waitFor(C, () => !!window.__runner && window.__runner.online?.spectator === true, 40000);
+    await C.evaluate(() => window.__runner.skipIntro());
+    // con tres navegadores con renderizado por software, montar la escena puede tardar mucho
+    await waitFor(C, () => window.__runner.guestSync.received > 20, 120000).catch(async (e) => {
+      throw new Error(e.message + ' ' + JSON.stringify(await C.evaluate(() => ({ same: window.__app.runner === window.__runner, rec: window.__runner?.guestSync?.received, conn: window.__app.net?.connected, ui: document.querySelector('#ui')?.textContent.replace(/\s+/g, ' ').slice(0, 60) }))));
+    });
+    await C.waitForTimeout(4000);
+    const st = await C.evaluate(() => ({ same: window.__app.runner === window.__runner, lt: window.__runner.localTeam, n: window.__runner.match.playersAll.length, ctrl: !!window.__runner.controller }));
+    assert(st.same && st.lt === -1 && st.n === 22 && !st.ctrl, JSON.stringify(st));
+    await C.screenshot({ path: join(OUT, 'online-spectator.png') });
+  } finally {
+    await C.context().close();
+  }
 });
 
 await check('Los mandos del invitado llegan al anfitrión (controla al equipo visitante)', async () => {

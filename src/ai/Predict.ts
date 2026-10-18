@@ -30,6 +30,9 @@ export function getBallPrediction(m: Match): Vector3[] {
   } else {
     const sub = 4;
     const dt = PRED_DT / sub;
+    const env = b.env;
+    const wx = env.wind.x;
+    const wz = env.wind.z;
     pts[0].set(x, y, z);
     for (let i = 1; i <= PRED_STEPS; i++) {
       for (let k = 0; k < sub; k++) {
@@ -39,21 +42,26 @@ export function getBallPrediction(m: Match): Vector3[] {
           vy = 0;
           const gs = Math.hypot(vx, vz);
           if (gs > 0) {
-            const ns = Math.max(0, gs - (ROLL_DECEL + AIR_DRAG * gs * gs) * dt);
+            const ns = Math.max(0, gs - (ROLL_DECEL * env.roll + AIR_DRAG * gs * gs) * dt);
             vx *= ns / gs;
             vz *= ns / gs;
           }
         } else {
-          vx -= AIR_DRAG * s * vx * dt;
-          vz -= AIR_DRAG * s * vz * dt;
-          vy -= (GRAVITY + AIR_DRAG * s * vy) * dt;
+          // arrastre respecto al viento
+          const rx = vx - wx;
+          const rz = vz - wz;
+          const rs = Math.hypot(rx, vy, rz);
+          vx -= AIR_DRAG * rs * rx * dt;
+          vz -= AIR_DRAG * rs * rz * dt;
+          vy -= (GRAVITY + AIR_DRAG * rs * vy) * dt;
+          void s;
         }
         x += vx * dt;
         y += vy * dt;
         z += vz * dt;
         if (y < BALL_RADIUS) {
           y = BALL_RADIUS;
-          if (vy < -0.6) { vy = -vy * 0.58; vx *= 0.84; vz *= 0.84; } else vy = 0;
+          if (vy < -0.6) { vy = -vy * 0.58 * env.bounce; vx *= env.skid; vz *= env.skid; } else vy = 0;
         }
       }
       pts[i].set(x, y, z);

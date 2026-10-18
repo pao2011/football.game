@@ -26,6 +26,7 @@ describe('Sonidos del partido', () => {
     expect(play({ type: 'save', team: 0, kind: 'shot' })).toEqual(['applause']);
     expect(play({ type: 'goal', team: 1, kind: 'normal' })).toEqual(['cheer', 'goalHorn']);
     expect(play({ type: 'goal', team: 1, kind: 'shootout' })).toEqual(['cheer']);
+    expect(play({ type: 'skill', kind: 'bicycle', text: 'Chilena' })).toEqual(['ooh']);
   });
 
   it('el balón rueda y el que conduce da toques mientras corre', () => {
@@ -49,15 +50,53 @@ describe('Sonidos del partido', () => {
   });
 
   it('la simulación avisa de controles y blocajes del arquero', () => {
+    // controles: en un partido normal
     const m = makeMatch({ seed: 7 });
     const seen = new Set<string>();
-    for (let i = 0; i < 60 * 240 && !(seen.has('touch') && seen.has('catch')); i++) {
+    for (let i = 0; i < 60 * 120 && !seen.has('touch'); i++) {
       m.step();
       for (const e of m.events) seen.add(e.type);
       m.events.length = 0;
       if (m.phase === 'replay') m.skipReplay();
     }
     expect(seen.has('touch')).toBe(true);
-    expect(seen.has('catch')).toBe(true);
+    // blocaje: balón suave de un rival hacia el arquero, dentro de su área
+    const g = makeMatch({ seed: 3 });
+    g.simulate(1);
+    g.phase = 'play';
+    g.teams[0].attackDir = 1;
+    g.teams[1].attackDir = -1;
+    const gk = g.teams[0].goalkeeper!;
+    for (const q of g.active) if (q !== gk) q.pos.set(10, 0, q.pos.z);
+    gk.pos.set(-50, 0, 0);
+    g.owner = null;
+    g.ball.reset(-42, 0);
+    g.ball.vel.set(-7, 0, 0);
+    g.setLastTouch(g.teams[1].players[9], true, 'shoot');
+    let caught = false;
+    for (let i = 0; i < 120 && !caught; i++) {
+      g.step();
+      caught = g.events.some((e) => e.type === 'catch' && e.playerId === gk.id);
+      g.events.length = 0;
+    }
+    expect(caught).toBe(true);
+  });
+
+  it('la tribuna silba cuando el visitante tiene el balón y para al perderlo', () => {
+    const m = makeMatch();
+    const { audio, calls } = fakeAudio();
+    const ma = new MatchAudio(audio, m);
+    m.phase = 'play';
+    const away = m.teams[1].players[5];
+    const home = m.teams[0].players[5];
+    const run = (secs: number) => { for (let i = 0; i < secs * 60; i++) { m.time += 1 / 60; ma.update(0.3); } };
+    m.owner = away;
+    run(0.8);
+    expect(calls).not.toContain('setWhistling'); // todavía no: hace falta 1,2 s seguidos
+    run(0.8);
+    expect(calls.filter((c) => c === 'setWhistling').length).toBe(1);
+    m.owner = home;
+    run(2);
+    expect(calls.filter((c) => c === 'setWhistling').length).toBe(2); // se apagó
   });
 });

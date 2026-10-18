@@ -23,9 +23,11 @@ export interface KickRequest {
    * instante del contacto, que puede ser unas décimas después de decidirlo.
    */
   aimAt?: Vector3;
+  /** Remate acrobático con el balón en el aire (volea, tijera o chilena). */
+  aerial?: import('./Aerial').AerialKind;
 }
 
-export type ActionKind = 'none' | 'kick' | 'tackle' | 'slide' | 'header' | 'dive' | 'fallen' | 'getup' | 'celebrate' | 'dejected' | 'hold' | 'throw' | 'trap' | 'skill';
+export type ActionKind = 'none' | 'kick' | 'tackle' | 'slide' | 'header' | 'dive' | 'fallen' | 'getup' | 'celebrate' | 'dejected' | 'hold' | 'throw' | 'trap' | 'skill' | 'scuffle';
 
 export interface PlayerAction {
   kind: ActionKind;
@@ -77,6 +79,9 @@ export class Player {
   warnings = 0;
   /** Desmarque pedido por el jugador humano (LB): hasta cuándo y hacia dónde. */
   forcedRunUntil = -1;
+  /** Lesionado en este partido (y partidos que se perderá en torneo o carrera). */
+  injured = false;
+  injuryGames = 0;
   readonly forcedRunTarget = new Vector3();
   duty: 'shape' | 'press' | 'cover' | 'mark' | 'chase' | 'support' | 'run' | 'carrier' | 'receive' | 'setpiece' = 'shape';
   markTarget: Player | null = null;
@@ -128,6 +133,7 @@ export class Player {
     const jog = 4.6 + (a.speed / 100) * 1.0;
     let s = this.sprinting ? top : jog;
     s *= 0.82 + 0.18 * this.stamina;
+    if (this.injured) s *= 0.8; // lesionado: cojea hasta que lo cambian
     if (withBall) s *= 0.86 + (a.control / 100) * 0.08;
     // contener: más rápido si además se esprinta (LT + RT, "brega rápida")
     if (this.jockeying) s = Math.min(s, this.sprinting ? 5.2 : 3.2);
@@ -158,14 +164,16 @@ export class Player {
       act.time += dt;
       if (act.time >= act.duration) {
         const k = act.kind;
+        const acrobatic = act.anim === 'bicycle' || act.anim === 'scissor' || act.anim === 'diving' || act.anim === 'scorpion';
         this.clearAction();
         if (k === 'slide' || k === 'fallen') this.startAction('getup', 'getup', 0.7);
+        else if (acrobatic) this.startAction('getup', 'getup', 0.75); // tras la chilena o la tijera, cae al césped
       }
     }
 
     if (this.frozen) {
       this.vel.set(0, 0, 0);
-    } else if (this.action.kind === 'slide' || this.action.kind === 'dive') {
+    } else if (this.action.kind === 'slide' || this.action.kind === 'dive' || this.action.anim === 'diving') {
       // Inercia de la barrida / estirada: desaceleración progresiva
       const decel = this.action.kind === 'slide' ? 5.5 : 6.5;
       const s = Math.hypot(this.vel.x, this.vel.z);
@@ -176,7 +184,12 @@ export class Player {
     } else {
       let maxS = this.maxSpeed(hasBall);
       if (this.action.kind === 'kick' && !this.action.done) maxS = Math.max(maxS * 0.55, 2.6);
+      // en el aire (chilena / tijera) casi no se avanza
+      if (this.action.anim === 'bicycle' || this.action.anim === 'scissor' || this.action.anim === 'scorpion') maxS = 1.2;
+      // terminando un control con el pecho o el muslo: no se aleja del balón que cae
+      else if (this.action.kind === 'trap' && this.action.variant > 0) maxS = Math.min(maxS, 2.2);
       if (this.action.kind === 'tackle' || this.action.kind === 'header') maxS *= 0.6;
+      if (this.action.kind === 'scuffle') maxS *= 0.35;
       const dv = this.desiredVel;
       const dl = Math.hypot(dv.x, dv.z);
       let tx = dv.x;

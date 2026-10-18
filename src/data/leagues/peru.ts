@@ -1,0 +1,106 @@
+import type { LeagueData, ClassicDef } from '../seedUtil';
+import { kit, crest, stadium, GK_YELLOW, GK_ORANGE, GK_GREEN, GK_BLACK } from '../seedUtil';
+import type { TeamSeed } from '../teams';
+
+type R = TeamSeed['roster'];
+/** Plantilla: [nombre, dorsal, bonus?]; nombre '' = hueco (el juego inventa un nombre ficticio). 11 titulares + 7 suplentes. */
+const sq = (l: Array<[string, number, number?]>): NonNullable<R> => l.map(([name, number, bonus]) => (bonus ? { name, number, bonus } : { name, number }));
+const blank = (nums: number[]): NonNullable<R> => nums.map((number) => ({ name: '', number }));
+const NUMS = [1, 3, 4, 5, 2, 6, 8, 10, 11, 9, 7, 12, 13, 14, 15, 16, 17, 18];
+
+const teams: TeamSeed[] = [
+  { id: 'pe_universitario', name: 'Universitario de Deportes', short: 'UNI', city: 'Lima', crest: crest('pe_universitario', '#8a1a1f', '#f5ecd8'),
+    home: kit('#f3e9d2', '#a31621', 'solid', '#f3e9d2', '#f3e9d2', '#a31621'), away: kit('#5a0f18', '#e8a090', 'stripes', '#1a1a1a', '#1a1a1a', '#ffffff'), gkKit: GK_GREEN,
+    formation: '4-2-3-1', rating: 76, seed: 5000,
+    roster: sq([['Sebastián Britos', 1, 3], ['', 3], ['Matías Di Benedetto', 4, 3], ['Williams Riveros', 5, 3], ['Aldo Corzo', 2, 4], ['Jairo Concha', 6, 3], ['Rodrigo Ureña', 8, 3], ['Andy Polo', 11, 3], ['Edison Flores', 10, 5], ['', 7], ['Alex Valera', 9, 4],
+      ['', 12], ['Anderson Santamaría', 13, 3], ['', 14], ['', 15], ['', 16], ['', 17], ['Diego Churín', 18, 3]]) },
+  { id: 'pe_alianza', name: 'Alianza Lima', short: 'ALI', city: 'Lima', crest: crest('pe_alianza', '#0b1f4f', '#ffffff'),
+    home: kit('#ffffff', '#0b1f4f', 'stripes', '#0b1f4f', '#0b1f4f', '#0b1f4f'), away: kit('#0b1f4f', '#c9a14a', 'solid', '#0b1f4f', '#0b1f4f', '#ffffff'), gkKit: GK_YELLOW,
+    formation: '4-3-3', rating: 75, seed: 5001,
+    roster: sq([['Guillermo Viscarra', 1, 3], ['Pablo Míguez', 3, 3], ['Miguel Araujo', 4, 3], ['Renzo Garcés', 5, 3], ['', 2], ['Adrián Arregui', 6, 3], ['Jesús Castillo', 8, 4], ['Sergio Peña', 10, 4], ['Kevin Serna', 11, 3], ['Hernán Barcos', 9, 5], ['Eryc Castillo', 7, 3],
+      ['', 12], ['Carlos Zambrano', 13, 3], ['', 14], ['', 15], ['', 16], ['', 17], ['', 18]]) },
+  { id: 'pe_cristal', name: 'Sporting Cristal', short: 'CRI', city: 'Lima', crest: crest('pe_cristal', '#62b5e5', '#ffffff'),
+    home: kit('#6cb8e8', '#ffffff', 'solid', '#ffffff', '#6cb8e8', '#ffffff'), away: kit('#f2f2f2', '#6cb8e8', 'sash', '#ffffff', '#ffffff', '#3a86b8'), gkKit: GK_ORANGE,
+    formation: '4-3-3', rating: 75, seed: 5002,
+    roster: sq([['Diego Enríquez', 1, 3], ['', 3], ['Leandro Sosa', 4, 3], ['', 5], ['Jhilmar Lora', 2, 3], ['', 6], ['Yoshimar Yotún', 8, 5], ['Fernando Pacheco', 10, 3], ['', 11], ['Irven Ávila', 9, 4], ['', 7],
+      ['', 12], ['', 13], ['', 14], ['', 15], ['', 16], ['', 17], ['', 18]]) },
+  { id: 'pe_melgar', name: 'FBC Melgar', short: 'MEL', city: 'Arequipa', crest: crest('pe_melgar', '#c4161c', '#1a1a1a'),
+    home: kit('#c4161c', '#141414', 'halves', '#141414', '#141414', '#ffffff'), away: kit('#f5d90a', '#1a1a1a', 'solid', '#1a1a1a', '#f5d90a', '#1a1a1a'), gkKit: GK_GREEN,
+    formation: '4-2-3-1', rating: 72, seed: 5003,
+    roster: sq([['Carlos Cáceda', 1, 3], ['', 3], ['', 4], ['', 5], ['', 2], ['Horacio Orzán', 6, 3], ['', 8], ['', 11], ['', 10], ['', 7], ['Bernardo Cuesta', 9, 4],
+      ['', 12], ['', 13], ['', 14], ['', 15], ['', 16], ['', 17], ['', 18]]) },
+  { id: 'pe_cienciano', name: 'Cienciano', short: 'CIE', city: 'Cusco', crest: crest('pe_cienciano', '#e0112b', '#14215a'),
+    home: kit('#dc1228', '#ffffff', 'solid', '#ffffff', '#dc1228', '#ffffff'), away: kit('#1a2a6a', '#ffffff', 'solid', '#1a2a6a', '#1a2a6a', '#ffffff'), gkKit: GK_YELLOW,
+    formation: '4-4-2', rating: 70, seed: 5004, roster: blank(NUMS) },
+  { id: 'pe_cusco', name: 'Cusco FC', short: 'CUS', city: 'Cusco', crest: crest('pe_cusco', '#c9a063', '#1a1a1a'),
+    home: kit('#c9a063', '#ffffff', 'solid', '#1a1a1a', '#c9a063', '#1a1a1a'), away: kit('#1a1a1a', '#c9a063', 'solid', '#1a1a1a', '#1a1a1a', '#c9a063'), gkKit: GK_GREEN,
+    formation: '4-3-3', rating: 69, seed: 5005, roster: blank(NUMS) },
+  { id: 'pe_garcilaso', name: 'Deportivo Garcilaso', short: 'GAR', city: 'Cusco', crest: crest('pe_garcilaso', '#e8202a', '#ffffff'),
+    home: kit('#12aee3', '#ffffff', 'solid', '#12aee3', '#12aee3', '#ffffff'), away: kit('#f4f4f4', '#d6232c', 'solid', '#ffffff', '#ffffff', '#1a2a6a'), gkKit: GK_ORANGE,
+    formation: '4-4-2', rating: 69, seed: 5006, roster: blank(NUMS) },
+  { id: 'pe_huancayo', name: 'Sport Huancayo', short: 'HUA', city: 'Huancayo', crest: crest('pe_huancayo', '#e8102a', '#d9a35c'),
+    home: kit('#e3101f', '#e8b84a', 'solid', '#e3101f', '#e3101f', '#ffffff'), away: kit('#0fa53a', '#e8b84a', 'solid', '#0fa53a', '#0fa53a', '#ffffff'), gkKit: GK_BLACK,
+    formation: '4-4-2', rating: 68, seed: 5007, roster: blank(NUMS) },
+  { id: 'pe_sportboys', name: 'Sport Boys', short: 'SPB', city: 'Callao', crest: crest('pe_sportboys', '#f4a6c8', '#141414', 'shield', 'star'),
+    home: kit('#f7b0cc', '#141414', 'solid', '#141414', '#f7b0cc', '#141414'), away: kit('#141414', '#f7b0cc', 'solid', '#141414', '#141414', '#f7b0cc'), gkKit: GK_YELLOW,
+    formation: '4-3-3', rating: 67, seed: 5008, roster: blank(NUMS) },
+  { id: 'pe_chankas', name: 'Los Chankas', short: 'CHA', city: 'Andahuaylas', crest: crest('pe_chankas', '#7a1f27', '#f0b000'),
+    home: kit('#6e1a28', '#f09a3a', 'solid', '#6e1a28', '#6e1a28', '#ffffff'), away: kit('#16255a', '#ffffff', 'solid', '#16255a', '#16255a', '#ffffff'), gkKit: GK_YELLOW,
+    formation: '4-4-2', rating: 66, seed: 5009, roster: blank(NUMS) },
+  { id: 'pe_utc', name: 'UTC de Cajamarca', short: 'UTC', city: 'Cajamarca', crest: crest('pe_utc', '#c4121f', '#f3ecd8'),
+    home: kit('#f5ecdc', '#a60f1f', 'band', '#a60f1f', '#a60f1f', '#a60f1f'), away: kit('#161616', '#a60f1f', 'solid', '#161616', '#161616', '#ffffff'), gkKit: GK_GREEN,
+    formation: '4-4-2', rating: 66, seed: 5010, roster: blank(NUMS) },
+  { id: 'pe_grau', name: 'Atlético Grau', short: 'GRA', city: 'Piura', crest: crest('pe_grau', '#f2b705', '#d6202a'),
+    home: kit('#d6202a', '#f2c200', 'stripes', '#d6202a', '#d6202a', '#ffffff'), away: kit('#f2f2f2', '#d6202a', 'solid', '#ffffff', '#ffffff', '#d6202a'), gkKit: GK_BLACK,
+    formation: '4-3-3', rating: 66, seed: 5011, roster: blank(NUMS) },
+  { id: 'pe_comerciantes', name: 'Comerciantes Unidos', short: 'COM', city: 'Cutervo', crest: crest('pe_comerciantes', '#5b1f9a', '#1a9a3a'),
+    home: kit('#6a1aa8', '#f5b78a', 'solid', '#6a1aa8', '#6a1aa8', '#ffffff'), away: kit('#ffe600', '#6a1aa8', 'solid', '#6a1aa8', '#ffe600', '#6a1aa8'), gkKit: GK_BLACK,
+    formation: '4-4-2', rating: 65, seed: 5013, roster: blank(NUMS) },
+  { id: 'pe_sullana', name: 'Alianza Atlético', short: 'AAT', city: 'Sullana', crest: crest('pe_sullana', '#1a2f8a', '#ffffff'),
+    home: kit('#ffffff', '#0a2bb8', 'sash', '#0a2bb8', '#ffffff', '#0a2bb8'), away: kit('#0a14b0', '#2a7ae0', 'gradient', '#0a14b0', '#0a14b0', '#ffffff'), gkKit: GK_ORANGE,
+    formation: '4-3-3', rating: 64, seed: 5014, roster: blank(NUMS) },
+  { id: 'pe_jpii', name: 'Juan Pablo II College', short: 'JPII', city: 'Chongoyape', crest: crest('pe_jpii', '#2a1a8a', '#f2c200'),
+    home: kit('#f7e24a', '#e8b400', 'solid', '#f7e24a', '#f7e24a', '#5a3a10'), away: kit('#e81ea0', '#ffffff', 'gradient', '#f09ac8', '#f09ac8', '#ffffff'), gkKit: GK_BLACK,
+    formation: '4-4-2', rating: 63, seed: 5016, roster: blank(NUMS) },
+  { id: 'pe_adt', name: 'ADT de Tarma', short: 'ADT', city: 'Tarma', crest: crest('pe_adt', '#4fb4ec', '#f2c200'),
+    home: kit('#4fb4ec', '#ffffff', 'solid', '#ffffff', '#4fb4ec', '#ffffff'), away: kit('#1a1a1a', '#2aa8f0', 'solid', '#1a1a1a', '#1a1a1a', '#4fb4ec'), gkKit: GK_ORANGE,
+    formation: '4-4-2', rating: 62, seed: 5017, roster: blank(NUMS) },
+  { id: 'pe_cajamarca', name: 'FC Cajamarca', short: 'CAJ', city: 'Cajamarca', crest: crest('pe_cajamarca', '#c0201e', '#ffffff'),
+    home: kit('#c0201e', '#ffffff', 'stripes', '#ffffff', '#c0201e', '#ffffff'), away: kit('#f2f2f2', '#c0201e', 'solid', '#f2f2f2', '#f2f2f2', '#c0201e'), gkKit: GK_GREEN,
+    formation: '4-4-2', rating: 64, seed: 5018, roster: blank(NUMS) },
+  { id: 'pe_moquegua', name: 'Deportivo Moquegua', short: 'MOQ', city: 'Moquegua', crest: crest('pe_moquegua', '#1f5fc0', '#ffffff'),
+    home: kit('#1f5fc0', '#ffffff', 'solid', '#1f5fc0', '#1f5fc0', '#ffffff'), away: kit('#f2f2f2', '#1f5fc0', 'band', '#f2f2f2', '#f2f2f2', '#1f5fc0'), gkKit: GK_ORANGE,
+    formation: '4-4-2', rating: 63, seed: 5019, roster: blank(NUMS) },
+];
+
+const stadiums = [
+  stadium('pe_monumental', 'Nubank Parque', 43713, 'pe_universitario', { standColor: '#4a1a1e', look: { roof: 'ring', upper: 'both', palcos: true, seats: ['#f3e9d2', '#a31621'] } }),
+  stadium('pe_matute', 'Estadio Alejandro Villanueva', 33938, 'pe_alianza', { standColor: '#14224a', look: { roof: 'sides', upper: 'both', seats: ['#0b1f4f', '#ffffff'] } }),
+  stadium('pe_gallardo', 'Estádio Governador Magalhães Pinto', 61927, 'pe_cristal', { standColor: '#2a4a6a', look: { roof: 'sides', upper: 'none', seats: ['#6cb8e8', '#ffffff'] } }),
+  stadium('pe_unsa', 'Estadio Monumental de la UNSA', 40370, 'pe_melgar', { standColor: '#3a1a1a', look: { roof: 'sides', upper: 'both', seats: ['#c4161c', '#141414'] } }),
+  stadium('pe_garcilaso_cie', 'Estadio Garcilaso de la Vega', 42056, 'pe_cienciano', { timeOfDay: 'day', standColor: '#3a1a22', look: { roof: 'sides', upper: 'both', seats: ['#dc1228', '#ffffff'] } }),
+  stadium('pe_garcilaso_cus', 'Estadio Inca Garcilaso de la Vega', 45000, 'pe_cusco', { timeOfDay: 'day', standColor: '#4a3a22', look: { roof: 'sides', upper: 'both', seats: ['#c9a063', '#1a1a1a'] } }),
+  stadium('pe_garcilaso', 'Estadio Inca Garcilaso de la Vega', 45000, 'pe_garcilaso', { timeOfDay: 'day', standColor: '#2a4a5a', look: { roof: 'sides', upper: 'both', seats: ['#12aee3', '#ffffff'] } }),
+  stadium('pe_huancayo', 'Estadio Huancayo', 20000, 'pe_huancayo', { timeOfDay: 'day', standColor: '#4a1a1a', look: { roof: 'sides', upper: 'none', seats: ['#e3101f', '#ffffff'] } }),
+  stadium('pe_callao', 'Estádio Jornalista Mário Filho', 82238, 'pe_sportboys', { standColor: '#3a2a30', look: { roof: 'none', upper: 'none', seats: ['#f7b0cc', '#141414'] } }),
+  stadium('pe_chankas', 'Estadio Los Chankas', 14000, 'pe_chankas', { timeOfDay: 'day', standColor: '#3a2022', look: { roof: 'none', upper: 'none', seats: ['#6e1a28', '#f09a3a'] } }),
+  stadium('pe_utc', 'Estadio Héroes de San Ramón', 18000, 'pe_utc', { timeOfDay: 'day', standColor: '#3a2a2a', look: { roof: 'none', upper: 'none', seats: ['#a60f1f', '#f5ecdc'] } }),
+  stadium('pe_grau', 'Estadio Municipal Ambrosio Maco Arroyo', 8000, 'pe_grau', { standColor: '#4a2a1a', look: { roof: 'none', upper: 'none', seats: ['#d6202a', '#f2c200'] } }),
+  stadium('pe_cutervo', 'Juan Maldonado Gamarra', 13000, 'pe_comerciantes', { timeOfDay: 'day', standColor: '#2a1a4a', look: { roof: 'none', upper: 'none', seats: ['#6a1aa8', '#ffe600'] } }),
+  stadium('pe_sullana', 'Estadio Campeones del 36', 12000, 'pe_sullana', { standColor: '#14224a', look: { roof: 'none', upper: 'none', seats: ['#0a2bb8', '#ffffff'] } }),
+  stadium('pe_chongoyape', 'Complejo Deportivo Juan Pablo II', 3000, 'pe_jpii', { timeOfDay: 'day', standColor: '#4a4a1a', look: { roof: 'none', upper: 'none', seats: ['#f7e24a', '#e81ea0'] } }),
+  stadium('pe_tarma', 'Estadio Unión Tarma', 9100, 'pe_adt', { timeOfDay: 'day', standColor: '#1a3a5a', look: { roof: 'none', upper: 'none', seats: ['#4fb4ec', '#ffffff'] } }),
+  stadium('pe_cajamarca', 'Estadio Héroes de San Ramón', 18000, 'pe_cajamarca', { timeOfDay: 'day', standColor: '#4a1a1a', look: { roof: 'none', upper: 'none', seats: ['#c0201e', '#ffffff'] } }),
+  stadium('pe_moquegua', 'Estadio 25 de Noviembre', 21000, 'pe_moquegua', { timeOfDay: 'day', standColor: '#1a2a5a', look: { roof: 'none', upper: 'none', seats: ['#1f5fc0', '#ffffff'] } }),
+];
+
+const classics: ClassicDef[] = [
+  { a: 'pe_universitario', b: 'pe_alianza', name: 'Clásico del fútbol peruano' },
+  { a: 'pe_alianza', b: 'pe_cristal', name: 'Clásico Moderno' },
+  { a: 'pe_universitario', b: 'pe_cristal', name: 'Clásico Moderno' },
+  { a: 'pe_cienciano', b: 'pe_cusco', name: 'Clásico cusqueño' },
+  { a: 'pe_cienciano', b: 'pe_garcilaso', name: 'Clásico cusqueño' },
+  { a: 'pe_melgar', b: 'pe_cienciano', name: 'Clásico del Sur' },
+];
+
+export const DATA: LeagueData = { teams, stadiums, classics };

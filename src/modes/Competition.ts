@@ -13,6 +13,8 @@ export interface Fixture {
   /** Penales en eliminatorias. */
   pens?: [number, number];
   knockout: boolean;
+  /** Estadio neutral (id) si el partido no se juega en la cancha del local. */
+  venue?: string;
 }
 
 export interface StandingRow {

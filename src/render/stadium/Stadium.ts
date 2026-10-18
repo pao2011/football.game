@@ -37,6 +37,8 @@ const QUALITY: Record<GfxQuality, QualitySettings> = {
  * Coordinate system follows src/config/constants.ts (x along length, z across, y up).
  * Draw calls are kept to ~20 by merging all static geometry per material.
  */
+const HAZE_COLOR = new THREE.Color('#8fd3ff');
+
 export class Stadium {
   readonly group: THREE.Group;
   readonly keyLight: THREE.DirectionalLight;
@@ -60,6 +62,8 @@ export class Stadium {
   private su: StaticShadowUniforms;
   private prevFog: THREE.Fog | THREE.FogExp2 | null = null;
   private prevBackground: THREE.Scene['background'] = null;
+  private roofOn = true;
+  private fogOverride: { color: string; near: number; far: number } | null = null;
 
   constructor(data: StadiumData, quality: GfxQuality, homeColor: string, awayColor: string, names: [string, string] = ['LOCAL', 'VISITANTE']) {
     this.quality = quality;
@@ -71,7 +75,12 @@ export class Stadium {
 
     // ---- analytic stadium shadow (roof opening) uniforms
     this.su = makeStaticShadowUniforms();
-    this.su.uSOn.value = this.q.staticShadow && this.preset.staticShadow ? (data.timeOfDay === 'night' ? 2 : 1) : 0;
+    // los estadios pequeños no tienen techo: sin la sombra del anillo del techo
+    const look = data.look ?? {};
+    this.roofOn = this.q.roof && !data.small && look.roof !== 'none';
+    // la sombra analítica del techo supone el anillo completo
+    this.su.uSOn.value = this.q.staticShadow && this.preset.staticShadow && !data.small && (look.roof ?? 'ring') === 'ring' ? (data.timeOfDay === 'night' ? 2 : 1) : 0;
+    this.fogOverride = data.fog ? { color: '#5c6670', near: 25, far: 150 } : null;
     this.su.uSSun.value.copy(this.preset.sunDir);
     this.su.uSCore.value.set(CORE_A, CORE_B);
     this.su.uSR.value = STAND_R + ROOF_IN_D;
@@ -100,7 +109,8 @@ export class Stadium {
 
     // ---- stands, roof, boards, dugouts
     const night = data.timeOfDay === 'night';
-    const sb = buildStands({ quality, standColor: data.standColor, roofColor: data.roofColor, homeColor, awayColor, roof: this.q.roof, night });
+    const sb = buildStands({ quality, standColor: data.standColor, roofColor: data.roofColor, homeColor, awayColor, roof: this.roofOn, night, upper: !data.small,
+      roofSides: look.roof === 'sides', upperSides: look.upper, seats: look.seats, track: look.track, palcos: look.palcos });
     const staticMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0.05 });
     staticMat.onBeforeCompile = (sh) => patchStaticShadow(sh, this.su);
     this.materials.push(staticMat);
@@ -179,7 +189,7 @@ export class Stadium {
       pg.setAttribute('position', new THREE.Float32BufferAttribute(sb.flares, 3));
       const pm = new THREE.PointsMaterial({
         map: glowTex,
-        size: this.q.roof ? 7 : 10,
+        size: this.roofOn ? 7 : 10,
         sizeAttenuation: true,
         color: new THREE.Color('#dfe9ff').multiplyScalar(0.5 + lightsOn * 0.6),
         transparent: true,
@@ -204,7 +214,7 @@ export class Stadium {
     this.textures.push(this.crowd.atlas);
     this.materials.push(this.crowd.material);
     this.group.add(...this.crowd.meshes);
-    this.fans = new FanEffects(this.crowd.spots, { homeColor, awayColor, seed, quality, homeName: names[0], awayName: names[1] });
+    this.fans = new FanEffects(this.crowd.spots, { homeColor, awayColor, seed, quality, homeName: names[0], awayName: names[1], show: data.show });
     this.group.add(this.fans.group);
 
     // ---- sky
@@ -257,13 +267,34 @@ export class Stadium {
     this.keyLight.target.updateMatrixWorld();
   }
 
+  private baseFog: { color: THREE.Color; near: number; far: number } | null = null;
+  private hazeApplied = 0;
+
+  /** Bruma celeste del espectáculo: tiñe y acerca la niebla de la escena para que cubra toda la cancha (0 = sin bruma). */
+  private applyHaze(h: number): void {
+    const fog = this.scene?.fog;
+    if (!(fog instanceof THREE.Fog)) return;
+    if (!this.baseFog) {
+      if (h <= 0.001) return;
+      this.baseFog = { color: fog.color.clone(), near: fog.near, far: fog.far };
+    }
+    if (Math.abs(h - this.hazeApplied) < 0.004 && h > 0.001) return;
+    this.hazeApplied = h;
+    const b = this.baseFog;
+    fog.color.copy(b.color).lerp(HAZE_COLOR, 0.85 * h);
+    fog.near = b.near + (22 - b.near) * h;
+    fog.far = b.far + (190 - b.far) * h;
+    if (h <= 0.001) this.baseFog = null;
+  }
+
   attachTo(scene: THREE.Scene): void {
     this.scene = scene;
     if (this.group.parent !== scene) scene.add(this.group);
     for (const l of this.lights) if (l.parent !== scene) scene.add(l);
     this.prevFog = scene.fog;
     this.prevBackground = scene.background;
-    scene.fog = new THREE.Fog(new THREE.Color(this.preset.fog), this.preset.fogNear, this.preset.fogFar);
+    const fo = this.fogOverride;
+    scene.fog = fo ? new THREE.Fog(new THREE.Color(fo.color), fo.near, fo.far) : new THREE.Fog(new THREE.Color(this.preset.fog), this.preset.fogNear, this.preset.fogFar);
     scene.background = new THREE.Color(this.preset.skyHorizon);
   }
 
@@ -290,6 +321,7 @@ export class Stadium {
     this.flags.update(this.time);
     this.nets.update(d);
     this.fans.update(d, camera, viewH, this.excite);
+    this.applyHaze(this.fans.hazeLevel);
     camera.getWorldPosition(this.sky.position);
   }
 

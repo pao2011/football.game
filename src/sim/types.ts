@@ -11,6 +11,12 @@ export type AnimState =
   | 'lob' // pase elevado / centro
   | 'shoot' // disparo
   | 'header' // salto y cabezazo
+  | 'volley' // volea (balón a media altura)
+  | 'scissor' // tijera: remate de lado en el aire
+  | 'bicycle' // chilena: de espaldas, por encima de la cabeza
+  | 'diving' // cabezazo en plancha (lanzándose hacia delante)
+  | 'scorpion' // escorpión: de cara al suelo, golpe con el talón por encima de la espalda
+  | 'backheel' // taco de primera
   | 'tackle' // entrada de pie
   | 'slide' // barrida
   | 'fallen' // caído tras una falta / barrida
@@ -25,12 +31,13 @@ export type AnimState =
   | 'gk_kick' // despeje / saque de volea
   | 'celebrate' // celebración
   | 'dejected' // reacción a gol en contra / error
-  | 'trap' // control del balón
+  | 'trap' // control del balón (variant: 0 pie, 1 pecho, 2 muslo)
   | 'skill' // regate (variant: ver SKILL_KINDS)
   | 'ref_card' // árbitro: muestra la tarjeta en alto
   | 'ref_warn' // árbitro: aviso verbal (dedo índice)
   | 'ref_point' // árbitro: señala la dirección del tiro libre
-  | 'ref_whistle'; // árbitro: silba
+  | 'ref_whistle' // árbitro: silba
+  | 'shove'; // empujón / roce con un rival (clásicos y peleas)
 
 export interface AnimInfo {
   state: AnimState;
@@ -57,6 +64,9 @@ export type MatchEventType =
   | 'goal'
   | 'save'
   | 'foul'
+  | 'advantage' // el árbitro da la ley de la ventaja (no para el juego)
+  | 'handball' // mano (text: nombre del jugador)
+  | 'injury' // lesión (text: nombre; power: partidos que se perderá)
   | 'card'
   | 'offside'
   | 'out'
@@ -66,6 +76,8 @@ export type MatchEventType =
   | 'warning' // aviso verbal del árbitro
   | 'sub' // cambio (text: 'sale ⇄ entra')
   | 'chat' // mensaje rápido del rival online
+  | 'scuffle' // roce o empujón entre rivales (partido caliente)
+  | 'brawl' // pelea entre varios jugadores (kind: start | end)
   | 'phase';
 
 export interface MatchEvent {
@@ -80,7 +92,7 @@ export interface MatchEvent {
 }
 
 /** Regates disponibles. El índice es la variante de animación. */
-export const SKILL_KINDS = ['stepover', 'roulette', 'elastico', 'rainbow', 'dragback', 'fakeshot'] as const;
+export const SKILL_KINDS = ['stepover', 'roulette', 'elastico', 'rainbow', 'dragback', 'fakeshot', 'nutmeg', 'croqueta'] as const;
 export type SkillKind = (typeof SKILL_KINDS)[number];
 
 export const SKILL_NAMES: Record<SkillKind, string> = {
@@ -90,4 +102,6 @@ export const SKILL_NAMES: Record<SkillKind, string> = {
   rainbow: 'Sombrero',
   dragback: 'Arrastre',
   fakeshot: 'Amago de tiro',
+  nutmeg: 'Caño',
+  croqueta: 'Croqueta',
 };

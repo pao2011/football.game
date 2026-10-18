@@ -1,4 +1,5 @@
-// Genera ejecutables de escritorio con Electron para Linux y Windows (x64).
+// Genera ejecutables de escritorio con Electron para Linux, Windows y macOS.
+// PLATFORMS=linux,win32,darwin  ARCH=x64|arm64|universal (macOS: universal = Intel y Apple Silicon)
 import { packager } from '@electron/packager';
 import { cpSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 
@@ -15,7 +16,9 @@ const paths = await packager({
   name: 'FootballElite3D',
   executableName: 'FootballElite3D',
   platform: platforms,
-  arch: 'x64',
+  arch: process.env.ARCH ?? 'x64',
+  appBundleId: 'com.footballelite3d.game',
+  appCategoryType: 'public.app-category.sports-games',
   electronVersion: '33.2.1',
   overwrite: true,
   asar: true,

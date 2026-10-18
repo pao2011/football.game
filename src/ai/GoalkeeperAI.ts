@@ -5,7 +5,7 @@ import {
 import type { Match } from '../sim/Match';
 import type { Player } from '../sim/Player';
 import { clamp, dist2D } from '../util/math';
-import { buildGroundPass, buildLob } from './Actions';
+import { buildClearance, buildGroundPass, buildLob } from './Actions';
 import { interceptFor } from './Predict';
 
 /**
@@ -17,13 +17,15 @@ interface GKState {
   threatSince: number; // instante en que detectó el tiro (-1 si no hay)
   reactAt: number;
   committed: boolean;
+  /** Desde cuándo tiene el balón en los pies (-1 si no lo tiene). */
+  feetSince: number;
 }
 const state = new WeakMap<Player, GKState>();
 
 function gkState(p: Player): GKState {
   let s = state.get(p);
   if (!s) {
-    s = { threatSince: -1, reactAt: 0, committed: false };
+    s = { threatSince: -1, reactAt: 0, committed: false, feetSince: -1 };
     state.set(p, s);
   }
   return s;
@@ -50,7 +52,7 @@ export function requestDive(m: Match, gk: Player, dz: number, y: number, t: numb
   const team = m.teams[gk.team];
   const dirZ = Math.sign(dz) || 1;
   const lift = clamp(y - 0.5, 0, 1.6);
-  const speed = clamp(Math.abs(dz) / Math.max(t, 0.25) + 1.2, 2.5, 6.5);
+  const speed = clamp(Math.abs(dz) / Math.max(t, 0.25) + 1.0, 2.5, 4.6);
   // izquierda del arquero (mirando hacia el campo): con attackDir +1 mira a +x → izquierda = -z
   const facingX = team.attackDir;
   const leftZ = -facingX; // z del lado izquierdo del arquero
@@ -82,11 +84,28 @@ export function updateGoalkeeperAI(m: Match, gk: Player, dt: number) {
     return;
   }
 
+  // --- Con el balón en los pies (cesión o balón suelto): jugarlo enseguida, no quedarse quieto ---
+  if (m.owner !== gk) s.feetSince = -1;
+  if (m.owner === gk && m.phase === 'play') {
+    playWithFeet(m, gk);
+    return;
+  }
+
   const ball = m.ball.pos;
   if (m.phase !== 'play' && m.phase !== 'shootout') {
     // posición de espera durante reanudaciones
     const tx = goalX - side * (m.restart?.type === 'penalty' ? 0.1 : 1.5);
     moveTo(gk, tx, clamp(ball.z * 0.15, -2, 2), 0.6);
+    return;
+  }
+
+  // --- Pase de un compañero hacia él (cesión): salir a recibirlo, no esperarlo en la línea ---
+  const lt = m.lastTouch;
+  if (!m.owner && !m.ball.held && lt && lt.team === gk.team && lt.player !== gk && lt.deliberate && m.time - lt.time < 4 && m.intendedReceiver === gk) {
+    const ic = interceptFor(m, gk, 1.6, 0.08);
+    gk.sprinting = dist2D(gk.pos, ic.point) > 3;
+    moveTo(gk, ic.point.x, ic.point.z, 1, 0.1);
+    gk.desiredFacing = Math.atan2(ball.x - gk.pos.x, ball.z - gk.pos.z);
     return;
   }
 
@@ -98,7 +117,7 @@ export function updateGoalkeeperAI(m: Match, gk: Player, dt: number) {
     if (onTarget) {
       if (s.threatSince < 0) {
         s.threatSince = m.time;
-        const reaction = (m.teams[gk.team].human ? 0.17 : m.diff.gkReaction) * (1.45 - gk.data.attrs.goalkeeping / 100);
+        const reaction = ((m.teams[gk.team].human ? 0.17 : m.diff.gkReaction) + 0.1) * (1.45 - gk.data.attrs.goalkeeping / 100);
         s.reactAt = m.time + reaction;
       }
       if (m.time >= s.reactAt) {
@@ -205,6 +224,53 @@ function moveTo(p: Player, x: number, z: number, factor: number, arrive = 0.25) 
   }
   const sp = Math.min(factor * 8, d * 3);
   p.desiredVel.set((dx / d) * sp, 0, (dz / d) * sp);
+}
+
+/**
+ * Arquero con el balón en los pies: pase raso a un compañero libre o, si un rival se le echa encima o no hay
+ * nadie libre, despeje largo. Decide rápido (más rápido cuanto más cerca está el rival).
+ */
+function playWithFeet(m: Match, gk: Player) {
+  const team = m.teams[gk.team];
+  const opp = m.otherTeam(team.index).active;
+  let press = Infinity;
+  for (const o of opp) press = Math.min(press, dist2D(o.pos, gk.pos));
+  // mientras decide, se acomoda el balón sin avanzar hacia su arco
+  gk.desiredVel.set(0, 0, 0);
+  gk.desiredFacing = Math.atan2(team.attackDir, 0);
+  if (gk.busy) return;
+  const s = gkState(gk);
+  if (s.feetSince < 0 || m.time - s.feetSince > 6) s.feetSince = m.time;
+  const think = press < 5 ? 0 : press < 10 ? 0.25 : 0.5 + (team.human ? 0 : m.diff.reaction);
+  if (m.time - s.feetSince < think) return;
+  const err = team.human ? 1 : m.diff.kickError;
+  if (press > 4) {
+    const cands = team.active
+      .filter((q) => q !== gk)
+      .map((q) => {
+        let open = Infinity;
+        for (const o of opp) {
+          // rival cerca del receptor o en la línea de pase
+          open = Math.min(open, dist2D(o.pos, q.pos), distToSegment(o.pos, gk.pos, q.pos) * 1.6);
+        }
+        return { q, d: dist2D(q.pos, gk.pos), open };
+      })
+      .filter((c) => c.d > 7 && c.d < 35 && c.open > 5)
+      .sort((a, b) => b.open - a.open);
+    if (cands.length) {
+      const q = cands[0].q;
+      if (m.requestKick(gk, buildGroundPass(m, gk, q.pos.clone().addScaledVector(q.vel, 0.4), 0.1, err, q))) s.feetSince = -1;
+      return;
+    }
+  }
+  if (m.requestKick(gk, buildClearance(m, gk, err))) s.feetSince = -1;
+}
+
+function distToSegment(p: { x: number; z: number }, a: { x: number; z: number }, b: { x: number; z: number }) {
+  const abx = b.x - a.x;
+  const abz = b.z - a.z;
+  const t = clamp(((p.x - a.x) * abx + (p.z - a.z) * abz) / Math.max(1e-6, abx * abx + abz * abz), 0, 1);
+  return Math.hypot(p.x - (a.x + abx * t), p.z - (a.z + abz * t));
 }
 
 /** Saque del arquero: mano a un compañero libre o patada larga. */

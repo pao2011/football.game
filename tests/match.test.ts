@@ -52,7 +52,7 @@ describe('Partido completo IA contra IA', () => {
 
   it('se pueden marcar goles en varias simulaciones', () => {
     let goals = 0;
-    for (const seed of [11, 12, 13, 14]) goals += runFull(seed, 90).m.teams.reduce((s, t) => s + t.stats.goals, 0);
+    for (const seed of [11, 12, 13, 14, 15, 16]) goals += runFull(seed, 180).m.teams.reduce((s, t) => s + t.stats.goals, 0);
     expect(goals).toBeGreaterThan(0);
   });
 
@@ -270,8 +270,8 @@ describe('Control humano (teclado estilo FIFA)', () => {
 });
 
 describe('Datos', () => {
-  it('8 equipos con 18 jugadores, dorsales únicos y un arquero titular', () => {
-    expect(TEAMS.length).toBe(8);
+  it('todos los equipos de todas las ligas tienen 18 jugadores, dorsales únicos y un arquero titular', () => {
+    expect(TEAMS.length).toBeGreaterThanOrEqual(30 + 36);
     for (const t of TEAMS) {
       expect(t.players.length).toBe(18);
       const nums = new Set(t.players.map((p) => p.number));

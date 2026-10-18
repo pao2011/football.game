@@ -1,15 +1,20 @@
 import type { Bindings } from '../input/Input';
 import { FIFA_CLASSIC, WASD_ALT } from '../input/Input';
 import { loadJSON, saveJSON } from '../save/Storage';
+import { detectLang, type Lang } from '../i18n';
 import type { CameraStyle } from '../render/CameraDirector';
 import type { Difficulty } from '../data/types';
 
 export interface GameSettings {
+  /** Idioma de la interfaz. */
+  language: Lang;
   // Gráficos
   quality: 'low' | 'medium' | 'high';
   shadows: boolean;
   resolutionScale: number; // 0.5 .. 1
   antialias: boolean;
+  /** Bajar la resolución y las sombras solo si el equipo no llega a unos FPS fluidos. */
+  autoQuality: boolean;
   showRadar: boolean;
   showIndicators: boolean;
   cameraStyle: CameraStyle;
@@ -23,6 +28,18 @@ export interface GameSettings {
   musicVolume: number;
   sfxVolume: number;
   crowdVolume: number;
+  /** Voz del relator (0 = sin narración). */
+  commentaryVolume: number;
+  /** Volumen de los sonidos del balón (dentro de los efectos). */
+  ballVolume: number;
+  /** Volumen del silbato del árbitro (dentro de los efectos). */
+  refereeVolume: number;
+  /** Sonido silenciado (tecla M o botón en la pausa); no cambia los volúmenes guardados. */
+  muted: boolean;
+  /** Comentarista: rótulos de transmisión durante el partido. */
+  commentary: boolean;
+  /** Voz del comentarista (síntesis de voz del navegador, si la hay en español). */
+  commentaryVoice: boolean;
   /** Vibración del mando (gamepad) y del móvil en golpeos, entradas y goles. */
   vibration: boolean;
   // Controles
@@ -32,6 +49,7 @@ export interface GameSettings {
   passAssist: number;
   /** Asistencia de pase/tiro/defensa: automática (solo en pantallas táctiles), siempre o desactivada. */
   assist: 'auto' | 'on' | 'off';
+  /** Segundos que tarda en llenarse la barra de potencia. */
   powerBarTime: number;
   deadzone: number;
   sensitivity: number;
@@ -44,13 +62,17 @@ export interface GameSettings {
   // Partido por defecto
   halfMinutes: number;
   difficulty: Difficulty;
+  /** Versión del guardado (para actualizar valores por defecto antiguos). */
+  version?: number;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
+  language: 'es',
   quality: 'medium',
   shadows: true,
   resolutionScale: 1,
   antialias: true,
+  autoQuality: true,
   showRadar: true,
   showIndicators: true,
   cameraStyle: 'broadcast',
@@ -62,13 +84,19 @@ export const DEFAULT_SETTINGS: GameSettings = {
   musicVolume: 0.5,
   sfxVolume: 0.9,
   crowdVolume: 0.7,
+  commentaryVolume: 0.9,
+  ballVolume: 1,
+  refereeVolume: 1,
   vibration: true,
+  commentary: true,
+  commentaryVoice: false,
+  muted: false,
   bindings: structuredClone(FIFA_CLASSIC),
   preset: 'fifa',
   autoSwitch: true,
   passAssist: 1,
   assist: 'auto',
-  powerBarTime: 1,
+  powerBarTime: 0.6,
   deadzone: 0.18,
   sensitivity: 1,
   autoSubs: false,
@@ -86,7 +114,7 @@ function mobileDefaults(): Partial<GameSettings> {
 
 export function loadSettings(): GameSettings {
   const s = loadJSON<Partial<GameSettings>>('settings', {});
-  const merged = { ...structuredClone(DEFAULT_SETTINGS), ...mobileDefaults(), ...s };
+  const merged = { ...structuredClone(DEFAULT_SETTINGS), ...mobileDefaults(), language: detectLang(), ...s };
   // completar asignaciones nuevas que no existían en guardados antiguos
   // las acciones nuevas (p. ej. regates) toman la tecla del esquema elegido, sin pisar teclas ya usadas
   const presetDefaults = structuredClone(merged.preset === 'wasd' ? WASD_ALT : FIFA_CLASSIC);
@@ -96,6 +124,11 @@ export function loadSettings(): GameSettings {
     if (!saved[k]) presetDefaults[k] = presetDefaults[k].filter((code) => !used.has(code));
   }
   merged.bindings = { ...presetDefaults, ...saved };
+  // v2: la barra de potencia se llena más rápido (antes 1 s por defecto)
+  if ((merged.version ?? 1) < 2) {
+    if (merged.powerBarTime >= 1) merged.powerBarTime = DEFAULT_SETTINGS.powerBarTime;
+    merged.version = 2;
+  }
   return merged;
 }
 
