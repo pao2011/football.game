@@ -3,6 +3,23 @@ import type { Dict } from './index';
 // Traducción al inglés. Las claves son el texto en español tal como aparece en pantalla.
 export const en: Dict = {
   exact: {
+    '¡LO LOGRASTE!': 'YOU DID IT!',
+    'NUEVO CAMPEÓN': 'NEW CHAMPION',
+    'toca para continuar': 'tap to continue',
+    '🔍 Buscar equipo': '🔍 Search team',
+    'Buscar por nombre, sigla o ciudad…': 'Search by name, short name or city…',
+    'Elige el equipo local': 'Pick the home team',
+    'Elige el equipo visitante': 'Pick the away team',
+    'Elige el equipo': 'Pick the team',
+    'Equipos propios': 'Custom teams',
+    'A - Z': 'A - Z',
+    'Z - A': 'Z - A',
+    'Mejor valorados': 'Best rated',
+    'Menor valoración': 'Lowest rated',
+    'Por liga': 'By league',
+    'Orden': 'Sort',
+    'No hay equipos que coincidan con la búsqueda.': 'No teams match your search.',
+    ' equipos': ' teams',
     'PULSA ENTER PARA EMPEZAR': 'PRESS ENTER TO START',
     'TOCA PARA EMPEZAR': 'TAP TO START',
     '🎮 ¿Usas mando? Pulsa cualquier botón para conectarlo': '🎮 Using a controller? Press any button to connect it',

@@ -28,6 +28,8 @@ import { Career, SQUAD_MAX, SQUAD_MIN, buyPlayer, marketOffers, playerPrice, sel
 import { Tournament } from '../modes/Tournament';
 import type { Fixture, StandingRow } from '../modes/Competition';
 import { crestSVG, kitSVG } from './Crest';
+import { ceremonySeen, markCeremonySeen, playCeremony } from './Ceremony';
+import { TEAM_SORTS, leagueLabel, searchTeams, teamLeagueId, type TeamSort } from './teamSearch';
 import { Screen, el, esc, type Handlers } from './dom';
 import { isTouchDevice } from '../input/TouchControls';
 import { gamepadBlocked } from '../input/pads';
@@ -270,8 +272,13 @@ export class App {
       <svg class="sp-goal" viewBox="0 0 200 100" preserveAspectRatio="none"><g class="sp-net">${net}</g><path class="sp-frame" d="M20 98V8h160v90"/></svg>
       <div class="sp-ball"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#fff" stroke="#111" stroke-width="1"/><path d="M12 6.5l4.2 3-1.6 5h-5.2l-1.6-5z" fill="#111"/><path d="M12 6.5V1.5M16.2 9.5l4.6-1.6M14.6 14.5l3 4M9.4 14.5l-3 4M7.8 9.5L3.2 7.9" stroke="#111" stroke-width="1"/></svg></div>
       <div class="sp-flash"></div>
-      <div class="sp-logo"><span class="s1">SOFFTI'S FOOTBALL</span><span class="s2">GAME</span></div>
-      <div class="sp-sub">11 contra 11 · IA táctica · física real</div>`;
+      <div class="sp-beams"><i></i><i></i><i></i><i></i></div>
+      <div class="sp-floor"></div>
+      <div class="sp-sparks">${Array.from({ length: 28 }, (_, i) => `<i style="--a:${(i * 360) / 28 + (i % 2) * 6}deg;--d:${22 + (i % 5) * 7}vmin;--s:${0.6 + (i % 3) * 0.3};--h:${i % 3 === 0 ? '#f6b40e' : i % 3 === 1 ? '#fff' : '#74acdf'}"></i>`).join('')}</div>
+      <div class="sp-logo"><span class="s1">${[...`SOFFTI'S FOOTBALL`].map((ch, i) => (ch === ' ' ? '<b class="sp-sp"></b>' : `<b style="--i:${i}">${ch}</b>`)).join('')}</span><span class="sp-stripe"><i></i><i></i><i></i></span><span class="s2">GAME</span><span class="sp-shine"></span></div>
+      <div class="sp-sub">11 contra 11 · IA táctica · física real</div>
+      <div class="sp-progress"><i></i></div>
+      <div class="sp-skip">toca para saltar</div>`;
     document.body.appendChild(el);
     let done = false;
     const end = () => {
@@ -283,7 +290,7 @@ export class App {
     };
     el.addEventListener('pointerdown', end);
     window.addEventListener('keydown', end, true);
-    setTimeout(end, 3300);
+    setTimeout(end, 4700);
   }
 
   /** En móvil: pantalla completa y orientación horizontal (si el navegador lo permite). */
@@ -343,7 +350,7 @@ export class App {
   // Partido rápido
   // ==================================================================
 
-  private teamCard(t: TeamData, side: string, prefix: string, extra = '') {
+  private teamCard(t: TeamData, side: string, prefix: string, extra = '', search = false) {
     const stars = '★'.repeat(Math.max(1, Math.round((t.rating - 70) / 3.5))).padEnd(5, '☆');
     return `<div class="panel team-picker">
       <div class="side">${side}</div>
@@ -352,8 +359,73 @@ export class App {
       <div class="stars">${stars} <span class="muted">${t.rating}</span></div>
       <div class="muted">${esc(t.city)} · ${t.formation}</div>
       ${extra}
+      ${search ? `<button class="btn ts-open" data-act="${prefix}Search">🔍 Buscar equipo</button>` : ''}
     </div>`;
   }
+
+  /**
+   * Buscador de equipos: por nombre (texto), por liga y con varios órdenes (A-Z, Z-A, valoración, por liga).
+   * `onPick` recibe el id del equipo elegido; `back` vuelve a la pantalla anterior sin cambiar nada.
+   */
+  private teamSearchScreen(opts: { title: string; crumb: string; teams: TeamData[]; current?: string; league?: string; onPick: (id: string) => void; back: () => void }) {
+    const leagueIds = [...new Set(opts.teams.map(teamLeagueId))];
+    const leagueOpts = [...LEAGUES.map((l) => l.id).filter((id) => leagueIds.includes(id)), ...(leagueIds.includes('') ? ['custom'] : [])];
+    let league = opts.league && leagueOpts.includes(opts.league) ? opts.league : 'all';
+    let sort: TeamSort = this.teamSort;
+    let query = '';
+    let limit = 60;
+    const handlers: Handlers = { back: opts.back };
+    const listHTML = () => {
+      const found = searchTeams(opts.teams, query, league, sort);
+      const shown = found.slice(0, limit);
+      for (const k of Object.keys(handlers)) if (k.startsWith('pick-')) delete handlers[k];
+      let html = '';
+      let last = '\0';
+      for (const t of shown) {
+        const lid = teamLeagueId(t);
+        if (sort === 'league' && lid !== last) { last = lid; html += `<div class="ts-head">${esc(leagueLabel(lid))}</div>`; }
+        handlers[`pick-${t.id}`] = () => opts.onPick(t.id);
+        html += `<button class="ts-item${t.id === opts.current ? ' cur' : ''}" data-act="pick-${esc(t.id)}">${crestSVG(t, 34)}<span class="ts-n">${esc(t.name)}<small>${esc(leagueLabel(lid))}</small></span><span class="ts-r num">${t.rating}</span></button>`;
+      }
+      if (!shown.length) html = '<p class="muted" style="padding:12px">No hay equipos que coincidan con la búsqueda.</p>';
+      if (found.length > shown.length) html += `<button class="btn" data-act="more" style="grid-column:1/-1">Mostrar más (${found.length - shown.length})</button>`;
+      return { html, count: found.length };
+    };
+    const first = listHTML();
+    const s = this.show(`
+      <div class="screen-header"><div><div class="crumb">${opts.crumb}</div><h2>${opts.title}</h2></div></div>
+      <div class="ts-bar">
+        <input class="text-in ts-q" type="search" placeholder="Buscar por nombre, sigla o ciudad…" autocomplete="off" autocapitalize="off" spellcheck="false" data-enter="pickFirst" aria-label="Buscar equipo">
+        <label class="ts-sel">Liga<select class="ts-league"><option value="all">Todas las ligas</option>${leagueOpts.map((id) => `<option value="${id}"${id === league ? ' selected' : ''}>${esc(id === 'custom' ? 'Equipos propios' : getLeague(id).name)}</option>`).join('')}</select></label>
+        <label class="ts-sel">Orden<select class="ts-sort">${TEAM_SORTS.map((o) => `<option value="${o.id}"${o.id === sort ? ' selected' : ''}>${o.label}</option>`).join('')}</select></label>
+        <span class="ts-count muted num">${first.count}</span>
+      </div>
+      <div class="screen-body"><div class="ts-list">${first.html}</div></div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, handlers, opts.back);
+    const list = s.root.querySelector('.ts-list') as HTMLElement;
+    const count = s.root.querySelector('.ts-count') as HTMLElement;
+    const redraw = () => { const r = listHTML(); list.innerHTML = r.html; count.textContent = String(r.count); s.applyFocus(); };
+    handlers.more = () => { limit += 80; redraw(); };
+    handlers.pickFirst = () => {
+      const f = searchTeams(opts.teams, query, league, sort)[0];
+      if (f) opts.onPick(f.id);
+    };
+    const q = s.root.querySelector('.ts-q') as HTMLInputElement;
+    q.addEventListener('input', () => { query = q.value; limit = 60; redraw(); });
+    (s.root.querySelector('.ts-league') as HTMLSelectElement).addEventListener('change', (e) => { league = (e.target as HTMLSelectElement).value; limit = 60; redraw(); });
+    (s.root.querySelector('.ts-sort') as HTMLSelectElement).addEventListener('change', (e) => { sort = this.teamSort = (e.target as HTMLSelectElement).value as TeamSort; limit = 60; redraw(); });
+    if (!isTouchDevice()) q.focus();
+    s.root.querySelector('.ts-item.cur')?.scrollIntoView({ block: 'center' });
+  }
+  private teamSort: TeamSort = 'az';
+
+  /** Ceremonia de campeón (una sola vez por copa): se lanza al abrir el menú de la competición ya terminada. */
+  private celebrate(key: string, champion: TeamData | null, cup: string, detail: string, user: boolean, logo?: string) {
+    if (!champion || ceremonySeen(key)) return;
+    markCeremonySeen(key);
+    setTimeout(() => playCeremony(document.body, { team: champion, cup, detail, user, logo, audio: this.audio }), 450);
+  }
+  private trainIdx = 0;
 
   quickMatchScreen() {
     const q = this.quick;
@@ -366,9 +438,9 @@ export class App {
       <div class="screen-header"><div><div class="crumb">PARTIDO RÁPIDO</div><h2>Configuración del encuentro</h2></div></div>
       <div class="screen-body">
         <div class="versus">
-          ${this.teamCard(home, 'LOCAL', 'home', `<div class="kits">${kitSVG(home.home)}</div>`)}
+          ${this.teamCard(home, 'LOCAL', 'home', `<div class="kits">${kitSVG(home.home)}</div>`, true)}
           <div class="vs">VS</div>
-          ${this.teamCard(away, 'VISITANTE', 'away', `<div class="kits">${kitSVG(awayKit)}</div>`)}
+          ${this.teamCard(away, 'VISITANTE', 'away', `<div class="kits">${kitSVG(awayKit)}</div>`, true)}
         </div>
         <div class="panel" style="margin-top:16px">
           ${this.stepper('Liga', q.league && q.league !== 'all' ? getLeague(q.league).name : 'Todas las ligas', 'lg')}
@@ -406,6 +478,11 @@ export class App {
       if (q.home === q.away && p.length > 1) q[key] = p[(i + d + p.length) % p.length];
       s.refresh(render());
     };
+    const search = (key: 'home' | 'away') => this.teamSearchScreen({
+      title: key === 'home' ? 'Elige el equipo local' : 'Elige el equipo visitante', crumb: 'PARTIDO RÁPIDO', teams: TEAMS, current: TEAMS[q[key]].id, league: q.league,
+      onPick: (id) => { q[key] = TEAMS.findIndex((t) => t.id === id); if (q.home === q.away) q[key === 'home' ? 'away' : 'home'] = pool().find((i) => i !== q[key]) ?? q.away; if (key === 'home') ownGround(); this.quickMatchScreen(); },
+      back: () => this.quickMatchScreen(),
+    });
     const LG = ['all', ...LEAGUES.filter((l) => l.teamIds().length).map((l) => l.id)];
     const league = (d: number) => {
       q.league = LG[(LG.indexOf(q.league ?? 'all') + d + LG.length) % LG.length];
@@ -420,6 +497,8 @@ export class App {
       lgNext: () => league(1),
       homePrev: () => { step('home', -1); ownGround(); },
       homeNext: () => { step('home', 1); ownGround(); },
+      homeSearch: () => search('home'),
+      awaySearch: () => search('away'),
       awayPrev: () => step('away', -1),
       awayNext: () => step('away', 1),
       stadPrev: () => cycle('stadium', STADIUMS.length, -1),
@@ -1532,18 +1611,23 @@ export class App {
   // ==================================================================
 
   /** Elegir un equipo (opcionalmente solo entre los ids dados, p. ej. los de una liga). */
-  private pickTeamScreen(title: string, crumb: string, onPick: (id: string) => void, back: () => void, only?: string[]) {
+  private pickTeamScreen(title: string, crumb: string, onPick: (id: string) => void, back: () => void, only?: string[], startIdx = 0) {
     const list = only ? TEAMS.filter((t) => only.includes(t.id)) : TEAMS;
-    let idx = 0;
+    let idx = startIdx;
     const render = () => `
       <div class="screen-header"><div><div class="crumb">${crumb}</div><h2>${title}</h2></div></div>
       <div class="screen-body" style="display:flex;justify-content:center;align-items:center">
-        ${this.teamCard(list[idx], 'TU EQUIPO', 'team', `<div class="kits">${kitSVG(list[idx].home)}${kitSVG(list[idx].away)}</div>`)}
+        ${this.teamCard(list[idx], 'TU EQUIPO', 'team', `<div class="kits">${kitSVG(list[idx].home)}${kitSVG(list[idx].away)}</div>`, true)}
       </div>
       <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn primary" data-act="ok">Confirmar</button></div>`;
     const s = this.show(render(), {
       teamPrev: () => { idx = (idx + list.length - 1) % list.length; s.refresh(render()); },
       teamNext: () => { idx = (idx + 1) % list.length; s.refresh(render()); },
+      teamSearch: () => this.teamSearchScreen({
+        title, crumb, teams: list, current: list[idx].id,
+        onPick: (id) => { idx = Math.max(0, list.findIndex((t) => t.id === id)); this.pickTeamScreen(title, crumb, onPick, back, only, idx); },
+        back: () => this.pickTeamScreen(title, crumb, onPick, back, only, idx),
+      }),
       ok: () => onPick(list[idx].id),
       back,
     }, back);
@@ -1588,6 +1672,7 @@ export class App {
     const next = t.nextUserFixture();
     const knock = st.fixtures.filter((f) => f.knockout);
     const champion = st.champion ? getTeam(st.champion) : null;
+    if (champion) this.celebrate(`tournament:${st.seed}`, champion, 'Copa Élite', '', champion.id === st.userTeam);
     const status = champion
       ? `<div class="panel" style="text-align:center"><div class="crumb" style="color:var(--warn)">CAMPEÓN</div><div style="display:flex;justify-content:center;margin:10px">${crestSVG(champion, 110)}</div><h2>${esc(champion.name)}</h2>${champion.id === st.userTeam ? '<p>¡Has ganado la Copa Élite! 🏆</p>' : '<p class="muted">Mejor suerte la próxima vez.</p>'}</div>`
       : st.eliminated ? '<div class="panel"><b>Tu equipo quedó eliminado.</b> <span class="muted">El torneo se completó automáticamente.</span></div>' : '';
@@ -1676,6 +1761,7 @@ export class App {
       const recent = st.fixtures.filter((f) => f.played).slice(-8).reverse();
       const history = st.history.map((h) => `<div class="row"><span>Temporada ${h.season}</span><span>${h.champions.map((ch, i) => `${esc(fmt.torneos[i] ?? 'Torneo')}: ${esc(lookup(ch).short)}`).join(' · ')}${fmt.annual ? ` · Anual: ${esc(lookup(h.champion).short)}` : ''} · Tu puesto: ${h.userPosition}.º</span></div>`).join('');
       const champ = c.torneoChampion;
+      if (champ) this.celebrate(`career:${st.seed}:${st.season}:${st.torneoIdx}`, lookup(champ), `${c.torneoName} · ${c.league.name}`, `Temporada ${st.season}`, champ === st.userTeam, c.league.logo);
       body = `<div class="grid2"><div>
           <div class="panel"><h3>${zoneTitle(c.userZone)}</h3>${this.tableHTML(c.standings(), st.userTeam, lookup)}${zoneNote}</div>
           ${st.news?.length ? `<div class="panel" style="margin-top:16px"><h3>Noticias</h3>${st.news.slice(0, 6).map((n) => `<div class="muted" style="font-size:13px;margin-bottom:4px">${esc(n)}</div>`).join('')}</div>` : ''}
@@ -1770,6 +1856,7 @@ export class App {
     const NAMES = { grupo: isLeague ? 'Tabla de la fase de liga' : 'Mi grupo', grupos: 'Todos los grupos', eliminatorias: 'Eliminatorias' } as const;
     const view = VIEWS.includes(this.continentalView) ? this.continentalView : 'grupo';
     const champion = st.champion ? getTeam(st.champion) : null;
+    if (champion) this.celebrate(`cup:${st.cup}:${st.seed}`, champion, c.def.name, `${c.def.confed ?? ""}`, champion.id === st.userTeam, leagueLogo(st.cup));
     const status = champion
       ? `<div class="panel" style="text-align:center"><div class="crumb" style="color:var(--warn)">CAMPEÓN</div><div style="display:flex;justify-content:center;margin:10px">${crestSVG(champion, 110)}</div><h2>${esc(champion.name)}</h2>${champion.id === st.userTeam ? `<p>¡Has ganado la ${esc(c.def.name)}! 🏆</p>` : '<p class="muted">Mejor suerte la próxima vez.</p>'}</div>`
       : st.eliminated ? '<div class="panel"><b>Tu equipo quedó eliminado.</b> <span class="muted">Simula el resto para ver al campeón.</span></div>' : '';
@@ -1920,7 +2007,7 @@ export class App {
 
   trainingScreen() {
     this.setMenuMode(true);
-    let idx = 0;
+    let idx = this.trainIdx;
     const start = (mode: 'free' | 'penalties' | 'freekicks') => {
       const home = TEAMS[idx];
       const away = TEAMS[(idx + 1) % TEAMS.length];
@@ -1932,7 +2019,7 @@ export class App {
     const render = () => `
       <div class="screen-header"><div><div class="crumb">ENTRENAMIENTO</div><h2>Campo de práctica</h2></div></div>
       <div class="screen-body"><div class="grid2">
-        ${this.teamCard(TEAMS[idx], 'EQUIPO', 'team')}
+        ${this.teamCard(TEAMS[idx], 'EQUIPO', 'team', '', true)}
         <div class="menu-list">
           <button class="menu-item" data-act="free">Práctica libre<small>Pases, conducción y tiros contra el arquero rival</small></button>
           <button class="menu-item" data-act="pens">Penales<small>Apunta, carga la potencia y engaña al arquero</small></button>
@@ -1944,6 +2031,10 @@ export class App {
     const s = this.show(render(), {
       teamPrev: () => { idx = (idx + TEAMS.length - 1) % TEAMS.length; s.refresh(render()); },
       teamNext: () => { idx = (idx + 1) % TEAMS.length; s.refresh(render()); },
+      teamSearch: () => this.teamSearchScreen({
+        title: 'Elige el equipo', crumb: 'ENTRENAMIENTO', teams: TEAMS, current: TEAMS[idx].id,
+        onPick: (id) => { this.trainIdx = TEAMS.findIndex((t) => t.id === id); this.trainingScreen(); }, back: () => this.trainingScreen(),
+      }),
       free: () => start('free'),
       pens: () => start('penalties'),
       fk: () => start('freekicks'),

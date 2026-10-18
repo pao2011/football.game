@@ -95,6 +95,10 @@ export class Screen {
     if ((window as any).__captureKey) return;
     // escribiendo en un campo de texto: solo Enter (acción del campo) y Esc
     const field = e.target as HTMLElement | null;
+    if (field && field.tagName === 'SELECT') {
+      if (e.code === 'Escape') field.blur();
+      return; // las listas desplegables usan sus propias teclas
+    }
     if (field && (field.tagName === 'INPUT' || field.tagName === 'TEXTAREA')) {
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
         e.preventDefault();
