@@ -12,7 +12,7 @@ import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from 
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
 import { LEAGUE_IDS, classicName, matchHeat } from '../data/classics';
 import sudamericanaLogo from '../assets/leagues/sudamericana.webp?url';
-import conmebolLogo from '../assets/leagues/conmebol.webp?url';
+import libertadoresLogo from '../assets/leagues/libertadores.webp?url';
 import { LEAGUES, getLeague } from '../data/leagues';
 import { GENERIC_STADIUMS, STADIUMS, getStadium, stadiumForHome } from '../data/stadiums';
 import { BUILTIN_TEAM_COUNT, TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
@@ -1747,10 +1747,10 @@ export class App {
       for (const cup of ls) {
         handlers[`cup-${cup.id}`] = () => this.pickTeamScreen(`Elige tu club para la ${cup.name}`, 'COPAS CONMEBOL', (id) => { this.continental = Continental.create(cup.id, id); this.continentalView = 'grupo'; this.continentalHub(); }, () => this.continentalHub(), cupEligibleTeams());
       }
-      const logo = (id: CupId) => `<img src="${id === 'sudamericana' ? sudamericanaLogo : conmebolLogo}" alt="" style="height:46px;width:46px;object-fit:contain;flex:none">`;
+      const logo = (id: CupId) => `<img src="${id === 'sudamericana' ? sudamericanaLogo : libertadoresLogo}" alt="" style="height:46px;width:46px;object-fit:contain;flex:none">`;
       this.show(`
         <div class="screen-header"><div><div class="crumb">COPAS CONMEBOL</div><h2>Elige la copa</h2></div></div>
-        <div class="screen-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:860px;margin:0 auto">${ls.map((cup) => `<button class="menu-item" data-act="cup-${cup.id}" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:12px 14px">${logo(cup.id)}<span>${esc(cup.name)}<small>32 clubes · 8 grupos · final en cancha neutral</small></span></button>`).join('')}</div></div>
+        <div class="screen-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:860px;margin:0 auto">${ls.map((cup) => `<button class="menu-item" data-act="cup-${cup.id}" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:12px 14px">${logo(cup.id)}<span>${esc(cup.name)}<small>32 clubes · 8 grupos · ida y vuelta · final neutral</small></span></button>`).join('')}</div></div>
         <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, handlers, () => this.mainMenu());
       return;
     }
@@ -1773,11 +1773,11 @@ export class App {
     else {
       const rounds = [...new Set(knock.map((f) => f.round))];
       body = rounds.length
-        ? rounds.map((r) => { const fx = knock.filter((f) => f.round === r); return `<div class="panel" style="margin-bottom:12px"><h3>${esc(fx[0].stage)}</h3>${fx.map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('')}${fx[0].venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(fx[0].venue).name)}</div>` : ''}</div>`; }).join('')
-        : '<div class="panel"><p class="muted">Pasan los dos primeros de cada grupo: octavos, cuartos, semifinales y final a partido único (con prórroga y penales). La final es en cancha neutral.</p></div>';
+        ? rounds.map((r) => { const fx = knock.filter((f) => f.round === r); return `<div class="panel" style="margin-bottom:12px"><h3>${esc(fx[0].stage)}</h3>${fx.map((f) => this.fixtureHTML(f, st.userTeam, lookup) + (f.leg === 2 && f.played ? `<div class="muted" style="font-size:12px;text-align:center">Global: ${c.aggregate(f)[0]} - ${c.aggregate(f)[1]}</div>` : '')).join('')}${fx[0].venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(fx[0].venue).name)}</div>` : ''}</div>`; }).join('')
+        : '<div class="panel"><p class="muted">Pasan los dos primeros de cada grupo: octavos, cuartos y semifinales a ida y vuelta (define el global, con prórroga y penales). La final es a partido único en cancha neutral.</p></div>';
     }
     this.show(`
-      <div class="screen-header"><div><div class="crumb">COPAS CONMEBOL · ${esc(getTeam(st.userTeam).name)}</div><h2 style="display:flex;align-items:center;gap:12px"><img src="${st.cup === 'sudamericana' ? sudamericanaLogo : conmebolLogo}" alt="" style="height:46px;width:46px;object-fit:contain"><span>${esc(c.def.name)}</span></h2></div></div>
+      <div class="screen-header"><div><div class="crumb">COPAS CONMEBOL · ${esc(getTeam(st.userTeam).name)}</div><h2 style="display:flex;align-items:center;gap:12px"><img src="${st.cup === 'sudamericana' ? sudamericanaLogo : libertadoresLogo}" alt="" style="height:46px;width:46px;object-fit:contain"><span>${esc(c.def.name)}</span></h2></div></div>
       <div class="screen-body">
         ${status}
         ${next ? `<div class="panel" style="margin-bottom:16px"><div class="crumb">PRÓXIMO PARTIDO · ${esc(next.stage.toUpperCase())}</div>${this.fixtureHTML(next, st.userTeam, lookup)}${next.venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(next.venue).name)}</div>` : ''}</div>` : ''}
@@ -1804,7 +1804,9 @@ export class App {
         this.playMatch({
           home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: side,
           halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty,
-          extraTime: next.knockout, penalties: next.knockout, neutral: !!next.venue, weather: randomWeather(Math.random()),
+          // la ida no tiene prórroga; la vuelta y la final sí (la vuelta se define por el global)
+          extraTime: next.knockout && next.leg !== 1, penalties: next.knockout && next.leg !== 1, neutral: !!next.venue,
+          aggregate: next.leg === 2 ? c.firstLegGoals(next) : undefined, weather: randomWeather(Math.random()),
           homeLineup: side === 0 ? st.availability && this.continental?.matchLineup() : undefined,
           awayLineup: side === 1 ? st.availability && this.continental?.matchLineup() : undefined,
         }, this.stadiumForCtx({ mode: 'continental', fixture: next }), { mode: 'continental', fixture: next });

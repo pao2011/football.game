@@ -140,7 +140,11 @@ export class Continental {
     f.played = true;
     f.homeGoals = homeGoals;
     f.awayGoals = awayGoals;
-    if (f.knockout && homeGoals === awayGoals) f.pens = pens && pens[0] !== pens[1] ? pens : [5, 4];
+    // la final y la vuelta se definen por penales si siguen empatadas (la vuelta, por el global)
+    if (f.knockout && f.leg !== 1) {
+      const tied = f.leg === 2 ? this.aggregate(f)[0] === this.aggregate(f)[1] : homeGoals === awayGoals;
+      if (tied) f.pens = pens && pens[0] !== pens[1] ? pens : [5, 4];
+    }
     this.simulateRound(f.round);
     this.advance();
     if (this.state.eliminated && !this.state.champion) this.simulateAll();
@@ -148,18 +152,39 @@ export class Continental {
     return msgs;
   }
 
+  /** Global de una vuelta: [goles del local de la vuelta, goles del visitante de la vuelta] sumando la ida. */
+  aggregate(f2: Fixture): [number, number] {
+    const f1 = this.state.fixtures.find((x) => x.tie === f2.tie && x.leg === 1);
+    if (!f1 || !f1.played) return [f2.homeGoals, f2.awayGoals];
+    return [f2.homeGoals + f1.awayGoals, f2.awayGoals + f1.homeGoals];
+  }
+
+  /** Goles de la ida de [local, visitante] de la vuelta (para el partido que se juega). */
+  firstLegGoals(f2: Fixture): [number, number] {
+    const f1 = this.state.fixtures.find((x) => x.tie === f2.tie && x.leg === 1);
+    return f1 && f1.played ? [f1.awayGoals, f1.homeGoals] : [0, 0];
+  }
+
+  /** Ganador de una llave (ida y vuelta) o de la final. */
+  private tieWinner(f: Fixture): string {
+    if (f.leg !== 2) return winnerOf(f)!;
+    const [h, a] = this.aggregate(f);
+    if (h !== a) return h > a ? f.home : f.away;
+    return f.pens && f.pens[0] > f.pens[1] ? f.home : f.away;
+  }
+
   /** Simula también el partido del usuario. */
   simulateUserFixture() {
     const f = this.nextUserFixture();
     if (!f) return;
-    const r = quickSim(getTeam(f.home), getTeam(f.away), new Rng(this.state.seed + f.round * 17 + 5), f.knockout);
+    const r = this.simFixture(f, new Rng(this.state.seed + f.round * 17 + 5));
     this.recordUserResult(f, r.h, r.a, r.pens);
   }
 
   /** Simula todo lo que queda cuando el usuario ya no juega. */
   simulateAll() {
     let guard = 0;
-    while (!this.state.champion && !this.nextUserFixture() && guard++ < 20) {
+    while (!this.state.champion && !this.nextUserFixture() && guard++ < 30) {
       const f = this.state.fixtures.find((x) => !x.played);
       if (!f) break;
       this.simulateRound(f.round);
@@ -168,19 +193,33 @@ export class Continental {
     this.save();
   }
 
-  private simulateRound(round: number) {
-    const rng = new Rng(this.state.seed + round * 31);
-    for (const f of this.state.fixtures) {
-      if (f.played || f.round > round) continue;
-      const r = quickSim(getTeam(f.home), getTeam(f.away), rng, f.knockout);
-      f.played = true;
-      f.homeGoals = r.h;
-      f.awayGoals = r.a;
-      f.pens = r.pens;
+  /** Simula un partido sin jugar: la ida y los grupos pueden empatar; la vuelta y la final se definen por penales. */
+  private simFixture(f: Fixture, rng: Rng) {
+    const final = f.knockout && f.leg !== 1;
+    const r = quickSim(getTeam(f.home), getTeam(f.away), rng, f.knockout && f.leg !== 2 && f.leg !== 1);
+    f.played = true;
+    f.homeGoals = r.h;
+    f.awayGoals = r.a;
+    f.pens = r.pens;
+    if (final && f.leg === 2) {
+      const [h, a] = this.aggregate(f);
+      f.pens = undefined;
+      if (h === a) {
+        let ph = 0, pa = 0;
+        for (let i = 0; i < 5; i++) { if (rng.next() < 0.76) ph++; if (rng.next() < 0.76) pa++; }
+        while (ph === pa) { if (rng.next() < 0.76) ph++; if (rng.next() < 0.76) pa++; }
+        f.pens = [ph, pa];
+      }
     }
+    return { h: f.homeGoals, a: f.awayGoals, pens: f.pens };
   }
 
-  /** Genera cada ronda eliminatoria cuando termina la anterior; si el usuario queda afuera, simula el resto. */
+  private simulateRound(round: number) {
+    const rng = new Rng(this.state.seed + round * 31);
+    for (const f of this.state.fixtures) if (!f.played && f.round <= round) this.simFixture(f, rng);
+  }
+
+  /** Genera cada ronda eliminatoria cuando termina la anterior (octavos, cuartos y semifinales a ida y vuelta; final única). */
   private advance() {
     const st = this.state;
     for (let guard = 0; guard < 8; guard++) {
@@ -197,34 +236,45 @@ export class Continental {
         if (!ties.some(([a, b]) => a === st.userTeam || b === st.userTeam)) st.eliminated = true;
       } else {
         const last = Math.max(...ko.map((f) => f.round));
-        const winners = ko.filter((f) => f.round === last).map((f) => winnerOf(f)!);
-        if (winners.length === 1) {
+        // los partidos que cierran cada llave (la vuelta, o la final), en el orden de la llave
+        const closing = ko.filter((f) => f.round === last);
+        const winners = closing.map((f) => this.tieWinner(f));
+        if (winners.length === 1 && closing[0].leg !== 2) {
           st.champion = winners[0];
           break;
         }
         const ties: [string, string][] = [];
         for (let i = 0; i < winners.length; i += 2) ties.push([winners[i], winners[i + 1]]);
-        this.addRound(last - GROUP_ROUNDS, ties);
+        this.addRound(KNOCKOUT_NAMES.indexOf(closing[0].stage.replace(/ · .*$/, '')) + 1, ties);
         if (!winners.includes(st.userTeam)) st.eliminated = true;
       }
     }
   }
 
+  /** Agrega una ronda eliminatoria: ida y vuelta (el mejor ubicado cierra en su casa) o, en la final, un solo partido neutral. */
   private addRound(idx: number, ties: [string, string][], tables?: StandingRow[][]) {
     const st = this.state;
     const isFinal = ties.length === 1;
-    // el mejor de la fase de grupos es local
     const rank = new Map<string, number>();
     const all = (tables ?? st.groups.map((_, i) => this.standings(i))).flat().sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
     all.forEach((r, i) => rank.set(r.team, i));
+    const base = GROUP_ROUNDS + 1 + idx * 2; // octavos 7-8, cuartos 9-10, semifinales 11-12, final 13
+    const legs1: Fixture[] = [];
+    const legs2: Fixture[] = [];
     ties.forEach(([x, y], i) => {
-      let home = x;
-      let away = y;
-      if (!isFinal && (rank.get(y) ?? 99) < (rank.get(x) ?? 99) && idx > 0) { home = y; away = x; }
-      st.fixtures.push({
-        id: `K${idx}-${i}`, home, away, round: GROUP_ROUNDS + idx + 1, stage: isFinal ? 'Final · cancha neutral' : KNOCKOUT_NAMES[idx],
-        played: false, homeGoals: 0, awayGoals: 0, knockout: true, venue: isFinal ? this.def.finalVenue : undefined,
-      });
+      // x es el mejor sembrado de la llave salvo que y le gane en la tabla de grupos
+      let better = x;
+      let worse = y;
+      if ((rank.get(y) ?? 99) < (rank.get(x) ?? 99)) { better = y; worse = x; }
+      const tie = `K${idx}-${i}`;
+      const blank = { played: false, homeGoals: 0, awayGoals: 0, knockout: true };
+      if (isFinal) {
+        st.fixtures.push({ ...blank, id: tie, home: x, away: y, round: GROUP_ROUNDS + 1 + idx * 2, stage: 'Final · cancha neutral', venue: this.def.finalVenue });
+      } else {
+        legs1.push({ ...blank, id: `${tie}a`, home: worse, away: better, round: base, stage: `${KNOCKOUT_NAMES[idx]} · Ida`, tie, leg: 1 });
+        legs2.push({ ...blank, id: `${tie}b`, home: better, away: worse, round: base + 1, stage: `${KNOCKOUT_NAMES[idx]} · Vuelta`, tie, leg: 2 });
+      }
     });
+    st.fixtures.push(...legs1, ...legs2);
   }
 }

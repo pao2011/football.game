@@ -171,9 +171,18 @@ describe('Copas CONMEBOL', () => {
     }
     expect(c.state.champion).toBeTruthy();
     const ko = c.state.fixtures.filter((f) => f.knockout);
-    expect(ko.length).toBe(8 + 4 + 2 + 1);
+    // octavos, cuartos y semifinales a ida y vuelta (28 partidos) y una final
+    expect(ko.length).toBe((8 + 4 + 2) * 2 + 1);
     expect(ko[ko.length - 1].venue).toBeTruthy();
-    expect(ko.map((f) => f.stage)).toContain(KNOCKOUT_NAMES[0]);
-    expect(ko.every((f) => f.played && (f.homeGoals !== f.awayGoals || f.pens))).toBe(true);
+    expect(ko[ko.length - 1].leg).toBeUndefined();
+    expect(ko.map((f) => f.stage)).toContain(`${KNOCKOUT_NAMES[0]} · Ida`);
+    expect(ko.every((f) => f.played)).toBe(true);
+    // cada vuelta se define por el global; si empata, hay penales
+    for (const f2 of ko.filter((f) => f.leg === 2)) {
+      const [h, a] = c.aggregate(f2);
+      if (h === a) expect(f2.pens).toBeTruthy();
+    }
+    const fin = ko[ko.length - 1];
+    if (fin.homeGoals === fin.awayGoals) expect(fin.pens).toBeTruthy();
   });
 });

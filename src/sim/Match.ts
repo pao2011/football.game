@@ -47,6 +47,8 @@ export interface MatchConfig {
   classic?: string;
   /** Sede neutral (final): no suenan los cánticos ni el espectáculo de ningún club. */
   neutral?: boolean;
+  /** Partido de vuelta: goles de la ida de [local, visitante] de este partido; la prórroga y los penales se deciden por el global. */
+  aggregate?: [number, number];
   /** Modo entrenamiento. */
   training?: 'free' | 'penalties' | 'freekicks';
   /** Clima (por defecto despejado). */
@@ -1841,11 +1843,13 @@ export class Match {
       this.enterPhase('halftime');
       return;
     }
-    if (a === b && this.half === 2 && this.config.extraTime) {
+    const [ag0, ag1] = this.config.aggregate ?? [0, 0];
+    const tied = a + ag0 === b + ag1;
+    if (tied && this.half === 2 && this.config.extraTime) {
       this.enterPhase('halftime');
       return;
     }
-    if (a === b && this.config.penalties) {
+    if (tied && this.config.penalties) {
       this.startShootout();
       return;
     }

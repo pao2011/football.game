@@ -205,6 +205,12 @@ export class Career {
       st.regularRounds = Math.max(...fx.map((f) => f.round));
       return fx;
     }
+    // zonas de distinto tamaño (cantidad impar de clubes): cada una juega la suya, sin interzonales
+    if (st.zones.A.length !== st.zones.B.length) {
+      const fx = [...roundRobin(shuffle(st.zones.A), double, stage, `${tag}a`), ...roundRobin(shuffle(st.zones.B), double, stage, `${tag}b`)];
+      st.regularRounds = Math.max(...fx.map((f) => f.round));
+      return fx.sort((x, y) => x.round - y.round);
+    }
     // dos zonas: se mezclan las parejas (igual en las dos zonas: las fechas libres de las parejas coinciden)
     const pairs = shuffle(st.zones.A.map((a, i) => ({ a, b: st.zones.B[i] })));
     const za = roundRobin(pairs.map((p) => p.a), double, stage, `${tag}a`);
