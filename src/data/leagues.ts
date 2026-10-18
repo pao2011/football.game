@@ -45,6 +45,18 @@ export const LEAGUES: LeagueDef[] = [
     format: { zones: 1, rr: 'single', torneos: ['Torneo Apertura', 'Torneo Finalización'], playoffs: 8, neutralFinal: false, annual: true } },
   { id: 'peru', name: 'Liga 1 de Perú', country: 'Perú', teamIds: () => ids('peru'),
     format: { zones: 1, rr: 'single', torneos: ['Torneo Apertura', 'Torneo Clausura'], playoffs: 0, neutralFinal: false, annual: true } },
+  { id: 'chile', name: 'Primera División de Chile', country: 'Chile', teamIds: () => ids('chile'),
+    format: { zones: 1, rr: 'double', torneos: ['Campeonato Nacional'], playoffs: 0, neutralFinal: false, annual: false } },
+  { id: 'paraguay', name: 'Primera División de Paraguay', country: 'Paraguay', teamIds: () => ids('paraguay'),
+    format: { zones: 1, rr: 'single', torneos: ['Torneo Apertura', 'Torneo Clausura'], playoffs: 0, neutralFinal: false, annual: true } },
+  { id: 'uruguay', name: 'Liga AUF Uruguaya', country: 'Uruguay', teamIds: () => ids('uruguay'),
+    format: { zones: 1, rr: 'single', torneos: ['Torneo Apertura', 'Torneo Clausura'], playoffs: 0, neutralFinal: false, annual: true } },
+  { id: 'ecuador', name: 'LigaPro Ecuador', country: 'Ecuador', teamIds: () => ids('ecuador'),
+    format: { zones: 1, rr: 'single', torneos: ['Primera Etapa', 'Segunda Etapa'], playoffs: 0, neutralFinal: false, annual: true } },
+  { id: 'bolivia', name: 'División Profesional de Bolivia', country: 'Bolivia', teamIds: () => ids('bolivia'),
+    format: { zones: 1, rr: 'single', torneos: ['Torneo Apertura', 'Torneo Clausura'], playoffs: 0, neutralFinal: false, annual: true } },
+  { id: 'venezuela', name: 'Liga FUTVE de Venezuela', country: 'Venezuela', teamIds: () => ids('venezuela'),
+    format: { zones: 1, rr: 'double', torneos: ['Liga FUTVE'], playoffs: 0, neutralFinal: false, annual: false } },
 ];
 
 export function getLeague(id: string | undefined): LeagueDef {

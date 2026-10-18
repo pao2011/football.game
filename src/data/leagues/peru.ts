@@ -74,15 +74,15 @@ const teams: TeamSeed[] = [
 ];
 
 const stadiums = [
-  stadium('pe_monumental', 'Nubank Parque', 43713, 'pe_universitario', { standColor: '#4a1a1e', look: { roof: 'ring', upper: 'both', palcos: true, seats: ['#f3e9d2', '#a31621'] } }),
+  stadium('pe_monumental', 'Estadio Monumental de Lima', 80093, 'pe_universitario', { standColor: '#4a1a1e', look: { roof: 'ring', upper: 'both', palcos: true, seats: ['#f3e9d2', '#a31621'] } }),
   stadium('pe_matute', 'Estadio Alejandro Villanueva', 33938, 'pe_alianza', { standColor: '#14224a', look: { roof: 'sides', upper: 'both', seats: ['#0b1f4f', '#ffffff'] } }),
-  stadium('pe_gallardo', 'Estádio Governador Magalhães Pinto', 61927, 'pe_cristal', { standColor: '#2a4a6a', look: { roof: 'sides', upper: 'none', seats: ['#6cb8e8', '#ffffff'] } }),
+  stadium('pe_gallardo', 'Estadio Alberto Gallardo', 11600, 'pe_cristal', { standColor: '#2a4a6a', look: { roof: 'sides', upper: 'none', seats: ['#6cb8e8', '#ffffff'] } }),
   stadium('pe_unsa', 'Estadio Monumental de la UNSA', 40370, 'pe_melgar', { standColor: '#3a1a1a', look: { roof: 'sides', upper: 'both', seats: ['#c4161c', '#141414'] } }),
   stadium('pe_garcilaso_cie', 'Estadio Garcilaso de la Vega', 42056, 'pe_cienciano', { timeOfDay: 'day', standColor: '#3a1a22', look: { roof: 'sides', upper: 'both', seats: ['#dc1228', '#ffffff'] } }),
   stadium('pe_garcilaso_cus', 'Estadio Inca Garcilaso de la Vega', 45000, 'pe_cusco', { timeOfDay: 'day', standColor: '#4a3a22', look: { roof: 'sides', upper: 'both', seats: ['#c9a063', '#1a1a1a'] } }),
   stadium('pe_garcilaso', 'Estadio Inca Garcilaso de la Vega', 45000, 'pe_garcilaso', { timeOfDay: 'day', standColor: '#2a4a5a', look: { roof: 'sides', upper: 'both', seats: ['#12aee3', '#ffffff'] } }),
   stadium('pe_huancayo', 'Estadio Huancayo', 20000, 'pe_huancayo', { timeOfDay: 'day', standColor: '#4a1a1a', look: { roof: 'sides', upper: 'none', seats: ['#e3101f', '#ffffff'] } }),
-  stadium('pe_callao', 'Estádio Jornalista Mário Filho', 82238, 'pe_sportboys', { standColor: '#3a2a30', look: { roof: 'none', upper: 'none', seats: ['#f7b0cc', '#141414'] } }),
+  stadium('pe_callao', 'Estadio Miguel Grau', 17000, 'pe_sportboys', { standColor: '#3a2a30', look: { roof: 'none', upper: 'none', seats: ['#f7b0cc', '#141414'] } }),
   stadium('pe_chankas', 'Estadio Los Chankas', 14000, 'pe_chankas', { timeOfDay: 'day', standColor: '#3a2022', look: { roof: 'none', upper: 'none', seats: ['#6e1a28', '#f09a3a'] } }),
   stadium('pe_utc', 'Estadio Héroes de San Ramón', 18000, 'pe_utc', { timeOfDay: 'day', standColor: '#3a2a2a', look: { roof: 'none', upper: 'none', seats: ['#a60f1f', '#f5ecdc'] } }),
   stadium('pe_grau', 'Estadio Municipal Ambrosio Maco Arroyo', 8000, 'pe_grau', { standColor: '#4a2a1a', look: { roof: 'none', upper: 'none', seats: ['#d6202a', '#f2c200'] } }),

@@ -113,7 +113,7 @@ const teams: TeamSeed[] = [
 ];
 
 const stadiums: StadiumData[] = [
-  stadium('br_maracana', 'Estadio Alejandro Villanueva', 33938, 'br_flamengo', { standColor: '#7a1a1a', look: { roof: 'ring', upper: 'both', seats: ['#d71920', K, W] } }),
+  stadium('br_maracana', 'Estádio Jornalista Mário Filho', 82238, 'br_flamengo', { standColor: '#7a1a1a', look: { roof: 'ring', upper: 'both', seats: ['#d71920', K, W] } }),
   stadium('br_allianz', 'Nubank Parque', 43713, 'br_palmeiras', { standColor: '#14452c', look: { roof: 'ring', upper: 'both', seats: ['#006437', W] } }),
   stadium('br_nilton_santos', 'Estádio Olímpico Nilton Santos', 46931, 'br_botafogo', { standColor: '#1c1c1c', look: { roof: 'ring', upper: 'both', track: '#9a4a3a', seats: [K, W] } }),
   stadium('br_mineirao', 'Estádio Governador Magalhães Pinto', 61927, 'br_cruzeiro', { standColor: '#1a3a7a', look: { roof: 'ring', upper: 'both', seats: ['#1b4fa0', W] } }),
@@ -122,13 +122,13 @@ const stadiums: StadiumData[] = [
   stadium('br_maracana_flu', 'Estádio Jornalista Mário Filho', 82238, 'br_fluminense', { standColor: '#5a1a2e', look: { roof: 'ring', upper: 'both', seats: ['#7a1f3d', '#00704a', W] } }),
   stadium('br_morumbi', 'MorumBIS', 72039, 'br_saopaulo', { standColor: '#4a2a2a', look: { roof: 'sides', upper: 'both', seats: ['#d71920', W, K] } }),
   stadium('br_beira_rio', 'Estádio Beira-Rio', 50848, 'br_internacional', { standColor: '#8a1a24', look: { roof: 'ring', upper: 'both', seats: ['#d71920', W] } }),
-  stadium('br_fonte_nova', 'Juan Maldonado Gamarra', 13000, 'br_bahia', { standColor: '#1a3a7a', look: { roof: 'ring', upper: 'both', seats: ['#0a4ea3', '#d71920', W] } }),
+  stadium('br_fonte_nova', 'Arena Fonte Nova', 47364, 'br_bahia', { standColor: '#1a3a7a', look: { roof: 'ring', upper: 'both', seats: ['#0a4ea3', '#d71920', W] } }),
   stadium('br_arena_gremio', 'Arena do Grêmio', 60540, 'br_gremio', { standColor: '#1a5a7a', look: { roof: 'ring', upper: 'both', seats: ['#00a3e0', K, W] } }),
   stadium('br_sao_januario', 'Estádio São Januário', 24584, 'br_vasco', { standColor: '#222222', timeOfDay: 'day', look: { roof: 'none', upper: 'none', seats: [K, W] } }),
   stadium('br_vila_belmiro', 'Estádio Urbano Caldeira', 16068, 'br_santos', { standColor: '#2a2a2a', timeOfDay: 'day', look: { roof: 'none', upper: 'none', seats: [W, K] } }),
   stadium('br_nabi_abi_chedid', 'Estádio Municipal Cicero De Souza Marques', 12000, 'br_bragantino', { standColor: '#8a1a24', timeOfDay: 'day', look: { roof: 'none', upper: 'none', seats: [W, '#d71920'] } }),
-  stadium('br_barradao', 'Estadio Los Chankas', 14000, 'br_vitoria', { standColor: '#5a1a1a', look: { roof: 'none', upper: 'far', seats: ['#d71920', K] } }),
-  stadium('br_maiao', 'Estadio de Fútbol Jaraguay de Montería', 12000, 'br_mirassol', { standColor: '#1d5a34', timeOfDay: 'day', look: { roof: 'none', upper: 'none', seats: ['#f7d417', '#0a7a3a'] } }),
+  stadium('br_barradao', 'Estádio Manoel Barradas', 30793, 'br_vitoria', { standColor: '#5a1a1a', look: { roof: 'none', upper: 'far', seats: ['#d71920', K] } }),
+  stadium('br_maiao', 'Estádio Municipal José María de Campos Maia', 14534, 'br_mirassol', { standColor: '#1d5a34', timeOfDay: 'day', look: { roof: 'none', upper: 'none', seats: ['#f7d417', '#0a7a3a'] } }),
   stadium('br_ligga', 'Estádio Mário Celso Petraglia', 42372, 'br_athleticopr', { standColor: '#7a1a1a', look: { roof: 'ring', upper: 'both', seats: ['#d71920', '#111111'] } }),
   stadium('br_conda', 'Arena Condá', 22600, 'br_chapecoense', { standColor: '#1d5a34', timeOfDay: 'day', look: { roof: 'none', upper: 'none', seats: ['#0a7a3a', '#ffffff'] } }),
   stadium('br_couto_pereira', 'Estádio Major Antônio Couto Pereira', 40502, 'br_coritiba', { standColor: '#1d5a34', look: { roof: 'none', upper: 'both', seats: ['#0a7a3a', '#ffffff'] } }),
