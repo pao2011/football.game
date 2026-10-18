@@ -41,13 +41,9 @@ export const LEAGUES: LeagueDef[] = [
     format: { zones: 2, rr: 'single', torneos: ['Primera Nacional'], playoffs: 8, neutralFinal: true, annual: false } },
   { id: 'brasil', name: 'Brasileirão Série A', country: 'Brasil', logo: brasilLogo, teamIds: () => ids('brasil'),
     format: { zones: 1, rr: 'double', torneos: ['Brasileirão'], playoffs: 0, neutralFinal: false, annual: false } },
-  { id: 'chile', name: 'Primera División de Chile', country: 'Chile', teamIds: () => ids('chile'),
-    format: { zones: 1, rr: 'double', torneos: ['Campeonato Nacional'], playoffs: 0, neutralFinal: false, annual: false } },
   { id: 'colombia', name: 'Liga BetPlay Dimayor', country: 'Colombia', logo: colombiaLogo, teamIds: () => ids('colombia'),
     format: { zones: 1, rr: 'single', torneos: ['Torneo Apertura', 'Torneo Finalización'], playoffs: 8, neutralFinal: false, annual: true } },
   { id: 'peru', name: 'Liga 1 de Perú', country: 'Perú', teamIds: () => ids('peru'),
-    format: { zones: 1, rr: 'single', torneos: ['Torneo Apertura', 'Torneo Clausura'], playoffs: 0, neutralFinal: false, annual: true } },
-  { id: 'paraguay', name: 'Primera División de Paraguay', country: 'Paraguay', teamIds: () => ids('paraguay'),
     format: { zones: 1, rr: 'single', torneos: ['Torneo Apertura', 'Torneo Clausura'], playoffs: 0, neutralFinal: false, annual: true } },
 ];
 

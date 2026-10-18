@@ -3,6 +3,7 @@ import type { FormationId, KitData, PlayerData, Position, TeamData } from './typ
 import { CRESTS } from './crests';
 import { ROSTERS } from './rosters';
 import { EXTRA_LEAGUES } from './leagues/index';
+import { TM_ROSTERS } from './leagues/tmRosters';
 
 // Los 30 equipos de la Liga Profesional Argentina 2026 con sus colores, escudos y plantillas reales (rosters.ts).
 
@@ -215,7 +216,11 @@ export function buildTeam(s: TeamSeed): TeamData {
 }
 
 // plantilla real de cada club (Clausura 2026); Belgrano trae la suya en la semilla
-export const TEAMS: TeamData[] = SEEDS.map((s) => buildTeam(!s.roster && ROSTERS[s.id] ? { ...s, ...ROSTERS[s.id] } : s));
+export const TEAMS: TeamData[] = SEEDS.map((s) => {
+  const tm = TM_ROSTERS[s.id];
+  if (tm) return buildTeam({ ...s, ...tm }); // las ligas de Transfermarkt traen formación, nivel y plantilla
+  return buildTeam(!s.roster && ROSTERS[s.id] ? { ...s, ...ROSTERS[s.id] } : s);
+});
 /** Equipos del juego (sin los creados en el editor): los únicos que se usan en el modo online. */
 export const BUILTIN_TEAM_COUNT = SEEDS.length;
 
