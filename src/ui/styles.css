@@ -780,3 +780,69 @@ body.touch .commentary { bottom: auto; top: 84px; font-size: 14px; padding: 6px 
 @keyframes ccTitle { from { opacity: 0; transform: scale(2.2); filter: blur(8px); } to { opacity: 1; transform: none; filter: none; } }
 @keyframes ccShine { 0%, 55% { opacity: 0; transform: translateX(-20px); } 70% { opacity: 0.7; } 100% { opacity: 0; transform: translateX(90px); } }
 @media (max-height: 520px) { .cc-stage { flex-direction: column; } .cc-trophy { width: 26vh; } .cc-kicker { letter-spacing: 0.3em; } }
+.net-info { position: absolute; top: 60px; right: 14px; padding: 3px 9px; border-radius: 3px; background: rgba(8,13,46,0.82); font-family: var(--num); font-size: 11px; font-weight: 700; letter-spacing: 0.03em; color: var(--ok); border-left: 3px solid currentColor; }
+.net-info[data-level="1"] { color: var(--warn); }
+.net-info[data-level="2"] { color: var(--danger); }
+
+/* ---------- Transiciones y animaciones suaves ---------- */
+:root { --ease: cubic-bezier(.22, .8, .3, 1); --ease-pop: cubic-bezier(.3, 1.5, .5, 1); }
+/* Fundido cruzado entre pantallas */
+.screen { animation: screenIn 0.42s var(--ease) both; will-change: opacity, transform; }
+.screen.screen-out { animation: screenOut 0.2s ease-in forwards; pointer-events: none; z-index: 0; }
+@keyframes screenOut { to { opacity: 0; transform: translateY(-8px) scale(0.985); } }
+/* Entrada escalonada de los elementos de una pantalla recién abierta */
+.screen.enter .menu-item { animation: itemIn 0.5s var(--ease) both; }
+.screen.enter .menu-list > :nth-child(1) { animation-delay: 0.04s; } .screen.enter .menu-list > :nth-child(2) { animation-delay: 0.08s; }
+.screen.enter .menu-list > :nth-child(3) { animation-delay: 0.12s; } .screen.enter .menu-list > :nth-child(4) { animation-delay: 0.16s; }
+.screen.enter .menu-list > :nth-child(5) { animation-delay: 0.2s; } .screen.enter .menu-list > :nth-child(6) { animation-delay: 0.24s; }
+.screen.enter .menu-list > :nth-child(7) { animation-delay: 0.28s; } .screen.enter .menu-list > :nth-child(8) { animation-delay: 0.32s; }
+.screen.enter .menu-list > :nth-child(n+9) { animation-delay: 0.36s; }
+.screen.enter .screen-header { animation: headIn 0.5s var(--ease) both; }
+.screen.enter .screen-body > .panel, .screen.enter .screen-body > .grid2 > .panel, .screen.enter .screen-body > .versus > .panel, .screen.enter .ts-item { animation: panelIn 0.55s var(--ease) both; }
+.screen.enter .screen-body > .panel:nth-child(2), .screen.enter .grid2 > .panel:nth-child(2), .screen.enter .versus > .panel:nth-child(3) { animation-delay: 0.08s; }
+.screen.enter .screen-body > .panel:nth-child(3) { animation-delay: 0.16s; }
+.screen.enter .screen-footer { animation: panelIn 0.5s 0.15s var(--ease) both; }
+.screen.enter .logo { animation: logoIn 0.8s var(--ease) both; }
+.screen.enter .ts-item:nth-child(-n+24) { animation-duration: 0.4s; }
+@keyframes itemIn { from { opacity: 0; transform: translateX(-26px); } }
+@keyframes headIn { from { opacity: 0; transform: translateY(-14px); } }
+@keyframes panelIn { from { opacity: 0; transform: translateY(18px) scale(0.985); } }
+@keyframes logoIn { from { opacity: 0; transform: translateY(16px) scale(0.96); filter: blur(6px); } }
+/* Botones y elementos de menú: respuesta suave */
+.menu-item { transition: transform 0.28s var(--ease), background 0.2s, border-color 0.2s, box-shadow 0.28s; }
+.menu-item::after { content: '›'; position: absolute; right: 16px; top: 50%; transform: translate(-8px, -52%); opacity: 0; font-size: 26px; color: var(--accent); transition: opacity 0.2s, transform 0.28s var(--ease); }
+.menu-item:hover::after, .menu-item.focus::after { opacity: 0.9; transform: translate(0, -52%); }
+.menu-item:hover, .menu-item.focus { box-shadow: 0 10px 28px rgba(0,0,0,0.35), 0 0 0 1px rgba(116,172,223,0.18) inset; }
+.menu-item:active { transform: translateX(8px) scale(0.985); transition-duration: 0.08s; }
+.menu-item::before { transition: transform 0.28s var(--ease); transform-origin: 50% 100%; }
+.btn { transition: transform 0.22s var(--ease), box-shadow 0.22s, border-color 0.2s, filter 0.2s, background 0.2s; position: relative; overflow: hidden; }
+.btn:active:not(:disabled) { transform: translateY(0) scale(0.97); transition-duration: 0.06s; }
+.btn.primary::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; background: linear-gradient(100deg, transparent, rgba(255,255,255,0.5), transparent); transform: translateX(-140%) skewX(-18deg); }
+.btn.primary:hover::after, .btn.primary.focus::after { transform: translateX(340%) skewX(-18deg); transition: transform 0.7s var(--ease); }
+.btn.primary:hover, .btn.primary.focus { filter: brightness(1.06); }
+.panel { transition: border-color 0.25s, box-shadow 0.25s; }
+.stepper button { transition: transform 0.15s var(--ease), border-color 0.2s, background 0.2s; }
+.stepper button:hover { background: rgba(116,172,223,0.18); transform: scale(1.08); }
+.stepper button:active { transform: scale(0.92); }
+.team-picker .nav button { transition: transform 0.2s var(--ease), background 0.2s, border-color 0.2s; }
+.team-picker .nav button:hover { transform: scale(1.12); border-color: var(--accent); background: rgba(116,172,223,0.18); }
+.team-picker .crest svg { animation: crestIn 0.45s var(--ease-pop); }
+@keyframes crestIn { from { opacity: 0; transform: scale(0.8) rotate(-4deg); } }
+.ts-item { transition: transform 0.2s var(--ease), background 0.2s, border-color 0.2s; }
+.ts-item:hover, .ts-item.focus { transform: translateY(-2px); }
+.fixture, .tbl tr { transition: background 0.2s; }
+.tbl tr:hover td { background: rgba(255,255,255,0.04); }
+/* Ventanas y avisos emergentes */
+.modal { animation: modalIn 0.45s var(--ease-pop) both; }
+@keyframes modalIn { from { opacity: 0; transform: translateY(24px) scale(0.94); } }
+.pad-toast { animation: toastIn 0.4s var(--ease-pop) both; }
+@keyframes toastIn { from { opacity: 0; transform: translate(-50%, -16px) scale(0.92); } }
+/* Barras de progreso y resultados */
+.loading .bar > div { transition: width 0.6s var(--ease); }
+.stat-row .v { transition: color 0.2s; }
+.menu-bg::before { will-change: transform; }
+/* Respeta la preferencia del sistema de reducir animaciones */
+@media (prefers-reduced-motion: reduce) {
+  .screen, .screen.enter *, .modal, .team-picker .crest svg, .menu-item, .btn { animation: none !important; transition-duration: 0.01s !important; }
+  .menu-bg::before { animation: none; }
+}

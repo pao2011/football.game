@@ -32,6 +32,10 @@ export interface OnlineLink {
   send(d: object): void;
   /** Nombre del rival (para los avisos). */
   opponentName?: string;
+  /** Hay enlace directo con el rival (permite más instantáneas por segundo). */
+  direct?(): boolean;
+  /** Latencia (ms) hasta el rival, si se conoce. */
+  latency?(): number;
   /** Espectador: recibe el partido del anfitrión pero no manda nada ni controla a nadie. */
   spectator?: boolean;
 }
@@ -210,6 +214,12 @@ export class MatchRunner {
     }
     this.hud.showRadar = settings.showRadar;
     this.hud.popups = settings.popups;
+    if (online && !online.spectator) {
+      this.hud.netInfo = () => {
+        const ms = Math.round(online.latency?.() ?? 0);
+        return { text: `${ms ? `${ms} ms` : '— ms'} · ${online.direct?.() ? 'directo' : 'servidor'}`, level: !ms || ms > 150 ? 2 : ms > 80 ? 1 : 0 };
+      };
+    }
     if (config.humanTeam >= 0 && !config.training && !config.versus) {
       this.achievements = new AchievementTracker(this.match, config.humanTeam as 0 | 1);
       this.achievements.onUnlock = (a) => this.hud.showBanner(`🏆 ${a.icon} ${escapeHtml(a.name)}`, `Logro desbloqueado · ${escapeHtml(a.desc)}`, '#ffd23f', 3.2);
@@ -325,6 +335,7 @@ export class MatchRunner {
         m.step(SIM_DT);
         for (const e of m.events) this.handleEvent(e);
         if (this.hostSync) {
+          this.hostSync.hz = this.online?.direct?.() ? 45 : 30;
           this.hostSync.collect(m.events);
           const snap = this.hostSync.step(SIM_DT);
           if (snap) this.online!.send(snap);

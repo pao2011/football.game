@@ -32,6 +32,10 @@ export class HUD {
   private replayTag: HTMLElement;
   private shootout: HTMLElement;
   private fps: HTMLElement;
+  private netEl: HTMLElement;
+  /** Online: texto con la latencia y el tipo de conexión (se pone desde el MatchRunner). */
+  netInfo: (() => { text: string; level: 0 | 1 | 2 }) | null = null;
+  private netAcc = 0;
   private bannerUntil = 0;
   private toastUntil = 0;
   private lastText = new Map<HTMLElement, string>();
@@ -75,7 +79,8 @@ export class HUD {
       <div class="hint hidden"></div>
       <div class="replay-tag hidden">REPETICIÓN</div>
       <div class="shootout hidden"></div>
-      <div class="fps hidden"></div>`;
+      <div class="fps hidden"></div>
+      <div class="net-info hidden"></div>`;
     parent.appendChild(r);
     this.root = r;
     this.advBadge = r.querySelector('.adv-badge') as HTMLElement;
@@ -97,6 +102,7 @@ export class HUD {
     this.replayTag = q('.replay-tag');
     this.shootout = q('.shootout');
     this.fps = q('.fps');
+    this.netEl = q('.net-info');
     void this.sbHome;
     void this.sbAway;
   }
@@ -326,6 +332,16 @@ export class HUD {
       this.fpsAcc = 0;
     }
     this.show(this.fps, this.showFps);
+    if (this.netInfo) {
+      this.netAcc += dt;
+      if (this.netAcc > 1 || !this.netEl.textContent) {
+        this.netAcc = 0;
+        const n = this.netInfo();
+        this.setText(this.netEl, n.text);
+        this.netEl.dataset.level = String(n.level);
+      }
+      this.show(this.netEl, true);
+    }
   }
 
   private k(action: keyof Bindings) {

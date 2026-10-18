@@ -164,7 +164,8 @@ export class Lobby {
         const m = c.match;
         if (!m || m.over) return;
         const other = m.host === c ? m.guest : m.host;
-        this.send(other, { t: 'relay', d: msg.d });
+        // 'spec': copia solo para los espectadores (el rival ya recibe por el enlace directo)
+        if (msg.to !== 'spec') this.send(other, { t: 'relay', d: msg.d });
         // los espectadores reciben las instantáneas del anfitrión
         if (m.host === c && m.spectators.size && msg.d && msg.d.k === 's') for (const s of m.spectators) this.send(s, { t: 'relay', d: msg.d });
         break;

@@ -205,7 +205,7 @@ export class App {
   }
 
   private show(html: string, handlers: Handlers, back: (() => void) | null, cls = '') {
-    this.screen?.dispose();
+    this.screen?.dispose(true);
     this.screen = new Screen(this.ui, html, handlers, this.audio, cls);
     this.screen.onBack = back;
     return this.screen;
@@ -1580,7 +1580,7 @@ export class App {
     const opp = st.role === 'host' ? st.away : st.home;
     const link: OnlineLink = st.role === 'spectator'
       ? { role: 'guest', spectator: true, send: () => {}, opponentName: `${st.home.name} - ${st.away.name}` }
-      : { role: st.role, send: (d) => net.relay(d), opponentName: opp.name };
+      : { role: st.role, send: (d) => net.relay(d as { k?: string }), opponentName: opp.name, direct: () => net.p2pOpen, latency: () => net.latency };
     this.playMatch(cfg, this.stadiumForCtx(ctx), ctx, link);
     // el invitado comprueba que siguen llegando datos del anfitrión
     window.clearInterval(this.onlineWatch);
@@ -1636,7 +1636,7 @@ export class App {
   /** Elegir la liga del modo carrera (con el logo de cada competencia). */
   private leaguePickScreen(onPick: (leagueId: string) => void, back: () => void) {
     const ls = LEAGUES.filter((l) => l.teamIds().length);
-    const item = (l: (typeof LEAGUES)[number]) => `<button class="menu-item" data-act="lg-${l.id}" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:10px 14px">${l.logo ? `<img src="${l.logo}" alt="" style="height:38px;width:38px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box;flex:none">` : '<span style="width:38px;flex:none"></span>'}<span style="font-size:15px">${esc(l.name)}<small>${esc(l.country)} · ${l.teamIds().length} equipos</small></span></button>`;
+    const item = (l: (typeof LEAGUES)[number]) => `<button class="menu-item" data-act="lg-${l.id}" style="display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:10px 14px">${l.logo ? `<img src="${l.logo}" alt="" style="height:38px;width:38px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box;flex:none">` : '<span style="width:38px;flex:none"></span>'}<span style="font-size:15px">${esc(l.name)}<small>${esc(l.country)} · ${l.teamIds().length} equipos</small></span></button>`;
     const handlers: Handlers = { back };
     for (const l of ls) handlers[`lg-${l.id}`] = () => onPick(l.id);
     this.show(`
@@ -1843,7 +1843,7 @@ export class App {
       const logo = (id: CupId) => `<img src="${leagueLogo(id) ?? ''}" alt="" style="height:46px;width:46px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box;flex:none">`;
       this.show(`
         <div class="screen-header"><div><div class="crumb">COPAS INTERNACIONALES</div><h2>Elige la copa</h2></div></div>
-        <div class="screen-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:860px;margin:0 auto">${ls.map((cup) => `<button class="menu-item" data-act="cup-${cup.id}" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:12px 14px">${logo(cup.id)}<span>${esc(cup.name)}<small>${cup.size} clubes · ${cup.format === 'league' ? 'fase de liga' : '8 grupos'} · ida y vuelta · final neutral</small></span></button>`).join('')}</div></div>
+        <div class="screen-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:860px;margin:0 auto">${ls.map((cup) => `<button class="menu-item" data-act="cup-${cup.id}" style="display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:12px 14px">${logo(cup.id)}<span>${esc(cup.name)}<small>${cup.size} clubes · ${cup.format === 'league' ? 'fase de liga' : '8 grupos'} · ida y vuelta · final neutral</small></span></button>`).join('')}</div></div>
         <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, handlers, () => this.mainMenu());
       return;
     }
