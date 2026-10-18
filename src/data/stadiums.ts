@@ -10,6 +10,9 @@ const BASE_STADIUMS: StadiumData[] = [
   { id: 'monumental', name: 'Gran Monumental', capacity: 95000, timeOfDay: 'sunset', standColor: '#2b3550', roofColor: '#dfe4ec', grassHue: 0.29 },
   // Estadios de los clubes de la Liga Profesional (capacidad aproximada). look: techo, bandeja alta, butacas,
   // pista y palcos según la cancha real (aproximado con lo que permite el generador de estadios)
+  // sedes neutrales de las finales de las copas de la CONMEBOL
+  { id: 'centenario', name: 'Estadio Centenario', capacity: 60235, timeOfDay: 'night', standColor: '#3a2a2a', roofColor: '#cfd6de', grassHue: 0.28, look: { roof: 'none', upper: 'both', seats: ['#6cb4e4', '#ffffff'] } },
+  { id: 'defensores-chaco', name: 'Defensores del Chaco', capacity: 42354, timeOfDay: 'night', standColor: '#2a3a5a', roofColor: '#cfd6de', grassHue: 0.28, look: { roof: 'sides', upper: 'both', seats: ['#c8102e', '#ffffff', '#0b2d6b'] } },
   { id: 'minella', name: 'José María Minella', capacity: 35000, timeOfDay: 'night', standColor: '#1d5a34', roofColor: '#cfd6de', grassHue: 0.28, homeTeam: 'aldosivi', look: { roof: 'none', upper: 'none', track: '#b4573f', seats: ['#9aa0a8'] } },
   { id: 'maradona', name: 'Diego Armando Maradona', capacity: 26000, timeOfDay: 'night', standColor: '#8a1a24', roofColor: '#cfd6de', grassHue: 0.28, homeTeam: 'argentinos', look: { roof: 'none', upper: 'none', seats: ['#c8102e', '#ffffff'] } },
   { id: 'fierro', name: 'Monumental José Fierro', capacity: 35200, timeOfDay: 'night', standColor: '#3a6f96', roofColor: '#cfd6de', grassHue: 0.28, homeTeam: 'atltucuman', look: { roof: 'none', upper: 'far', seats: ['#6cb4e4', '#ffffff'] } },

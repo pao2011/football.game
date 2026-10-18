@@ -10,7 +10,9 @@ import type { MatchView } from '../render/MatchView';
 import { deleteReplay, encodeFrames, lastSeconds, listReplays, MAX_SAVED_REPLAYS, saveReplay, type SavedReplay } from '../modes/SavedReplays';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
-import { classicName, matchHeat } from '../data/classics';
+import { LEAGUE_IDS, classicName, matchHeat } from '../data/classics';
+import sudamericanaLogo from '../assets/leagues/sudamericana.webp?url';
+import conmebolLogo from '../assets/leagues/conmebol.webp?url';
 import { LEAGUES, getLeague } from '../data/leagues';
 import { GENERIC_STADIUMS, STADIUMS, getStadium, stadiumForHome } from '../data/stadiums';
 import { BUILTIN_TEAM_COUNT, TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
@@ -23,6 +25,7 @@ import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
 import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, versusDevicesLabel, type Action } from '../input/Input';
 import { MAX_SUBS, type MatchConfig } from '../sim/Match';
 import { manOfTheMatch, playerRatings } from '../sim/Ratings';
+import { Continental, CUPS, cupEligibleTeams, type CupId } from '../modes/Continental';
 import { Career, SQUAD_MAX, SQUAD_MIN, buyPlayer, marketOffers, playerPrice, sellPlayer } from '../modes/Career';
 import { Tournament } from '../modes/Tournament';
 import type { Fixture, StandingRow } from '../modes/Competition';
@@ -88,6 +91,7 @@ type MatchContext =
   | { mode: 'online'; start: MatchStart }
   | { mode: 'tournament'; fixture: Fixture }
   | { mode: 'career'; fixture: Fixture }
+  | { mode: 'continental'; fixture: Fixture }
   | { mode: 'training' };
 
 export class App {
@@ -106,6 +110,7 @@ export class App {
   private replayViewer: ReplayViewer | null = null;
   tournament: Tournament | null = null;
   career: Career | null = null;
+  continental: Continental | null = null;
 
   private splashShown = false;
   /** Conexión online (se crea al entrar en ONLINE). */
@@ -295,7 +300,7 @@ export class App {
 
   mainMenu() {
     this.setMenuMode(true);
-    const crests = TEAMS.map((t) => crestSVG(t, 56)).join('');
+    const crests = TEAMS.filter((t) => LEAGUE_IDS.includes(t.id)).map((t) => crestSVG(t, 56)).join(''); // el muro de escudos del menú: los 30 de la Liga Profesional
     const isElectron = typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent);
     this.show(`
       <div class="main-menu">
@@ -303,7 +308,8 @@ export class App {
           <button class="menu-item" data-act="quick">Partido rápido<small>Elige equipos, estadio y dificultad</small></button>
           <button class="menu-item" data-act="online">Online<small>Division Rivals, amistosos y salas con amigos</small></button>
           <button class="menu-item" data-act="tournament">Copa Élite<small>Torneo: fase de grupos y eliminatorias</small></button>
-          <button class="menu-item" data-act="career">Carrera<small>5 ligas: Argentina (1.ª y 2.ª), Brasil, Colombia y Perú</small></button>
+          <button class="menu-item" data-act="continental">Copas CONMEBOL<small>Libertadores y Sudamericana con clubes de toda Sudamérica</small></button>
+          <button class="menu-item" data-act="career">Carrera<small>11 ligas: Argentina (1.ª y 2.ª), Brasil y 8 países más</small></button>
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
           <button class="menu-item" data-act="editor">✏️ Editor de equipos<small>Crea tu equipo · exportar e importar</small></button>
@@ -324,6 +330,7 @@ export class App {
       online: () => this.onlineMenu(),
       tournament: () => this.tournamentHub(),
       career: () => this.careerHub(),
+      continental: () => this.continentalHub(),
       training: () => this.trainingScreen(),
       settings: () => this.settingsScreen(() => this.mainMenu()),
       controls: () => this.controlsScreen(() => this.mainMenu()),
@@ -1068,6 +1075,7 @@ export class App {
     }
     if (ctx?.mode === 'tournament') this.tournamentHub();
     else if (ctx?.mode === 'career') this.careerHub();
+    else if (ctx?.mode === 'continental') this.continentalHub();
     else if (ctx?.mode === 'training') this.trainingScreen();
     else this.mainMenu();
   }
@@ -1130,6 +1138,12 @@ export class App {
       availabilityMsgs = this.career.recordUserResult(ctx.fixture, r.home, r.away, scorers, d, r.penalties ?? undefined);
       if (this.career.state.phase === 'done' && this.career.torneoChampion === this.career.state.userTeam) addAch('league');
     }
+    if (ctx.mode === 'continental' && this.continental) {
+      const userIdx = ctx.fixture.home === this.continental.state.userTeam ? 0 : 1;
+      const d = disciplineOf([...m.teams[userIdx].players, ...m.teams[userIdx].subbedOff]);
+      availabilityMsgs = this.continental.recordUserResult(ctx.fixture, r.home, r.away, r.penalties ?? undefined, d);
+      if (this.continental.state.champion === this.continental.state.userTeam) addAch('cup');
+    }
     if (ctx.mode === 'online') {
       window.clearInterval(this.onlineWatch);
       this.net?.send({ t: 'result', home: r.home, away: r.away, pens: r.penalties ? r.winner : -1 });
@@ -1140,7 +1154,7 @@ export class App {
     this.setMenuMode(true);
     const scorers = (t: typeof h) => t.scorers.map((s) => `⚽ ${esc(s.name)} ${s.minute}'`).join('<br>') || '<span class="muted">—</span>';
     const pens = r.penalties ? `<div class="muted" style="text-align:center">Penales: ${r.penalties[0]} - ${r.penalties[1]}</div>` : '';
-    const cont = ctx.mode === 'online' ? 'Menú online' : ctx.mode === 'tournament' ? 'Volver al torneo' : ctx.mode === 'career' ? 'Volver a la carrera' : ctx.mode === 'training' ? 'Entrenamiento' : 'Menú principal';
+    const cont = ctx.mode === 'online' ? 'Menú online' : ctx.mode === 'tournament' ? 'Volver al torneo' : ctx.mode === 'career' ? 'Volver a la carrera' : ctx.mode === 'continental' ? 'Volver a la copa' : ctx.mode === 'training' ? 'Entrenamiento' : 'Menú principal';
     this.show(`
       <div class="screen-header"><div><div class="crumb">RESULTADO FINAL</div><h2>${r.winner === -1 ? 'Empate' : `Gana ${esc(m.teams[r.winner].data.name)}`}</h2></div></div>
       <div class="screen-body"><div class="grid2">
@@ -1716,6 +1730,84 @@ export class App {
           homeLineup: side === 0 ? this.career?.matchLineup() ?? st.lineup : undefined, awayLineup: side === 1 ? this.career?.matchLineup() ?? st.lineup : undefined,
           weather: randomWeather(Math.random()),
         }, this.stadiumForCtx({ mode: 'career', fixture: next }), { mode: 'career', fixture: next });
+      },
+    }, () => this.mainMenu());
+  }
+
+  private continentalView: 'grupo' | 'grupos' | 'eliminatorias' = 'grupo';
+
+  /** Copas CONMEBOL: elegir la copa y el club, y jugar grupos y eliminatorias. */
+  continentalHub() {
+    this.setMenuMode(true);
+    this.continental = this.continental ?? Continental.load();
+    const c = this.continental;
+    if (!c) {
+      const ls = (['libertadores', 'sudamericana'] as CupId[]).map((id) => CUPS[id]);
+      const handlers: Handlers = { back: () => this.mainMenu() };
+      for (const cup of ls) {
+        handlers[`cup-${cup.id}`] = () => this.pickTeamScreen(`Elige tu club para la ${cup.name}`, 'COPAS CONMEBOL', (id) => { this.continental = Continental.create(cup.id, id); this.continentalView = 'grupo'; this.continentalHub(); }, () => this.continentalHub(), cupEligibleTeams());
+      }
+      const logo = (id: CupId) => `<img src="${id === 'sudamericana' ? sudamericanaLogo : conmebolLogo}" alt="" style="height:46px;width:46px;object-fit:contain;flex:none">`;
+      this.show(`
+        <div class="screen-header"><div><div class="crumb">COPAS CONMEBOL</div><h2>Elige la copa</h2></div></div>
+        <div class="screen-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:860px;margin:0 auto">${ls.map((cup) => `<button class="menu-item" data-act="cup-${cup.id}" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:12px 14px">${logo(cup.id)}<span>${esc(cup.name)}<small>32 clubes · 8 grupos · final en cancha neutral</small></span></button>`).join('')}</div></div>
+        <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, handlers, () => this.mainMenu());
+      return;
+    }
+    const st = c.state;
+    const next = c.nextUserFixture();
+    const lookup = (id: string) => getTeam(id);
+    const knock = st.fixtures.filter((f) => f.knockout);
+    const VIEWS = ['grupo', 'grupos', 'eliminatorias'] as const;
+    const NAMES = { grupo: 'Mi grupo', grupos: 'Todos los grupos', eliminatorias: 'Eliminatorias' } as const;
+    const view = this.continentalView;
+    const champion = st.champion ? getTeam(st.champion) : null;
+    const status = champion
+      ? `<div class="panel" style="text-align:center"><div class="crumb" style="color:var(--warn)">CAMPEÓN</div><div style="display:flex;justify-content:center;margin:10px">${crestSVG(champion, 110)}</div><h2>${esc(champion.name)}</h2>${champion.id === st.userTeam ? `<p>¡Has ganado la ${esc(c.def.name)}! 🏆</p>` : '<p class="muted">Mejor suerte la próxima vez.</p>'}</div>`
+      : st.eliminated ? '<div class="panel"><b>Tu equipo quedó eliminado.</b> <span class="muted">Simula el resto para ver al campeón.</span></div>' : '';
+    const groupFx = (g: number) => st.fixtures.filter((f) => !f.knockout && st.groups[g].includes(f.home));
+    const groupPanel = (g: number) => `<div class="panel" style="margin-bottom:12px"><h3>Grupo ${'ABCDEFGH'[g]}</h3>${this.tableHTML(c.standings(g), st.userTeam, lookup)}${view === 'grupo' ? `<div style="margin-top:10px">${groupFx(g).map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('')}</div>` : ''}</div>`;
+    let body = '';
+    if (view === 'grupo') body = groupPanel(c.userGroup);
+    else if (view === 'grupos') body = st.groups.map((_, g) => groupPanel(g)).join('');
+    else {
+      const rounds = [...new Set(knock.map((f) => f.round))];
+      body = rounds.length
+        ? rounds.map((r) => { const fx = knock.filter((f) => f.round === r); return `<div class="panel" style="margin-bottom:12px"><h3>${esc(fx[0].stage)}</h3>${fx.map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('')}${fx[0].venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(fx[0].venue).name)}</div>` : ''}</div>`; }).join('')
+        : '<div class="panel"><p class="muted">Pasan los dos primeros de cada grupo: octavos, cuartos, semifinales y final a partido único (con prórroga y penales). La final es en cancha neutral.</p></div>';
+    }
+    this.show(`
+      <div class="screen-header"><div><div class="crumb">COPAS CONMEBOL · ${esc(getTeam(st.userTeam).name)}</div><h2 style="display:flex;align-items:center;gap:12px"><img src="${st.cup === 'sudamericana' ? sudamericanaLogo : conmebolLogo}" alt="" style="height:46px;width:46px;object-fit:contain"><span>${esc(c.def.name)}</span></h2></div></div>
+      <div class="screen-body">
+        ${status}
+        ${next ? `<div class="panel" style="margin-bottom:16px"><div class="crumb">PRÓXIMO PARTIDO · ${esc(next.stage.toUpperCase())}</div>${this.fixtureHTML(next, st.userTeam, lookup)}${next.venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(next.venue).name)}</div>` : ''}</div>` : ''}
+        ${this.stepper('Ver', NAMES[view], 'view')}
+        ${body}
+      </div>
+      <div class="screen-footer">
+        <button class="btn" data-act="back">Menú</button>
+        <button class="btn danger" data-act="abandon">${st.champion ? 'Nueva copa' : 'Abandonar copa'}</button>
+        ${next ? '<button class="btn" data-act="simMatch">Simular partido</button>' : ''}
+        ${next ? '<button class="btn primary" data-act="play">Jugar partido</button>' : !st.champion ? '<button class="btn primary" data-act="simRest">Simular el resto</button>' : ''}
+      </div>`, {
+      back: () => this.mainMenu(),
+      abandon: () => { Continental.clear(); this.continental = null; this.continentalHub(); },
+      viewPrev: () => { this.continentalView = VIEWS[(VIEWS.indexOf(view) + VIEWS.length - 1) % VIEWS.length]; this.continentalHub(); },
+      viewNext: () => { this.continentalView = VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length]; this.continentalHub(); },
+      simMatch: () => { c.simulateUserFixture(); this.continentalHub(); },
+      simRest: () => { c.simulateAll(); this.continentalHub(); },
+      play: () => {
+        if (!next) return;
+        const home = getTeam(next.home);
+        const away = getTeam(next.away);
+        const side = next.home === st.userTeam ? 0 : 1;
+        this.playMatch({
+          home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: side,
+          halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty,
+          extraTime: next.knockout, penalties: next.knockout, neutral: !!next.venue, weather: randomWeather(Math.random()),
+          homeLineup: side === 0 ? st.availability && this.continental?.matchLineup() : undefined,
+          awayLineup: side === 1 ? st.availability && this.continental?.matchLineup() : undefined,
+        }, this.stadiumForCtx({ mode: 'continental', fixture: next }), { mode: 'continental', fixture: next });
       },
     }, () => this.mainMenu());
   }

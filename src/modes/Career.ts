@@ -300,9 +300,9 @@ export class Career {
     if (r.pens) o.pens = r.pens;
   }
 
-  /** Simula los partidos sin jugar de una ronda. */
+  /** Simula los partidos sin jugar de una ronda y de las anteriores (fechas libres del usuario en ligas de equipos impares). */
   private simRound(round: number, rng: Rng) {
-    for (const o of this.state.fixtures) if (!o.played && o.round === round) this.simFixture(o, rng);
+    for (const o of this.state.fixtures) if (!o.played && o.round <= round) this.simFixture(o, rng);
   }
 
   private rngFor(salt: number) {

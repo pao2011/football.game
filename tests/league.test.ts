@@ -152,3 +152,28 @@ describe('Datos de todas las ligas', () => {
     for (const s of STADIUMS) if (s.homeTeam) expect(teamIds, s.id).toContain(s.homeTeam);
   });
 });
+
+describe('Copas CONMEBOL', () => {
+  it.each(['libertadores', 'sudamericana'] as const)('%s: 32 clubes de varios países, 8 grupos, eliminatorias y final neutral', async (cupId) => {
+    const { Continental, cupField, KNOCKOUT_NAMES } = await import('../src/modes/Continental');
+    const field = cupField(cupId, 'boca');
+    expect(field.length).toBe(32);
+    expect(new Set(field).size).toBe(32);
+    expect(field).toContain('boca');
+    const c = Continental.create(cupId, 'boca', 3);
+    expect(c.state.groups.length).toBe(8);
+    expect(c.state.groups.every((g) => g.length === 4)).toBe(true);
+    expect(c.state.fixtures.length).toBe(8 * 12);
+    let guard = 0;
+    while (!c.state.champion && guard++ < 40) {
+      if (c.nextUserFixture()) c.simulateUserFixture();
+      else c.simulateAll();
+    }
+    expect(c.state.champion).toBeTruthy();
+    const ko = c.state.fixtures.filter((f) => f.knockout);
+    expect(ko.length).toBe(8 + 4 + 2 + 1);
+    expect(ko[ko.length - 1].venue).toBeTruthy();
+    expect(ko.map((f) => f.stage)).toContain(KNOCKOUT_NAMES[0]);
+    expect(ko.every((f) => f.played && (f.homeGoals !== f.awayGoals || f.pens))).toBe(true);
+  });
+});
