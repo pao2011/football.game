@@ -5,7 +5,7 @@ import type { PlayerAttributes, PlayerData, Position } from '../../data/types';
 import { evoBoost, evoById } from './evoDefs';
 import { ROLE_ALT, ROLE_GROUP } from './roles';
 import type { CardDef, CardStats, Rarity, Role } from './types';
-import { clamp, hash32 } from './util';
+import { clamp, dayId, hash32, weekId } from './util';
 
 // Catálogo de cartas: un jugador del juego = una carta base (bronce/plata/oro según su valoración), más versiones
 // Promesa y Especial de algunos de ellos, cartas de Evento de cada temporada y Leyendas FICTICIAS (personajes inventados).
@@ -20,7 +20,8 @@ const COUNTRY_ALIAS: Record<string, string> = { 'Brasil': 'Brasil', 'Reino Unido
 
 /** Valor de mercado (monedas) según la valoración: interpolación logarítmica entre estos puntos. */
 const PRICE_KNOTS: [number, number][] = [[40, 10], [50, 25], [60, 100], [70, 550], [75, 1200], [80, 2400], [85, 5000], [90, 14000], [95, 40000], [99, 100000]];
-export const RARITY_PRICE: Record<Rarity, number> = { bronze: 1, silver: 1, gold: 1, rising: 1.3, special: 1.6, event: 1.5, legend: 2, hero: 1.6, idol: 1.7, flash: 1.3, titan: 1.4, maestro: 1.4 };
+export const RARITY_PRICE: Record<Rarity, number> = { bronze: 1, silver: 1, gold: 1, rising: 1.3, special: 1.6, event: 1.5, legend: 2, hero: 1.6, idol: 1.7, flash: 1.3, titan: 1.4, maestro: 1.4,
+  motm: 1.3, totw: 1.5, totm: 1.7, tots: 1.9, toty: 2.3 };
 
 export function basePrice(ovr: number): number {
   const o = clamp(ovr, 40, 99);
@@ -84,8 +85,9 @@ const KIND_BOOST: Partial<Record<Rarity, (a: PlayerAttributes) => PlayerAttribut
   flash: (a) => plus(a, { speed: 9, acceleration: 9, control: 2 }),
   titan: (a) => plus(a, { defending: 6, goalkeeping: 6, stamina: 3, passing: 1 }),
   maestro: (a) => plus(a, { passing: 6, control: 6, shooting: 2 }),
+  motm: (a) => boostAttrs(a, 3), totw: (a) => boostAttrs(a, 4), totm: (a) => boostAttrs(a, 5), tots: (a) => boostAttrs(a, 6), toty: (a) => boostAttrs(a, 8),
 };
-const KIND_CODE: Partial<Record<Rarity, string>> = { rising: 'rs', special: 'sp', hero: 'hr', idol: 'id', flash: 'fl', titan: 'tt', maestro: 'ms' };
+const KIND_CODE: Partial<Record<Rarity, string>> = { rising: 'rs', special: 'sp', hero: 'hr', idol: 'id', flash: 'fl', titan: 'tt', maestro: 'ms', motm: 'mm', totw: 'tw', totm: 'tm', tots: 'ts', toty: 'ty' };
 
 const tierOf = (ovr: number): Rarity => (ovr < 65 ? 'bronze' : ovr < 75 ? 'silver' : 'gold');
 
@@ -117,7 +119,7 @@ function make(base: { p: PlayerData; role: Role; teamId: string; teamName: strin
   const ovr = clamp(playerOverall(pd), 30, 99);
   const rarity: Rarity = kind === 'base' ? tierOf(ovr) : kind;
   const stats = statsOf(attrs, p.height, p.position === 'GK');
-  const suffix = kind === 'base' ? '' : kind === 'event' ? `~ev~${season}` : `~${KIND_CODE[kind]}`;
+  const suffix = kind === 'base' ? '' : kind === 'event' ? `~ev~${season}` : isPeriodKind(kind) ? `~${KIND_CODE[kind]}~${season}` : `~${KIND_CODE[kind]}`;
   const parts = p.name.trim().split(/\s+/);
   const short = parts.length > 1 ? parts.slice(1).join(' ') : parts[0];
   return {
@@ -228,16 +230,74 @@ export function eventDefs(season: string): CardDef[] {
   for (const d of catalog().values()) {
     if (d.rarity !== 'gold' || d.ovr < 76 || d.ovr > 87) continue;
     if (hash32(`${season}|${d.id}`) % 100 >= 2) continue; // ~2 % de los de oro
-    const t = TEAMS.find((x) => x.id === d.clubId);
-    const p = t?.players.find((x) => x.id === d.playerId);
-    if (!t || !p) continue;
-    const lg = leagueOfTeam(t.id);
-    const country = COUNTRY_ALIAS[lg?.country ?? ''] ?? lg?.country ?? 'Argentina';
-    const i = t.players.indexOf(p);
-    const role: Role = i < 11 ? (FORMATIONS[t.formation][i].role as Role) : BENCH_ROLES[(i - 11) % BENCH_ROLES.length];
-    out.push(make({ p, role, teamId: t.id, teamName: t.name, league: lg?.id ?? '', country, fictional: !p.name }, 'event', season));
+    const ctx = ctxOf(d);
+    if (ctx) out.push(make(ctx, 'event', season));
   }
   eventCache.set(season, out);
+  return out;
+}
+
+/** Datos de origen (jugador, club, puesto) de una carta base, para fabricar sus versiones especiales. */
+function ctxOf(d: CardDef): Parameters<typeof make>[0] | null {
+  const t = TEAMS.find((x) => x.id === d.clubId);
+  const p = t?.players.find((x) => x.id === d.playerId);
+  if (!t || !p) return null;
+  const lg = leagueOfTeam(t.id);
+  const country = COUNTRY_ALIAS[lg?.country ?? ''] ?? lg?.country ?? 'Argentina';
+  const i = t.players.indexOf(p);
+  const role: Role = i < 11 ? (FORMATIONS[t.formation][i].role as Role) : BENCH_ROLES[(i - 11) % BENCH_ROLES.length];
+  return { p, role, teamId: t.id, teamName: t.name, league: lg?.id ?? '', country, fictional: !p.name };
+}
+
+// ---------- Cartas por periodo: Jugador del partido (día), Equipo de la semana, del mes, de la temporada y del año ----------
+export type PeriodKind = 'motm' | 'totw' | 'totm' | 'tots' | 'toty';
+export const PERIOD_KINDS: PeriodKind[] = ['motm', 'totw', 'totm', 'tots', 'toty'];
+export const isPeriodKind = (r: string): r is PeriodKind => (PERIOD_KINDS as string[]).includes(r);
+const CODE_KIND: Record<string, PeriodKind> = { mm: 'motm', tw: 'totw', tm: 'totm', ts: 'tots', ty: 'toty' };
+
+/** Periodo vigente de cada tipo: día, semana (lunes), mes, temporada del club o año. */
+export function periodOf(k: PeriodKind, now: number, season: string): string {
+  switch (k) {
+    case 'motm': return dayId(now);
+    case 'totw': return weekId(now);
+    case 'totm': return dayId(now).slice(0, 7);
+    case 'tots': return season;
+    default: return dayId(now).slice(0, 4);
+  }
+}
+
+const XI: Record<Position, number> = { GK: 1, DEF: 4, MID: 3, FWD: 3 };
+/** Un once (1-4-3-3) de la lista, en el orden dado. */
+function pickXI(list: CardDef[]): CardDef[] {
+  const left = { ...XI };
+  return list.filter((d) => left[d.group]-- > 0);
+}
+
+const periodCache = new Map<string, CardDef[]>();
+/** Cartas de un periodo (deterministas: mismas para todos los clubes). */
+export function periodDefs(kind: PeriodKind, period: string): CardDef[] {
+  const key = `${kind}|${period}`;
+  const hit = periodCache.get(key);
+  if (hit) return hit;
+  const base = [...catalog().values()].filter((d) => (d.rarity === 'bronze' || d.rarity === 'silver' || d.rarity === 'gold') && d.playerId);
+  const h = (d: CardDef) => hash32(`${key}|${d.id}`);
+  // las del año y la temporada premian a los mejores; un pequeño azar por periodo cambia quién entra en los empates
+  const byRating = (xs: CardDef[]) => xs.slice().sort((a, b) => b.ovr + (h(b) % 3) - (a.ovr + (h(a) % 3)));
+  const byLuck = (xs: CardDef[]) => xs.slice().sort((a, b) => h(a) - h(b));
+  let picked: CardDef[];
+  switch (kind) {
+    case 'motm': picked = byLuck(base.filter((d) => d.ovr >= 70 && d.ovr <= 86)).slice(0, 6); break;
+    case 'totw': picked = pickXI(byLuck(base.filter((d) => d.ovr >= 76 && d.ovr <= 88))); break;
+    case 'totm': picked = pickXI(byLuck(base.filter((d) => d.ovr >= 80 && d.ovr <= 90))); break;
+    case 'toty': picked = pickXI(byRating(base)); break;
+    default: {
+      // un once por liga
+      const leagues = [...new Set(base.map((d) => d.league).filter(Boolean))];
+      picked = leagues.flatMap((lg) => pickXI(byRating(base.filter((d) => d.league === lg))));
+    }
+  }
+  const out = picked.map((d) => ctxOf(d)).filter(Boolean).map((c) => make(c!, kind, period));
+  periodCache.set(key, out);
   return out;
 }
 
@@ -249,6 +309,8 @@ export function getCardDef(id: string): CardDef | undefined {
   if (e) return evolvedDef(e[1], e[2], Number(e[3]));
   const m = /^(.+)~ev~(.+)$/.exec(id);
   if (m) return eventDefs(m[2]).find((d) => d.id === id);
+  const pk = /^(.+)~(mm|tw|tm|ts|ty)~(.+)$/.exec(id);
+  if (pk) return periodDefs(CODE_KIND[pk[2]], pk[3]).find((d) => d.id === id);
   return undefined;
 }
 

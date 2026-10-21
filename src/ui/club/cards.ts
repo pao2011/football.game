@@ -118,7 +118,7 @@ export function avatarSVG(face: CardDef['face'], kit: Pick<KitData, 'shirt' | 's
   </svg>`;
 }
 
-const KIND_TAG: Partial<Record<CardDef['rarity'], string>> = { hero: 'HÉROE', idol: 'ÍDOLO', flash: 'RELÁMPAGO', titan: 'TITÁN', maestro: 'MAESTRO' };
+const KIND_TAG: Partial<Record<CardDef['rarity'], string>> = { hero: 'HÉROE', idol: 'ÍDOLO', flash: 'RELÁMPAGO', titan: 'TITÁN', maestro: 'MAESTRO', motm: 'JUGADOR DEL PARTIDO', totw: 'EQUIPO DE LA SEMANA', totm: 'EQUIPO DEL MES', tots: 'EQUIPO DE LA TEMPORADA', toty: 'EQUIPO DEL AÑO' };
 
 export interface CardOpts {
   size?: 'xs' | 'sm' | 'md' | 'lg';

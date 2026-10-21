@@ -226,7 +226,7 @@ export class Club {
       if (!pack.buyable) return fail('Ese sobre no se puede comprar: solo se consigue como recompensa.');
       if (s.coins - market.heldCoins(s) < pack.price) return fail('No tienes monedas suficientes.');
     }
-    const roll = rollPack({ pack, season: currentSeason(now).id, rand, owned: this.ownedCounts(), pity: s.packs.pity[packId] ?? 0 });
+    const roll = rollPack({ pack, season: currentSeason(now).id, rand, owned: this.ownedCounts(), pity: s.packs.pity[packId] ?? 0, now });
     if (free) s.packs.promo[packId]--;
     else { const tx = addTx(s, 'pack', -pack.price, pack.name, now); if (!tx.ok) return tx as Result<never>; }
     s.packs.pity[packId] = roll.hadRare ? 0 : (s.packs.pity[packId] ?? 0) + 1;

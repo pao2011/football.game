@@ -3,11 +3,13 @@ import type { FormationId, PlayerAttributes, Position } from '../../data/types';
 // Modo "Soffti Club": colección de cartas, plantilla, química, sobres, mercado local y competiciones.
 // Todo el estado del club es un objeto serializable (ClubState) que se guarda en localStorage (ver state.ts).
 
-export type Rarity = 'bronze' | 'silver' | 'gold' | 'rising' | 'special' | 'event' | 'legend' | 'hero' | 'idol' | 'flash' | 'titan' | 'maestro';
-export const RARITIES: Rarity[] = ['bronze', 'silver', 'gold', 'rising', 'flash', 'maestro', 'titan', 'special', 'hero', 'idol', 'event', 'legend'];
+export type Rarity = 'bronze' | 'silver' | 'gold' | 'rising' | 'special' | 'event' | 'legend' | 'hero' | 'idol' | 'flash' | 'titan' | 'maestro'
+  | 'motm' | 'totw' | 'totm' | 'tots' | 'toty';
+export const RARITIES: Rarity[] = ['bronze', 'silver', 'gold', 'rising', 'flash', 'maestro', 'titan', 'motm', 'totw', 'special', 'hero', 'idol', 'totm', 'event', 'tots', 'toty', 'legend'];
 export const RARITY_NAMES: Record<Rarity, string> = {
   bronze: 'Bronce', silver: 'Plata', gold: 'Oro', rising: 'Promesa', special: 'Especial', event: 'Evento', legend: 'Leyenda',
   hero: 'Héroe', idol: 'Ídolo', flash: 'Relámpago', titan: 'Titán', maestro: 'Maestro',
+  motm: 'Jugador del partido', totw: 'Equipo de la semana', totm: 'Equipo del mes', tots: 'Equipo de la temporada', toty: 'Equipo del año',
 };
 
 /** Puesto con el nombre que usa el juego (POR, LI, DFC…). */

@@ -54,3 +54,9 @@
 .cb-passlv small.num { font-size: 12px; letter-spacing: .04em; font-family: var(--body); }
 .cb-passlv { width: 220px; }
 .cb-evactgrid { grid-template-columns: repeat(auto-fill, minmax(380px, 560px)); }
+
+/* destacados */
+.cb-feat { margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px; }
+.cb-feathead { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; } .cb-feathead h3 { margin: 0; }
+.cb-featleft { font-family: var(--display); letter-spacing: .08em; font-size: 13px; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,.08); white-space: nowrap; }
+.cb-featgrid { display: flex; flex-wrap: wrap; gap: 10px; } .cb-featgrid .fc { cursor: default; }

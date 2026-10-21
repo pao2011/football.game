@@ -95,6 +95,7 @@ export function passReward(track: PassTrack, level: number): Reward {
   }
   if (level === PASS_LEVELS) return { packs: { legend: 1 }, coins: 10000 };
   if (level === 20) return { packs: { pick82: 1 } };
+  if (level === 25) return { packs: { stars: 1 } };
   if (level % 10 === 0) return { packs: { special: 1 } };
   if (level % 5 === 0) return { packs: { mega: 1 } };
   if (level % 4 === 0) return { packs: { gold: 1 } };

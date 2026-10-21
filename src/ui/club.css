@@ -130,3 +130,25 @@
 .fc-hero .fc-name, .fc-flash .fc-name, .fc-titan .fc-name, .fc-maestro .fc-name { text-shadow: 0 0.08em 0.3em rgba(0,0,0,0.55); }
 .fc-hero .fc-foil, .fc-idol .fc-foil, .fc-titan .fc-foil { opacity: 0.7; }
 .fc-hero .fc-evotag, .fc-flash .fc-evotag, .fc-titan .fc-evotag, .fc-maestro .fc-evotag { color: #e3b8ff; }
+
+/* ---------- Cartas por periodo: MOTM, TOTW, TOTM, TOTS y TOTY ---------- */
+/* Jugador del partido: carmesí y blanco */
+.fc-motm { --frame: linear-gradient(160deg, #ffffff, #ff3d6e 50%, #7a0a2a); --face: linear-gradient(175deg, #c2183f, #3a0414); --ink: #ffffff; --ink2: #ffd0dc; --line: rgba(255,255,255,0.55); --glow: rgba(255,61,110,0.6); --plate: rgba(0,0,0,0.33);
+  --art: repeating-linear-gradient(135deg, rgba(255,255,255,0.12) 0 0.25em, transparent 0.25em 1em), radial-gradient(ellipse at 70% 85%, rgba(255,255,255,0.35), transparent 60%); }
+/* Equipo de la semana: negro y oro */
+.fc-totw { --frame: linear-gradient(160deg, #ffe27a, #b8892a 50%, #3a2a08); --face: linear-gradient(175deg, #1e1e22, #050507); --ink: #ffd35a; --ink2: #fff1c2; --line: rgba(255,211,90,0.55); --glow: rgba(255,211,90,0.55); --plate: rgba(255,211,90,0.1);
+  --art: repeating-linear-gradient(60deg, rgba(255,211,90,0.18) 0 1px, transparent 1px 0.8em), repeating-linear-gradient(-60deg, rgba(255,211,90,0.14) 0 1px, transparent 1px 0.8em), radial-gradient(ellipse at 70% 85%, rgba(255,211,90,0.3), transparent 60%); }
+/* Equipo del mes: violeta con destellos */
+.fc-totm { --frame: linear-gradient(160deg, #f1e6ff, #9b6bff 50%, #3a137a); --face: linear-gradient(175deg, #4c1fa8, #14043a); --ink: #ffffff; --ink2: #ffd35a; --line: rgba(255,255,255,0.5); --glow: rgba(155,107,255,0.7); --plate: rgba(0,0,0,0.33);
+  --art: radial-gradient(circle at 25% 30%, rgba(255,255,255,0.6) 0 0.12em, transparent 0.15em), radial-gradient(circle at 80% 40%, rgba(255,255,255,0.6) 0 0.1em, transparent 0.13em), radial-gradient(circle at 60% 15%, rgba(255,211,90,0.7) 0 0.12em, transparent 0.15em), radial-gradient(ellipse at 70% 85%, rgba(199,166,255,0.5), transparent 60%); }
+/* Equipo de la temporada: celeste y dorado */
+.fc-tots { --frame: linear-gradient(160deg, #ffe27a, #5ee7ff 45%, #0a3a7a); --face: linear-gradient(175deg, #0a5fa8, #031a3a); --ink: #ffe27a; --ink2: #bff4ff; --line: rgba(255,226,122,0.55); --glow: rgba(94,231,255,0.7); --plate: rgba(0,0,0,0.33);
+  --art: repeating-conic-gradient(from 0deg at 70% 100%, rgba(255,226,122,0.2) 0 5deg, transparent 5deg 15deg), radial-gradient(ellipse at 70% 85%, rgba(94,231,255,0.5), transparent 60%); }
+/* Equipo del año: azul noche y oro, la más brillante */
+.fc-toty { --frame: linear-gradient(160deg, #fff1b8 0%, #f6b40e 35%, #fff1b8 60%, #b8892a 100%); --face: linear-gradient(175deg, #0d2a8a, #00113a); --ink: #ffd35a; --ink2: #fff1c2; --line: rgba(255,211,90,0.6); --glow: rgba(255,211,90,0.8); --plate: rgba(255,211,90,0.12);
+  --art: radial-gradient(circle at 30% 25%, rgba(255,255,255,0.8) 0 0.1em, transparent 0.14em), radial-gradient(circle at 75% 35%, rgba(255,255,255,0.8) 0 0.12em, transparent 0.16em), radial-gradient(circle at 55% 60%, rgba(255,255,255,0.6) 0 0.08em, transparent 0.12em), repeating-conic-gradient(from 0deg at 70% 95%, rgba(255,211,90,0.25) 0 4deg, transparent 4deg 12deg), radial-gradient(ellipse at 70% 85%, rgba(26,79,255,0.6), transparent 60%); }
+.fc-toty .fc-bg::before { inset: 0.46em; } .fc-toty .fc-bg::after { inset: 0.46em; } .fc-toty .fc-art { left: 0.46em; right: 0.46em; top: 0.46em; }
+.fc-toty { filter: drop-shadow(0 0 0.8em rgba(255,211,90,0.6)) drop-shadow(0 0.5em 0.9em rgba(0,0,0,0.55)); }
+:is(.fc-motm, .fc-totw, .fc-totm, .fc-tots, .fc-toty) .fc-name { text-shadow: 0 0.08em 0.3em rgba(0,0,0,0.55); }
+:is(.fc-motm, .fc-totw, .fc-totm, .fc-tots, .fc-toty) .fc-tag { letter-spacing: 0.12em; font-size: 0.72em; }
+:is(.fc-totm, .fc-tots, .fc-toty) .fc-foil { opacity: 0.8; }

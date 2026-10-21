@@ -1,4 +1,4 @@
-import { catalog, defsByRarity, eventDefs } from './catalog';
+import { catalog, defsByRarity, eventDefs, isPeriodKind, periodDefs, periodOf } from './catalog';
 import type { CardDef, Rarity } from './types';
 import { weighted, type Rand } from './util';
 
@@ -24,7 +24,7 @@ export interface PackDef {
   minOvr?: number;
 }
 
-export const RARE: Rarity[] = ['rising', 'flash', 'maestro', 'titan', 'special', 'hero', 'idol', 'event', 'legend'];
+export const RARE: Rarity[] = ['rising', 'flash', 'maestro', 'titan', 'motm', 'totw', 'special', 'hero', 'idol', 'totm', 'event', 'tots', 'toty', 'legend'];
 
 export const PACKS: PackDef[] = [
   { id: 'basic', name: 'Sobre básico', blurb: 'Jugadores de bronce y plata para empezar a armar el club.', price: 2000, cards: 5, odds: { bronze: 62, silver: 35, gold: 3 }, buyable: true, color: '#b87333' },
@@ -34,29 +34,30 @@ export const PACKS: PackDef[] = [
   { id: 'mega', name: 'Mega sobre', blurb: 'Doce cartas: para llenar la colección y los desafíos.', price: 24000, cards: 12, odds: { silver: 62, gold: 34, rising: 3, special: 0.8, event: 0.1, legend: 0.1 }, guarantee: ['gold', 'rising', 'special', 'event', 'legend'], pityAfter: 4, buyable: true, color: '#ff5d8f' },
   { id: 'pick82', name: 'Sobre 82+', blurb: 'Una carta de 82 o más de valoración. Recompensa de misiones y del pase.', price: 0, cards: 1, odds: { gold: 66, special: 12, hero: 8, idol: 6, titan: 5, event: 2, legend: 1 }, buyable: false, color: '#46e3b7', minOvr: 82 },
   { id: 'legend', name: 'Sobre de leyenda', blurb: 'Una leyenda asegurada. Solo en el pase premium y en misiones.', price: 0, cards: 1, odds: { legend: 100 }, buyable: false, color: '#fff1b8' },
+  { id: 'stars', name: 'Sobre de destacados', blurb: 'Jugador del partido, Equipo de la semana, del mes, de la temporada y del año (los vigentes).', price: 30000, cards: 3, odds: { gold: 64, motm: 16, totw: 12, totm: 5, tots: 2.4, toty: 0.6 }, guarantee: ['motm', 'totw', 'totm', 'tots', 'toty'], buyable: true, color: '#ff3d6e' },
   { id: 'promo', name: 'Sobre promocional', blurb: 'Regalo por objetivos, recompensas y hitos. No se compra.', price: 0, cards: 3, odds: { silver: 60, gold: 36, rising: 4 }, buyable: false, color: '#c28bff' },
 ];
 
 export const packById = (id: string) => PACKS.find((p) => p.id === id);
 
 /** Las probabilidades efectivas (sin eventos si no hay cartas de evento esa temporada). */
-export function effectiveOdds(p: PackDef, season: string): Partial<Record<Rarity, number>> {
+export function effectiveOdds(p: PackDef, season: string, now = Date.now()): Partial<Record<Rarity, number>> {
   const odds = { ...p.odds };
-  for (const r of Object.keys(odds) as Rarity[]) if (!pool(r, season, p.minOvr).length) delete odds[r];
+  for (const r of Object.keys(odds) as Rarity[]) if (!pool(r, season, p.minOvr, now).length) delete odds[r];
   return odds;
 }
 
-function pool(r: Rarity, season: string, minOvr = 0): CardDef[] {
-  const all = r === 'event' ? eventDefs(season) : defsByRarity(r);
+function pool(r: Rarity, season: string, minOvr = 0, now = Date.now()): CardDef[] {
+  const all = r === 'event' ? eventDefs(season) : isPeriodKind(r) ? periodDefs(r, periodOf(r, now, season)) : defsByRarity(r);
   return minOvr ? all.filter((d) => d.ovr >= minOvr) : all;
 }
 
 const cachePools = new Map<string, { defs: CardDef[]; w: number[]; total: number }>();
-function weightedPool(r: Rarity, season: string, minOvr = 0) {
-  const key = `${r}|${season}|${minOvr}`;
+function weightedPool(r: Rarity, season: string, minOvr = 0, now = Date.now()) {
+  const key = `${r}|${season}|${minOvr}|${isPeriodKind(r) ? periodOf(r, now, season) : ''}`;
   let c = cachePools.get(key);
   if (!c) {
-    const defs = pool(r, season, minOvr);
+    const defs = pool(r, season, minOvr, now);
     // las cartas más valiosas de una misma rareza salen menos
     const w = defs.map((d) => 1 / Math.pow(Math.max(20, d.price), 0.5));
     c = { defs, w, total: w.reduce((a, b) => a + b, 0) };
@@ -65,8 +66,8 @@ function weightedPool(r: Rarity, season: string, minOvr = 0) {
   return c;
 }
 
-function pickDef(r: Rarity, season: string, rand: Rand, minOvr = 0): CardDef {
-  const c = weightedPool(r, season, minOvr);
+function pickDef(r: Rarity, season: string, rand: Rand, minOvr = 0, now = Date.now()): CardDef {
+  const c = weightedPool(r, season, minOvr, now);
   let x = rand() * c.total;
   for (let i = 0; i < c.defs.length; i++) {
     x -= c.w[i];
@@ -83,18 +84,21 @@ export interface RollInput {
   owned: ReadonlyMap<string, number>;
   /** Sobres seguidos sin carta rara de este tipo. */
   pity: number;
+  /** Momento de la apertura (elige el Equipo de la semana, del mes… vigente). */
+  now?: number;
 }
 
 /** Tira un sobre: devuelve las cartas y si se activó la protección. Las probabilidades salen de `pack.odds`. */
 export function rollPack(inp: RollInput): { defs: CardDef[]; pityUsed: boolean; hadRare: boolean } {
   const { pack, season, rand, owned } = inp;
-  const odds = effectiveOdds(pack, season);
+  const now = inp.now ?? Date.now();
+  const odds = effectiveOdds(pack, season, now);
   const rarities = Object.keys(odds) as Rarity[];
   const taken = new Map<string, number>();
   const draw = (r: Rarity): CardDef => {
     // protección contra duplicados: hasta 3 intentos de evitar una carta que ya tienes (o ya salió en este sobre)
-    let d = pickDef(r, season, rand, pack.minOvr);
-    for (let t = 0; t < 3 && ((owned.get(d.id) ?? 0) + (taken.get(d.id) ?? 0) > 0); t++) d = pickDef(r, season, rand, pack.minOvr);
+    let d = pickDef(r, season, rand, pack.minOvr, now);
+    for (let t = 0; t < 3 && ((owned.get(d.id) ?? 0) + (taken.get(d.id) ?? 0) > 0); t++) d = pickDef(r, season, rand, pack.minOvr, now);
     taken.set(d.id, (taken.get(d.id) ?? 0) + 1);
     return d;
   };
@@ -103,12 +107,12 @@ export function rollPack(inp: RollInput): { defs: CardDef[]; pityUsed: boolean; 
   let pityUsed = false;
   const rareOk = (d: CardDef) => RARE.includes(d.rarity);
   if (pack.pityAfter && inp.pity >= pack.pityAfter && !defs.some(rareOk)) {
-    const r = weighted(RARE.filter((x) => pool(x, season, pack.minOvr).length), (x) => ({ rising: 60, flash: 15, maestro: 15, titan: 10, special: 25, hero: 8, idol: 6, event: 12, legend: 3 }[x as 'rising'] ?? 1), rand);
+    const r = weighted(RARE.filter((x) => pool(x, season, pack.minOvr, now).length), (x) => ({ rising: 60, flash: 15, maestro: 15, titan: 10, special: 25, hero: 8, idol: 6, event: 12, legend: 3 }[x as 'rising'] ?? 1), rand);
     defs[defs.length - 1] = draw(r);
     pityUsed = true;
   }
   if (pack.guarantee && !defs.some((d) => pack.guarantee!.includes(d.rarity))) {
-    const opts = pack.guarantee.filter((r) => odds[r] || r === 'gold').filter((r) => pool(r, season, pack.minOvr).length);
+    const opts = pack.guarantee.filter((r) => odds[r] || r === 'gold').filter((r) => pool(r, season, pack.minOvr, now).length);
     const r = weighted(opts, (x) => odds[x] ?? 1, rand);
     // sustituye a la carta más barata
     let idx = 0;

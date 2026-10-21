@@ -2,7 +2,8 @@ import type { AudioEngine } from '../../audio/AudioEngine';
 import { FORMATIONS } from '../../data/formations';
 import { getTeam } from '../../data/teams';
 import type { FormationId, KitData, TeamData } from '../../data/types';
-import { eventDefs, evolvedId, getCardDef, statLabels, STAT_KEYS } from '../../modes/club/catalog';
+import { eventDefs, evolvedId, getCardDef, periodDefs, periodOf, statLabels, STAT_KEYS, type PeriodKind } from '../../modes/club/catalog';
+import { LEAGUES } from '../../data/leagues';
 import { COACHES } from '../../modes/club/chemistry';
 import { Club, ONLINE_POINTS, type ClubMatchKind, type ClubMatchMeta } from '../../modes/club/Club';
 import { BATTLES, CHAMPIONS, SBCS, TOURNAMENT_ENTRY, TOURNAMENT_ROUNDS, checkSbc, championsReward, rivalsDivision, rivalsWeeklyReward, tournamentRuleOf, RIVALS_WEEKLY_MIN_MATCHES, DIVISION_THRESHOLDS } from '../../modes/club/competitions';
@@ -88,6 +89,7 @@ export class ClubUI implements ClubHost {
       case 'history': this.objectives('estadisticas'); break;
       case 'sbc': this.sbc(); break;
       case 'evos': this.evos(); break;
+      case 'featured': this.featured(); break;
       case 'pass': this.objectives('pase'); break;
       case 'missions': this.objectives('misiones'); break;
       case 'online': this.app.clubOnline(); break;
@@ -235,6 +237,7 @@ export class ClubUI implements ClubHost {
             ${tile('objectives', '🎯', 'Objetivos', 'Diarios, semanales y temporada', claims ? `${claims}` : '')}
             ${tile('sbc', '🧩', 'Desafíos', 'Crea plantillas por premios')}
             ${tile('collection', '🗂️', 'Colección', `${s.inventory.length}/${MAX_INVENTORY} cartas`)}
+            ${tile('featured', '⭐', 'Destacados', 'Equipo de la semana, del mes, del año…')}
             ${tile('evos', '🧬', 'Evoluciones', s.evos.length ? `${s.evos.length} en curso` : 'Mejora a tus jugadores')}
             ${tile('pass', '🎟️', 'Pase', `Nivel ${passLevel(s.progress.season.points)}/${PASS_LEVELS}${s.progress.season.premium ? ' · premium' : ''}`, passPending(s) ? `${passPending(s)}` : '')}
             ${tile('online', '🌐', 'Online', s.online.played ? `${s.online.points} pts · ${s.online.won}V ${s.online.drawn}E ${s.online.lost}D` : 'Tu club contra otros clubes')}
@@ -253,7 +256,7 @@ export class ClubUI implements ClubHost {
       back: () => this.app.mainMenu(),
       squad: () => this.goto('squad'), packs: () => this.goto('packs'), market: () => this.goto('market'), competitions: () => this.goto('competitions'),
       objectives: () => this.goto('objectives'), sbc: () => this.goto('sbc'), collection: () => this.goto('collection'), history: () => this.goto('history'),
-      evos: () => this.goto('evos'), pass: () => this.goto('pass'), online: () => this.goto('online'),
+      evos: () => this.goto('evos'), featured: () => this.goto('featured'), pass: () => this.goto('pass'), online: () => this.goto('online'),
       login: () => { const r = c.claimLogin(this.now()); if (r.ok) this.toast(`Recompensa diaria: ${rewardText(r.reward!)}`); else this.toast(r.error ?? 'No disponible', 'err'); this.hub(); },
       reset: () => this.confirm('¿Borrar tu club?', 'Se perderán para siempre tus cartas, monedas y progreso. Esta acción no se puede deshacer.', 'Borrar', () => { Club.clear(); this.app.mainMenu(); }, () => this.hub()),
     }, () => this.app.mainMenu(), 'club-screen club-hub');
@@ -493,6 +496,47 @@ export class ClubUI implements ClubHost {
     this.show(`<div class="screen-header"><div><div class="crumb">SOFFTI CLUB · EQUIPO ${ev.ovr} · QUÍMICA ${ev.chem}</div><h2>Competiciones</h2></div></div>
       <div class="screen-body">${warn}<div class="cb-compgrid">${online}${rivals}${champions}${battles}${tournament}${friendly}</div></div>
       <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, handlers, () => this.hub(), 'club-screen club-comp');
+  }
+
+  // ==================================================================
+  // Destacados: Jugador del partido, Equipo de la semana, del mes, de la temporada y del año
+  // ==================================================================
+  private featLeague = '';
+  private featured() {
+    const now = this.now();
+    const season = currentSeason(now);
+    const left = (ms: number) => { const h = Math.max(0, Math.floor(ms / 3600000)); return h >= 48 ? `${Math.floor(h / 24)} días` : `${h} h`; };
+    const d = new Date(now);
+    const ends: Record<PeriodKind, number> = {
+      motm: Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1),
+      totw: Date.parse(`${weekId(now)}T00:00:00Z`) + 7 * 86400000,
+      totm: Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1),
+      tots: season.end,
+      toty: Date.UTC(d.getUTCFullYear() + 1, 0, 1),
+    };
+    const info: [PeriodKind, string, string][] = [
+      ['motm', 'Jugadores del partido', 'Seis actuaciones destacadas cada día.'],
+      ['totw', 'Equipo de la semana', 'Un once nuevo cada lunes.'],
+      ['totm', 'Equipo del mes', 'Los mejores del mes, con más mejora.'],
+      ['tots', 'Equipos de la temporada', `Un once por liga durante ${season.name}.`],
+      ['toty', 'Equipo del año', 'El once de los mejores del juego: la carta más valiosa.'],
+    ];
+    const handlers: Handlers = { back: () => this.hub(), packs: () => this.goto('packs') };
+    const sections = info.map(([k, title, blurb]) => {
+      let defs = periodDefs(k, periodOf(k, now, season.id));
+      let picker = '';
+      if (k === 'tots') {
+        const lgs = [...new Set(defs.map((x) => x.league))];
+        if (!lgs.includes(this.featLeague)) this.featLeague = lgs[0] ?? '';
+        picker = `<div class="cb-chips">${lgs.map((id) => { handlers[`fl-${id}`] = () => { this.featLeague = id; this.featured(); }; return `<button class="cb-chip ${id === this.featLeague ? 'on' : ''}" data-act="fl-${id}">${esc(LEAGUES.find((l) => l.id === id)?.name ?? id)}</button>`; }).join('')}</div>`;
+        defs = defs.filter((x) => x.league === this.featLeague);
+      }
+      return `<div class="panel cb-feat"><div class="cb-feathead"><div><h3>${esc(title)}</h3><small class="muted">${esc(blurb)}</small></div><span class="cb-featleft">Termina en ${left(ends[k] - now)}</span></div>
+        ${picker}<div class="cb-featgrid">${defs.map((x) => cardHTML(x, { size: 'xs' })).join('')}</div></div>`;
+    }).join('');
+    this.show(`<div class="screen-header"><div><div class="crumb">SOFFTI CLUB</div><h2>Destacados</h2></div></div>
+      <div class="screen-body"><p class="muted">Cartas especiales que cambian con el tiempo. Salen en el <b>Sobre de destacados</b> (y algunas en el mercado) solo mientras están vigentes; las que consigas se quedan para siempre.</p>${sections}</div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn primary" data-act="packs">Ir a los sobres</button></div>`, handlers, () => this.hub(), 'club-screen club-featured');
   }
 
   // ==================================================================

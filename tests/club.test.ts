@@ -3,7 +3,7 @@ import { makeMatch } from './helpers';
 import { SIM_DT } from '../src/config/constants';
 import { FORMATIONS } from '../src/data/formations';
 import { TEAMS } from '../src/data/teams';
-import { catalog, eventDefs, getCardDef } from '../src/modes/club/catalog';
+import { catalog, eventDefs, getCardDef, periodDefs, periodOf } from '../src/modes/club/catalog';
 import { evaluateSquad } from '../src/modes/club/chemistry';
 import { Club } from '../src/modes/club/Club';
 import { BATTLES, CHAMPIONS, SBCS, rivalsDivision } from '../src/modes/club/competitions';
@@ -684,5 +684,32 @@ describe('Club · evoluciones, pase, misiones y sobres nuevos', () => {
     const got = new Set<string>();
     for (let i = 0; i < 400; i++) for (const d of rollPack({ pack: special, season: 's1', rand, owned: new Map(), pity: 0 }).defs) got.add(d.rarity);
     for (const r of ['hero', 'idol', 'flash', 'titan', 'maestro']) expect(got.has(r)).toBe(true);
+  });
+  it('MOTM, TOTW, TOTM, TOTS y TOTY: cambian por periodo, son onces válidos y el sobre de destacados da los vigentes', () => {
+    const now = T0;
+    const w1 = periodDefs('totw', periodOf('totw', now, 's1'));
+    const w2 = periodDefs('totw', periodOf('totw', now + 7 * DAY, 's1'));
+    expect(w1.length).toBe(11);
+    expect(w1.filter((d) => d.group === 'GK').length).toBe(1);
+    expect(w1.map((d) => d.id).join()).not.toBe(w2.map((d) => d.id).join());
+    expect(periodDefs('motm', periodOf('motm', now, 's1')).length).toBe(6);
+    const toty = periodDefs('toty', periodOf('toty', now, 's1'));
+    expect(toty.length).toBe(11);
+    expect(Math.min(...toty.map((d) => d.ovr))).toBeGreaterThan(Math.min(...periodDefs('totm', periodOf('totm', now, 's1')).map((d) => d.ovr)) - 5);
+    expect(periodDefs('tots', 's1').length).toBeGreaterThan(11 * 15);
+    // la carta se encuentra por su id aunque ya no esté vigente, y mejora a la base
+    for (const d of [...w1, ...toty]) {
+      expect(getCardDef(d.id)?.id).toBe(d.id);
+      expect(d.ovr).toBeGreaterThanOrEqual(getCardDef(d.playerId)!.ovr);
+    }
+    const stars = PACKS.find((p) => p.id === 'stars')!;
+    const rand = seeded(17);
+    const current = new Set(['motm', 'totw', 'totm', 'tots', 'toty'].flatMap((k) => periodDefs(k as never, periodOf(k as never, now, 's1')).map((d) => d.id)));
+    for (let i = 0; i < 200; i++) {
+      const r = rollPack({ pack: stars, season: 's1', rand, owned: new Map(), pity: 0, now });
+      const special = r.defs.filter((d) => ['motm', 'totw', 'totm', 'tots', 'toty'].includes(d.rarity));
+      expect(special.length).toBeGreaterThan(0);
+      for (const d of special) expect(current.has(d.id)).toBe(true);
+    }
   });
 });

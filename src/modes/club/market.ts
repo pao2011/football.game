@@ -1,4 +1,4 @@
-import { catalog, eventDefs, getCardDef, niceRound } from './catalog';
+import { catalog, eventDefs, getCardDef, isPeriodKind, niceRound, periodDefs, periodOf } from './catalog';
 import { addTx, ECONOMY, nextId } from './economy';
 import { track } from './progress';
 import type { CardDef, CardInstance, ClubState, Listing, Rarity, Result } from './types';
@@ -22,7 +22,7 @@ export interface MarketBackend {
   list(cardUid: string, price: number, hours: number): Promise<Result<void>>;
 }
 
-const RARITY_WEIGHT: [Rarity, number][] = [['bronze', 24], ['silver', 34], ['gold', 30], ['rising', 6], ['flash', 2], ['maestro', 2], ['titan', 1.5], ['special', 3.5], ['hero', 1.2], ['idol', 0.9], ['event', 1.8], ['legend', 0.7]];
+const RARITY_WEIGHT: [Rarity, number][] = [['bronze', 24], ['silver', 34], ['gold', 30], ['rising', 6], ['flash', 2], ['maestro', 2], ['titan', 1.5], ['special', 3.5], ['hero', 1.2], ['idol', 0.9], ['event', 1.8], ['legend', 0.7], ['motm', 1.2], ['totw', 1], ['totm', 0.5], ['tots', 0.3], ['toty', 0.12]];
 
 let defsByRarityCache: Map<Rarity, CardDef[]> | null = null;
 function defsOf(r: Rarity): CardDef[] {
@@ -47,7 +47,7 @@ export function generateListings(epoch: number, season: string, count = 90): Lis
     let x = rand() * total;
     let r: Rarity = 'silver';
     for (const [rr, w] of RARITY_WEIGHT) { x -= w; if (x < 0) { r = rr; break; } }
-    const list = r === 'event' ? eventDefs(season) : defsOf(r);
+    const list = r === 'event' ? eventDefs(season) : isPeriodKind(r) ? periodDefs(r, periodOf(r, start, season)) : defsOf(r);
     if (!list.length) continue;
     const d = list[Math.floor(rand() * list.length)];
     if (seen.has(d.id)) continue;
