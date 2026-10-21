@@ -45,3 +45,5 @@
 .cb-result { margin-top: 14px; padding: 12px; border-radius: 8px; background: rgba(116,172,223,0.1); border: 1px solid rgba(116,172,223,0.35); } .cb-rewards { display: flex; gap: 22px; margin: 6px 0 8px; } .cb-rewards div { display: flex; flex-direction: column; } .cb-rewards span { font-size: 26px; font-weight: 800; color: #ffe27a; } .cb-rewards small { font-size: 10px; letter-spacing: 0.15em; color: var(--muted); font-family: var(--display); font-weight: 700; }
 @media (max-width: 900px) { .cb-main { grid-template-columns: 1fr; } .cb-create, .cb-detail, .cb-sbcb { grid-template-columns: 1fr; } .cb-top { grid-template-columns: 1fr auto; } .cb-lv { display: none; } }
 @media (max-height: 520px) { .cb-main { grid-template-columns: 1fr 1.4fr 1fr; } .cb-pitch { aspect-ratio: 4 / 3.6; } .cb-tile { padding: 8px 10px; } .cb-tile b { font-size: 16px; } .cb-tile small { display: none; } .cb-ico { font-size: 20px; } .cb-clubname { font-size: 22px; } .cb-id svg { width: 40px; height: 40px; } .cb-colgrid { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); } }
+
+.cb-detinfo .tbl td { padding: 3px 10px; font-size: 13px; } .cb-detinfo { padding: 12px 16px; }

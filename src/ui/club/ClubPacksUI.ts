@@ -13,7 +13,7 @@ import { cardHTML, fmt } from './cards';
 
 type Stage = 'pack' | 'cards' | 'done';
 interface LogEntry { defId: string; action: 'club' | 'sell' | 'discard'; value: number }
-interface Scene { openingId: string; packId: string; stage: Stage; revealed: boolean; confirmDiscard: boolean; log: LogEntry[]; total: number }
+interface Scene { openingId: string; packId: string; stage: Stage; revealed: boolean; confirmDiscard: boolean; log: LogEntry[]; total: number; dealt?: boolean }
 
 const reduced = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const RARE_FX: Rarity[] = ['special', 'event', 'legend'];
@@ -34,7 +34,7 @@ export function packsScreen(host: ClubHost): void {
   const cv = document.createElement('canvas');
   cv.className = 'cp-confetti';
   const ctx = cv.getContext('2d');
-  type P = { x: number; y: number; vx: number; vy: number; r: number; vr: number; w: number; h: number; c: string; life: number };
+  type P = { x: number; y: number; vx: number; vy: number; r: number; vr: number; w: number; h: number; c: string; life: number; g?: number; star?: boolean };
   let parts: P[] = [];
   let W = 0, H = 0, last = 0;
   const fit = () => {
@@ -62,6 +62,18 @@ export function packsScreen(host: ClubHost): void {
     }
     if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); }
   };
+  /** Chispas en estrella que salen del centro y se apagan (sin gravedad). */
+  const sparks = (kind: string, n: number) => {
+    if (reduced() || !ctx) return;
+    fit();
+    const cols = COLORS[kind] ?? COLORS.gold;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 140 + Math.random() * 520;
+      parts.push({ x: W / 2, y: H * 0.5, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: Math.random() * 6, vr: (Math.random() - 0.5) * 6, w: 3 + Math.random() * 5, h: 3 + Math.random() * 5, c: cols[(Math.random() * cols.length) | 0], life: 0.7 + Math.random() * 0.9, g: 0, star: true });
+    }
+    if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); }
+  };
   const frame = (now: number) => {
     raf = 0;
     if (!ctx || !cv.isConnected) { parts = []; return; }
@@ -69,10 +81,17 @@ export function packsScreen(host: ClubHost): void {
     ctx.clearRect(0, 0, W, H);
     parts = parts.filter((p) => p.life > 0 && p.y < H + 30);
     for (const p of parts) {
-      p.vy += 560 * dt; p.vx *= 1 - 0.7 * dt; p.vy *= 1 - 0.3 * dt;
+      p.vy += 560 * (p.g ?? 1) * dt; p.vx *= 1 - (p.star ? 1.6 : 0.7) * dt; p.vy *= 1 - (p.star ? 1.6 : 0.3) * dt;
       p.x += p.vx * dt; p.y += p.vy * dt; p.r += p.vr * dt; p.life -= dt;
-      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.globalAlpha = Math.min(1, p.life);
-      ctx.fillStyle = p.c; ctx.scale(1, Math.cos(p.r * 1.7)); ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+      ctx.fillStyle = p.c;
+      if (p.star) {
+        // destello de cuatro puntas con halo
+        ctx.globalCompositeOperation = 'lighter'; ctx.shadowColor = p.c; ctx.shadowBlur = 12;
+        const s = p.w * 2.2;
+        ctx.beginPath(); ctx.moveTo(0, -s); ctx.lineTo(s * 0.28, -s * 0.28); ctx.lineTo(s, 0); ctx.lineTo(s * 0.28, s * 0.28); ctx.lineTo(0, s); ctx.lineTo(-s * 0.28, s * 0.28); ctx.lineTo(-s, 0); ctx.lineTo(-s * 0.28, -s * 0.28); ctx.closePath(); ctx.fill();
+      } else { ctx.scale(1, Math.cos(p.r * 1.7)); ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); }
+      ctx.restore();
     }
     if (parts.length) raf = requestAnimationFrame(frame);
   };
@@ -103,16 +122,51 @@ export function packsScreen(host: ClubHost): void {
   const promoOf = (id: string) => club.s.packs.promo[id] ?? 0;
 
   // ---------- HTML ----------
-  const packArt = (p: PackDef, cls = '') => `<svg class="cp-art ${cls}" viewBox="0 0 120 170" style="--pc:${p.color}" aria-hidden="true">
-    <path class="cp-art-body" d="M12 14L24 8L36 14L48 8L60 14L72 8L84 14L96 8L108 14V156L96 162L84 156L72 162L60 156L48 162L36 156L24 162L12 156Z" style="fill:var(--pc)"/>
-    <path d="M12 14L24 8L36 14L48 8L60 14L72 8L84 14L96 8L108 14V60L12 96Z" fill="#fff" opacity=".22"/>
-    <path d="M12 156L96 162L108 156V110L12 142Z" fill="#000" opacity=".22"/>
-    <circle cx="60" cy="84" r="27" fill="#000" opacity=".28"/><circle cx="60" cy="84" r="24" fill="none" stroke="#fff" stroke-width="2.5" opacity=".85"/>
-    <path d="M60 68L71 76L67 89H53L49 76Z" fill="#fff" opacity=".9"/>
-    <path d="M60 68V61M71 76L78 72M67 89L72 96M53 89L48 96M49 76L42 72" stroke="#fff" stroke-width="2" opacity=".8"/>
-    <rect x="22" y="30" width="76" height="5" rx="2.5" fill="#fff" opacity=".7"/><rect x="34" y="40" width="52" height="3" rx="1.5" fill="#fff" opacity=".5"/>
-    <path class="cp-art-shine" d="M-30 0L-10 0L40 170L20 170Z" fill="#fff" opacity=".35"/>
-  </svg>`;
+  // Sobre de aluminio: cierres dentados arriba y abajo, brillo diagonal, emblema propio por tipo y la cinta con el nombre.
+  let artN = 0;
+  const lite = (c: string, k: number) => { const n = parseInt(c.slice(1), 16); const f = (v: number) => Math.max(0, Math.min(255, Math.round(k >= 0 ? v + (255 - v) * k : v * (1 + k)))); return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`; };
+  const emblem = (id: string, c: string, uid: string): string => {
+    if (id === 'special') return `<defs><linearGradient id="${uid}r" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5ee7ff"/><stop offset=".35" stop-color="#9a7bff"/><stop offset=".7" stop-color="#ff64dc"/><stop offset="1" stop-color="#ffe27a"/></linearGradient></defs>
+      <path d="M60 52L84 84L60 118L36 84Z" fill="url(#${uid}r)" stroke="#fff" stroke-width="2.4"/><path d="M60 52L72 84L60 118L48 84Z" fill="#fff" opacity=".3"/><path d="M36 84H84" stroke="#fff" stroke-width="1.4" opacity=".7"/>`;
+    if (id === 'premium') return `<circle cx="60" cy="86" r="27" fill="#000" opacity=".25"/><circle cx="60" cy="86" r="24" fill="${lite(c, 0.55)}" stroke="#fff" stroke-width="2.4"/>
+      <path d="M60 68L65 81L79 81L68 89L72 103L60 94.5L48 103L52 89L41 81L55 81Z" fill="${lite(c, -0.45)}"/>`;
+    if (id === 'promo') return `<rect x="38" y="70" width="44" height="34" rx="4" fill="${lite(c, 0.4)}" stroke="#fff" stroke-width="2.2"/><rect x="56" y="70" width="8" height="34" fill="#fff" opacity=".85"/><rect x="38" y="84" width="44" height="7" fill="#fff" opacity=".85"/>
+      <path d="M60 70C50 56 40 62 48 70M60 70C70 56 80 62 72 70" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>`;
+    return `<circle cx="60" cy="86" r="27" fill="#000" opacity=".25"/><circle cx="60" cy="86" r="24" fill="${lite(c, 0.5)}" stroke="#fff" stroke-width="2.4"/>
+      <path d="M60 70L71 78L67 91H53L49 78Z" fill="${lite(c, -0.5)}"/><path d="M60 70V63M71 78L78 74M67 91L72 98M53 91L48 98M49 78L42 74" stroke="${lite(c, -0.5)}" stroke-width="2.2" stroke-linecap="round"/>`;
+  };
+  const packArt = (p: PackDef, cls = '') => {
+    const u = `pk${artN++}`;
+    const c = p.color;
+    let crimp = 'M10 0';
+    for (let i = 0; i < 27; i++) crimp += `L${10 + i * 4 + 2} ${i % 2 ? 0 : 5}`;
+    crimp += 'L110 0';
+    let crimpB = 'M10 176';
+    for (let i = 0; i < 27; i++) crimpB += `L${10 + i * 4 + 2} ${i % 2 ? 176 : 171}`;
+    crimpB += 'L110 176';
+    const name = esc(p.name.replace(/^Sobre\s+/i, '').toUpperCase());
+    return `<svg class="cp-art ${cls}" viewBox="0 0 120 180" style="--pc:${c}" aria-hidden="true">
+      <defs>
+        <linearGradient id="${u}f" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${lite(c, 0.5)}"/><stop offset=".35" stop-color="${c}"/><stop offset=".75" stop-color="${lite(c, -0.35)}"/><stop offset="1" stop-color="${lite(c, -0.55)}"/></linearGradient>
+        <linearGradient id="${u}s" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".7"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+        <clipPath id="${u}b"><rect x="10" y="0" width="100" height="180" rx="3"/></clipPath>
+      </defs>
+      <g class="cp-art-body" clip-path="url(#${u}b)">
+        <path d="M10 0H110V180H10Z" fill="url(#${u}f)"/>
+        <path d="M10 22H110V150L10 118Z" fill="#fff" opacity=".12"/>
+        <path d="M10 118L110 150V180H10Z" fill="#000" opacity=".2"/>
+        ${Array.from({ length: 7 }, (_, i) => `<path d="M${12 + i * 15} 24L${28 + i * 15} 150" stroke="#fff" stroke-width=".6" opacity=".14"/>`).join('')}
+        ${emblem(p.id, c, u)}
+        <path d="M10 118H110V138H10Z" fill="#05081a" opacity=".78"/><path d="M10 118H110" stroke="#fff" stroke-width="1.2" opacity=".85"/><path d="M10 138H110" stroke="${lite(c, 0.4)}" stroke-width="1.2"/>
+        <text x="60" y="132" text-anchor="middle" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="800" font-size="13" letter-spacing="2" fill="#fff">${name}</text>
+        <text x="60" y="150" text-anchor="middle" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-weight="700" font-size="6.2" letter-spacing="1.3" fill="#fff" opacity=".8">${p.cards} CARTAS · SOFFTI CLUB</text>
+        <rect class="cp-art-shine" x="-40" y="0" width="34" height="180" fill="url(#${u}s)" transform="skewX(-16)"/>
+      </g>
+      <g class="cp-art-top"><path d="${crimp}V20H10Z" fill="url(#${u}f)"/><path d="M10 20H110" stroke="#000" stroke-width="1" opacity=".3"/><path d="M10 6H110V13H10Z" fill="#fff" opacity=".2"/></g>
+      <g class="cp-art-bot"><path d="${crimpB}V160H10Z" fill="url(#${u}f)"/><path d="M10 160H110" stroke="#000" stroke-width="1" opacity=".3"/></g>
+      <path d="M10 0V180M110 0V180" stroke="#000" stroke-width="1.4" opacity=".35"/>
+    </svg>`;
+  };
 
   const oddsBlock = (p: PackDef): string => {
     const odds = effectiveOdds(p, currentSeason(host.now()).id);
@@ -185,8 +239,9 @@ export function packsScreen(host: ClubHost): void {
         <div class="cp-prog"><span class="num">Carta ${idx + 1} / ${op.cards.length}</span><span class="cp-dots">${dots}</span></div>
         <div class="cp-reveal">
           <div class="cp-flip" data-act="flip" role="button" tabindex="-1" aria-label="Revelar carta">
+            <div class="cp-beams"><i></i><i></i><i></i><i></i><i></i></div>
             <div class="cp-glow"></div>
-            <div class="cp-flipper"><div class="cp-face cp-back"><div class="cp-back-in"><span>S</span></div></div><div class="cp-face cp-front">${cardHTML(d, { size: 'lg' })}</div></div>
+            <div class="cp-flipper ${sc.dealt ? 'next' : 'deal'}"><div class="cp-face cp-back"><div class="cp-back-in"><span>S</span><em>SOFFTI CLUB</em></div></div><div class="cp-face cp-front">${cardHTML(d, { size: 'lg' })}</div></div>
           </div>
           <div class="cp-panel hid">
             <div class="cp-cname">${esc(d.name)}</div>
@@ -228,9 +283,27 @@ export function packsScreen(host: ClubHost): void {
       const h = sceneHTML();
       if (!h) { scene.stage = 'done'; screen.refresh(sceneHTML()); } else screen.refresh(h);
       screen.root.appendChild(cv);
+      bindTilt();
     } else {
       screen.refresh(storeHTML());
     }
+  };
+  /** Inclinación 3D y reflejo holográfico de la carta revelada siguiendo el puntero. */
+  const bindTilt = () => {
+    const flip = screen.root.querySelector<HTMLElement>('.cp-flip');
+    const card = flip?.querySelector<HTMLElement>('.cp-front .fc');
+    if (!flip || !card || reduced()) return;
+    flip.addEventListener('pointermove', (e) => {
+      if (!scene?.revealed) return;
+      const r = flip.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width - 0.5;
+      const y = (e.clientY - r.top) / r.height - 0.5;
+      card.style.setProperty('--rx', `${(-y * 16).toFixed(1)}deg`);
+      card.style.setProperty('--ry', `${(x * 18).toFixed(1)}deg`);
+      card.style.setProperty('--mx', `${((x + 0.5) * 100).toFixed(0)}%`);
+      card.style.setProperty('--my', `${((y + 0.5) * 100).toFixed(0)}%`);
+    });
+    flip.addEventListener('pointerleave', () => { card.style.setProperty('--rx', '0deg'); card.style.setProperty('--ry', '0deg'); });
   };
   const stageEl = () => screen.root.querySelector<HTMLElement>('.cp-scene');
   const flash = (cls = '') => {
@@ -250,17 +323,27 @@ export function packsScreen(host: ClubHost): void {
     paint();
   };
 
+  /** Sobre: carga (tiembla y brilla cada vez más) → se rasga la parte de arriba con un destello → salen las cartas. */
   function rip() {
     if (!scene || scene.stage !== 'pack') return;
     const done = () => { if (!scene) return; scene.stage = 'cards'; scene.revealed = false; paint(); };
     if (reduced()) { done(); return; }
     const pk = screen.root.querySelector<HTMLElement>('.cp-rip');
-    if (!pk || pk.classList.contains('shake')) return;
-    pk.classList.add('shake');
+    if (!pk || pk.classList.contains('charge')) return;
+    pk.classList.add('charge');
     pk.removeAttribute('data-act');
     cheer(0.15);
-    later(() => { pk.classList.remove('shake'); pk.classList.add('tear'); flash(); }, 900);
-    later(done, 1500);
+    later(() => {
+      pk.classList.remove('charge'); pk.classList.add('tear');
+      flash('big');
+      const b = document.createElement('div');
+      b.className = 'cp-burst';
+      stageEl()?.appendChild(b);
+      confetti('gold', false);
+      sparks(scene?.packId === 'special' ? 'special' : 'gold', 46);
+      cheer(0.3);
+    }, 1300);
+    later(done, 2150);
   }
 
   function flip() {
@@ -270,6 +353,7 @@ export function packsScreen(host: ClubHost): void {
     if (!cur) return;
     const d = getCardDef(cur.defId)!;
     scene.revealed = true;
+    scene.dealt = true;
     const root = screen.root;
     const f = root.querySelector<HTMLElement>('.cp-flip');
     f?.setAttribute('data-nofocus', '1');
@@ -288,7 +372,7 @@ export function packsScreen(host: ClubHost): void {
     if (fx) stageEl()?.classList.add('fx-' + d.rarity);
     later(() => {
       show();
-      if (fx) { flash(wow ? 'big' : ''); confetti(fx, wow); }
+      if (fx) { flash(wow ? 'big' : ''); confetti(fx, wow); sparks(fx, wow ? 90 : 36); }
       if (wow) {
         cheer(0.5);
         const w = document.createElement('div');
