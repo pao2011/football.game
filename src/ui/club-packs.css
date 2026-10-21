@@ -227,3 +227,9 @@
 :is(.cp-r-totm, .cp-r-tots, .cp-r-toty).revealed .cp-glow { animation: cpGlow 1.6s ease-in-out infinite; }
 :is(.cp-r-motm, .cp-r-totw, .cp-r-totm, .cp-r-tots, .cp-r-toty) .cp-back-in { filter: drop-shadow(0 0 16px var(--rc)); animation: cpAura 1s ease-in-out infinite; }
 .cp-ch-motm { background: rgba(255,61,110,.22); color: #ffd0dc; } .cp-ch-totw { background: rgba(255,211,90,.18); color: #ffe27a; } .cp-ch-totm { background: rgba(155,107,255,.25); color: #e3d4ff; } .cp-ch-tots { background: rgba(94,231,255,.2); color: #bff4ff; } .cp-ch-toty { background: rgba(26,79,255,.3); color: #ffe27a; }
+
+/* El frente de la carta no se ve hasta que el giro pasa la mitad: si no, el navegador lo deja asomar (la carta tiene
+   su propia transformación y filtro) durante la animación de entrada y se arruina la sorpresa. */
+.cp-front { visibility: hidden; }
+.cp-flipper.on .cp-front { visibility: visible; transition: visibility 0s .3s; }
+@media (prefers-reduced-motion: reduce) { .cp-flipper.on .cp-front { transition: none; } }
