@@ -118,6 +118,8 @@ export function avatarSVG(face: CardDef['face'], kit: Pick<KitData, 'shirt' | 's
   </svg>`;
 }
 
+const KIND_TAG: Partial<Record<CardDef['rarity'], string>> = { hero: 'HÉROE', idol: 'ÍDOLO', flash: 'RELÁMPAGO', titan: 'TITÁN', maestro: 'MAESTRO' };
+
 export interface CardOpts {
   size?: 'xs' | 'sm' | 'md' | 'lg';
   /** Química del jugador en su puesto (0..3): muestra los puntos. */
@@ -154,7 +156,7 @@ export function cardHTML(d: CardDef, o: CardOpts = {}): string {
   const chem = o.chem !== undefined ? `<div class="fc-chem c${o.chem}" title="Química ${o.chem}/3">${[0, 1, 2].map((i) => `<i class="${i < o.chem! ? 'on' : ''}"></i>`).join('')}</div>` : '';
   const stats = STAT_KEYS.map((k, i) => `<span><b>${d.stats[k]}</b>${labels[i]}</span>`);
   const evoTag = d.evo ? `<div class="fc-tag fc-evotag">EVO · ${esc(d.evo.name.toUpperCase())}</div>` : '';
-  const tag = d.evo ? evoTag : d.rarity === 'event' ? `<div class="fc-tag">${esc(d.eventSeason ?? 'EVENTO').toUpperCase()}</div>` : d.rarity === 'rising' ? '<div class="fc-tag">PROMESA</div>' : d.rarity === 'special' ? '<div class="fc-tag">ESTRELLA</div>' : d.rarity === 'legend' ? '<div class="fc-tag">LEYENDA</div>' : '';
+  const tag = d.evo ? evoTag : d.rarity === 'event' ? `<div class="fc-tag">${esc(d.eventSeason ?? 'EVENTO').toUpperCase()}</div>` : d.rarity === 'rising' ? '<div class="fc-tag">PROMESA</div>' : d.rarity === 'special' ? '<div class="fc-tag">ESTRELLA</div>' : d.rarity === 'legend' ? '<div class="fc-tag">LEYENDA</div>' : KIND_TAG[d.rarity] ? `<div class="fc-tag">${KIND_TAG[d.rarity]}</div>` : '';
   const foil = d.rarity === 'bronze' || d.rarity === 'silver' ? '' : '<div class="fc-foil"></div>';
   return `<div class="fc fc-${d.rarity} fc-${size} ${d.evo ? 'fc-evo' : ''} ${o.cls ?? ''}" ${o.attrs ?? ''} title="${esc(d.name)} · ${RARITY_NAMES[d.rarity]}${d.evo ? ` · Evolución ${esc(d.evo.name)} (nivel ${d.evo.level})` : ''}">
     <div class="fc-bg"></div><div class="fc-art"></div>${foil}

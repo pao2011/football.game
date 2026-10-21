@@ -15,6 +15,8 @@ Código: `src/modes/club/` (motor, sin interfaz) y `src/ui/club/` (pantallas). G
 | Evoluciones (datos y lógica) | `evoDefs.ts`, `evos.ts` |
 | Estado, guardado y acciones | `Club.ts` |
 
+**Tipos de carta:** bronce, plata y oro (según la valoración) para todos los jugadores de todos los clubes del juego; Promesa (≤21 años), Especial (83+), Evento (por temporada), Leyenda (ficticias) y Héroe (veteranos de 31+), Ídolo (el mejor de cada club), Relámpago (rápidos), Titán (defensas y porteros 78+) y Maestro (medios de buen pase). Se generan en `catalog.ts` (`KIND_BOOST`), así que un club o una liga nueva del juego aparece sola en el modo.
+
 **Datos generados:** el juego no tiene edad, nacionalidad ni pierna de los jugadores; se generan de forma determinista a partir del id. Las leyendas son ficticias.
 
 **Partidos:** son partidos jugables reales. Los atributos de la carta, el ajuste de puesto, la química y el capitán modifican los atributos del jugador en el partido; los lanzadores designados se usan en penales y tiros libres. Rivals, Champions, Squad Battles y torneos son contra la IA. **Online** (club contra club): la cola `club` del servidor (`server/lobby.mjs`) empareja y reenvía la plantilla de cada jugador; el anfitrión simula el partido y valida la plantilla rival con `sanitizeOnlineTeam` (atributos 1..99). El resultado confirmado por los dos se contabiliza en el club (monedas, XP, puntos online, misiones y evoluciones). Los atributos los manda cada cliente: sin cuentas en el servidor no es resistente a trampas.

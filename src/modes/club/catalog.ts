@@ -20,7 +20,7 @@ const COUNTRY_ALIAS: Record<string, string> = { 'Brasil': 'Brasil', 'Reino Unido
 
 /** Valor de mercado (monedas) según la valoración: interpolación logarítmica entre estos puntos. */
 const PRICE_KNOTS: [number, number][] = [[40, 10], [50, 25], [60, 100], [70, 550], [75, 1200], [80, 2400], [85, 5000], [90, 14000], [95, 40000], [99, 100000]];
-export const RARITY_PRICE: Record<Rarity, number> = { bronze: 1, silver: 1, gold: 1, rising: 1.3, special: 1.6, event: 1.5, legend: 2 };
+export const RARITY_PRICE: Record<Rarity, number> = { bronze: 1, silver: 1, gold: 1, rising: 1.3, special: 1.6, event: 1.5, legend: 2, hero: 1.6, idol: 1.7, flash: 1.3, titan: 1.4, maestro: 1.4 };
 
 export function basePrice(ovr: number): number {
   const o = clamp(ovr, 40, 99);
@@ -72,6 +72,21 @@ const boostAttrs = (a: PlayerAttributes, b: number): PlayerAttributes => ({
   control: clamp(a.control + b, 1, 99), defending: clamp(a.defending + b, 1, 99), stamina: clamp(a.stamina + b, 1, 99), goalkeeping: clamp(a.goalkeeping + b, 1, 99),
 });
 
+/** Mejora de atributos de cada tipo de carta especial. */
+const plus = (a: PlayerAttributes, b: Partial<PlayerAttributes>): PlayerAttributes => {
+  const o = { ...a };
+  for (const [k, v] of Object.entries(b)) o[k as keyof PlayerAttributes] = clamp(o[k as keyof PlayerAttributes] + (v ?? 0), 1, 99);
+  return o;
+};
+const KIND_BOOST: Partial<Record<Rarity, (a: PlayerAttributes) => PlayerAttributes>> = {
+  rising: (a) => boostAttrs(a, 3), special: (a) => boostAttrs(a, 3), event: (a) => boostAttrs(a, 4),
+  hero: (a) => boostAttrs(a, 5), idol: (a) => boostAttrs(a, 4),
+  flash: (a) => plus(a, { speed: 9, acceleration: 9, control: 2 }),
+  titan: (a) => plus(a, { defending: 6, goalkeeping: 6, stamina: 3, passing: 1 }),
+  maestro: (a) => plus(a, { passing: 6, control: 6, shooting: 2 }),
+};
+const KIND_CODE: Partial<Record<Rarity, string>> = { rising: 'rs', special: 'sp', hero: 'hr', idol: 'id', flash: 'fl', titan: 'tt', maestro: 'ms' };
+
 const tierOf = (ovr: number): Rarity => (ovr < 65 ? 'bronze' : ovr < 75 ? 'silver' : 'gold');
 
 const BENCH_ROLES: Role[] = ['POR', 'DFC', 'DFC', 'MC', 'MC', 'DC', 'DC'];
@@ -96,13 +111,13 @@ function make(base: { p: PlayerData; role: Role; teamId: string; teamName: strin
   const sa = NATIONS.indexOf(base.country) < 10;
   const pool = (h >>> 3) % 100 < 85 ? (sa ? NATIONS.slice(0, 10) : NATIONS.slice(10)) : NATIONS;
   const nat = foreign ? pool[(h >>> 12) % pool.length] : base.country;
-  const boost = kind === 'rising' ? 3 : kind === 'special' ? 3 : kind === 'event' ? 4 : 0;
-  const attrs = boost ? boostAttrs(p.attrs, boost) : p.attrs;
+  const attrs = kind === 'base' ? p.attrs : KIND_BOOST[kind]!(p.attrs);
+  const boost = kind === 'base' ? 0 : Math.max(...Object.keys(attrs).map((k) => attrs[k as keyof PlayerAttributes] - p.attrs[k as keyof PlayerAttributes]));
   const pd: PlayerData = { ...p, attrs };
   const ovr = clamp(playerOverall(pd), 30, 99);
   const rarity: Rarity = kind === 'base' ? tierOf(ovr) : kind;
   const stats = statsOf(attrs, p.height, p.position === 'GK');
-  const suffix = kind === 'base' ? '' : kind === 'rising' ? '~rs' : kind === 'special' ? '~sp' : `~ev~${season}`;
+  const suffix = kind === 'base' ? '' : kind === 'event' ? `~ev~${season}` : `~${KIND_CODE[kind]}`;
   const parts = p.name.trim().split(/\s+/);
   const short = parts.length > 1 ? parts.slice(1).join(' ') : parts[0];
   return {
@@ -176,15 +191,25 @@ function build(): Map<string, CardDef> {
     const lg = leagueOfTeam(t.id);
     const country = COUNTRY_ALIAS[lg?.country ?? ''] ?? lg?.country ?? 'Argentina';
     const slots = FORMATIONS[t.formation];
+    const idol: { ctx: Parameters<typeof make>[0] | null; ovr: number } = { ctx: null, ovr: 69 };
     t.players.forEach((p, i) => {
       const role: Role = i < 11 ? (slots[i].role as Role) : BENCH_ROLES[(i - 11) % BENCH_ROLES.length];
       const ctx = { p, role, teamId: t.id, teamName: t.name, league: lg?.id ?? '', country, fictional: !p.name };
       const base = make(ctx, 'base');
       map.set(base.id, base);
-      const age = base.age;
-      if (age <= 21 && base.ovr >= 62 && base.ovr < 82) { const c = make(ctx, 'rising'); map.set(c.id, c); }
-      if (base.ovr >= 83) { const c = make(ctx, 'special'); map.set(c.id, c); }
+      const { age, ovr, group, stats } = base;
+      const add = (k: Rarity) => { const c = make(ctx, k); map.set(c.id, c); };
+      if (age <= 21 && ovr >= 62 && ovr < 82) add('rising');
+      if (ovr >= 83) add('special');
+      // Héroe: veteranos · Relámpago: los más rápidos · Titán: defensas y porteros · Maestro: medios de buen pie
+      if (age >= 31 && ovr >= 74 && ovr <= 86) add('hero');
+      if (group !== 'GK' && group !== 'DEF' && stats.pac >= 78 && ovr >= 68 && ovr <= 85) add('flash');
+      if ((group === 'DEF' || group === 'GK') && ovr >= 78) add('titan');
+      if (group === 'MID' && stats.pas >= 78 && ovr >= 74) add('maestro');
+      if (ovr > idol.ovr) { idol.ctx = ctx; idol.ovr = ovr; }
     });
+    // Ídolo: el mejor jugador de cada club
+    if (idol.ctx) { const c = make(idol.ctx, 'idol'); map.set(c.id, c); }
   }
   LEGEND_SEEDS.forEach((s, i) => { const d = legendDef(s, i); map.set(d.id, d); });
   return map;

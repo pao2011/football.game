@@ -22,7 +22,7 @@ export interface MarketBackend {
   list(cardUid: string, price: number, hours: number): Promise<Result<void>>;
 }
 
-const RARITY_WEIGHT: [Rarity, number][] = [['bronze', 24], ['silver', 34], ['gold', 30], ['rising', 6], ['special', 3.5], ['event', 1.8], ['legend', 0.7]];
+const RARITY_WEIGHT: [Rarity, number][] = [['bronze', 24], ['silver', 34], ['gold', 30], ['rising', 6], ['flash', 2], ['maestro', 2], ['titan', 1.5], ['special', 3.5], ['hero', 1.2], ['idol', 0.9], ['event', 1.8], ['legend', 0.7]];
 
 let defsByRarityCache: Map<Rarity, CardDef[]> | null = null;
 function defsOf(r: Rarity): CardDef[] {

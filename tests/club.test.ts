@@ -665,4 +665,24 @@ describe('Club · evoluciones, pase, misiones y sobres nuevos', () => {
     expect(sanitizeOnlineTeam({ ...raw, players: raw.players.slice(0, 5) })).toBeNull();
     expect(sanitizeOnlineTeam(null)).toBeNull();
   });
+  it('los cinco tipos nuevos (Héroe, Ídolo, Relámpago, Titán, Maestro) existen, mejoran a su jugador y salen en sobres', () => {
+    const all = [...catalog().values()];
+    for (const r of ['hero', 'idol', 'flash', 'titan', 'maestro'] as const) {
+      const ds = all.filter((d) => d.rarity === r);
+      expect(ds.length).toBeGreaterThan(50);
+      for (const d of ds.slice(0, 40)) {
+        const base = getCardDef(d.playerId)!;
+        expect(d.ovr).toBeGreaterThanOrEqual(base.ovr);
+        expect(d.price).toBeGreaterThan(base.price);
+      }
+    }
+    // un ídolo por club como mucho
+    const idols = all.filter((d) => d.rarity === 'idol');
+    expect(new Set(idols.map((d) => d.clubId)).size).toBe(idols.length);
+    const special = PACKS.find((p) => p.id === 'special')!;
+    const rand = seeded(13);
+    const got = new Set<string>();
+    for (let i = 0; i < 400; i++) for (const d of rollPack({ pack: special, season: 's1', rand, owned: new Map(), pity: 0 }).defs) got.add(d.rarity);
+    for (const r of ['hero', 'idol', 'flash', 'titan', 'maestro']) expect(got.has(r)).toBe(true);
+  });
 });

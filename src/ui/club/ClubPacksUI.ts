@@ -16,7 +16,7 @@ interface LogEntry { defId: string; action: 'club' | 'sell' | 'discard'; value: 
 interface Scene { openingId: string; packId: string; stage: Stage; revealed: boolean; confirmDiscard: boolean; log: LogEntry[]; total: number; dealt?: boolean; walked?: boolean }
 
 const reduced = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-const RARE_FX: Rarity[] = ['special', 'event', 'legend'];
+const RARE_FX: Rarity[] = ['special', 'event', 'legend', 'hero', 'idol', 'titan'];
 const isWalkout = (d: CardDef) => RARE_FX.includes(d.rarity) || (d.rarity === 'gold' && d.ovr >= 85);
 
 let disposePrev: (() => void) | null = null;
@@ -49,6 +49,11 @@ export function packsScreen(host: ClubHost): void {
     special: ['#5ee7ff', '#ff64dc', '#ffffff', '#6a8cff', '#f6b40e'],
     event: ['#ff8a2f', '#ffe08a', '#c2185b', '#ffffff'],
     legend: ['#ffd35a', '#fff1c2', '#ffffff', '#f6b40e'],
+    hero: ['#ff3b3b', '#ffd35a', '#ffffff', '#8a0f1d'],
+    idol: ['#ffffff', '#c8d6ff', '#7b5cff', '#ffd35a'],
+    flash: ['#fff35a', '#ffffff', '#2fd3ff', '#ffb020'],
+    titan: ['#9aa7b8', '#ffffff', '#3e4a5c', '#5ee7ff'],
+    maestro: ['#2fe6c8', '#ffffff', '#0e7c6b', '#ffe27a'],
   };
   const confetti = (kind: string, big: boolean) => {
     if (reduced() || !ctx) return;

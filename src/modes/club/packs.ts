@@ -24,15 +24,15 @@ export interface PackDef {
   minOvr?: number;
 }
 
-export const RARE: Rarity[] = ['rising', 'special', 'event', 'legend'];
+export const RARE: Rarity[] = ['rising', 'flash', 'maestro', 'titan', 'special', 'hero', 'idol', 'event', 'legend'];
 
 export const PACKS: PackDef[] = [
   { id: 'basic', name: 'Sobre básico', blurb: 'Jugadores de bronce y plata para empezar a armar el club.', price: 2000, cards: 5, odds: { bronze: 62, silver: 35, gold: 3 }, buyable: true, color: '#b87333' },
   { id: 'premium', name: 'Sobre premium', blurb: 'Garantiza al menos una carta de oro.', price: 9000, cards: 5, odds: { silver: 58, gold: 38, rising: 3, special: 0.9, legend: 0.1 }, guarantee: ['gold', 'rising', 'special', 'event', 'legend'], pityAfter: 6, buyable: true, color: '#e8c25a' },
-  { id: 'special', name: 'Sobre especial', blurb: 'Promesas, cartas especiales, de evento y leyendas ficticias.', price: 24000, cards: 4, odds: { gold: 74, rising: 13, special: 7, event: 5, legend: 1 }, guarantee: RARE, buyable: true, color: '#7fe0ff' },
-  { id: 'gold', name: 'Sobre de oro', blurb: 'Tres cartas, todas de oro o mejores.', price: 12000, cards: 3, odds: { gold: 92, rising: 5, special: 2.4, event: 0.5, legend: 0.1 }, guarantee: ['gold', 'rising', 'special', 'event', 'legend'], buyable: true, color: '#ffb020' },
+  { id: 'special', name: 'Sobre especial', blurb: 'Promesas, Relámpago, Maestro, Titán, Héroe, Ídolo, especiales, de evento y leyendas ficticias.', price: 24000, cards: 4, odds: { gold: 60, rising: 11, flash: 6, maestro: 5, titan: 4, special: 6, hero: 3, idol: 2, event: 2.5, legend: 0.5 }, guarantee: RARE, buyable: true, color: '#7fe0ff' },
+  { id: 'gold', name: 'Sobre de oro', blurb: 'Tres cartas, todas de oro o mejores.', price: 12000, cards: 3, odds: { gold: 87, rising: 5, flash: 2, maestro: 2, titan: 1, special: 2.4, event: 0.5, legend: 0.1 }, guarantee: ['gold', 'rising', 'special', 'event', 'legend'], buyable: true, color: '#ffb020' },
   { id: 'mega', name: 'Mega sobre', blurb: 'Doce cartas: para llenar la colección y los desafíos.', price: 24000, cards: 12, odds: { silver: 62, gold: 34, rising: 3, special: 0.8, event: 0.1, legend: 0.1 }, guarantee: ['gold', 'rising', 'special', 'event', 'legend'], pityAfter: 4, buyable: true, color: '#ff5d8f' },
-  { id: 'pick82', name: 'Sobre 82+', blurb: 'Una carta de 82 o más de valoración. Recompensa de misiones y del pase.', price: 0, cards: 1, odds: { gold: 80, special: 15, event: 4, legend: 1 }, buyable: false, color: '#46e3b7', minOvr: 82 },
+  { id: 'pick82', name: 'Sobre 82+', blurb: 'Una carta de 82 o más de valoración. Recompensa de misiones y del pase.', price: 0, cards: 1, odds: { gold: 66, special: 12, hero: 8, idol: 6, titan: 5, event: 2, legend: 1 }, buyable: false, color: '#46e3b7', minOvr: 82 },
   { id: 'legend', name: 'Sobre de leyenda', blurb: 'Una leyenda asegurada. Solo en el pase premium y en misiones.', price: 0, cards: 1, odds: { legend: 100 }, buyable: false, color: '#fff1b8' },
   { id: 'promo', name: 'Sobre promocional', blurb: 'Regalo por objetivos, recompensas y hitos. No se compra.', price: 0, cards: 3, odds: { silver: 60, gold: 36, rising: 4 }, buyable: false, color: '#c28bff' },
 ];
@@ -103,7 +103,7 @@ export function rollPack(inp: RollInput): { defs: CardDef[]; pityUsed: boolean; 
   let pityUsed = false;
   const rareOk = (d: CardDef) => RARE.includes(d.rarity);
   if (pack.pityAfter && inp.pity >= pack.pityAfter && !defs.some(rareOk)) {
-    const r = weighted(RARE.filter((x) => pool(x, season, pack.minOvr).length), (x) => ({ rising: 60, special: 25, event: 12, legend: 3 }[x as 'rising'] ?? 1), rand);
+    const r = weighted(RARE.filter((x) => pool(x, season, pack.minOvr).length), (x) => ({ rising: 60, flash: 15, maestro: 15, titan: 10, special: 25, hero: 8, idol: 6, event: 12, legend: 3 }[x as 'rising'] ?? 1), rand);
     defs[defs.length - 1] = draw(r);
     pityUsed = true;
   }

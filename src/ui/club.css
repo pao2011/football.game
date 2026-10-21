@@ -109,3 +109,24 @@
 .fc-stats b { min-width: 1.3em; }
 .fc-ids { display: flex; align-items: center; justify-content: center; gap: 0.25em; margin-top: 0.35em; padding-top: 0.35em; border-top: 0.09em solid var(--line); }
 .fc-ids .fc-nat, .fc-ids .fc-club { margin: 0; padding: 0; border: 0; } .fc-ids .fc-nat .fc-flag { width: 1.7em; } .fc-ids .fc-club svg { width: 1.6em; height: 1.6em; }
+
+/* ---------- Tipos de carta especiales: Héroe, Ídolo, Relámpago, Titán y Maestro ---------- */
+/* Héroe: rojo carmesí con rayos dorados */
+.fc-hero { --frame: linear-gradient(160deg, #ffd35a, #b8892a 45%, #8a0f1d); --face: linear-gradient(175deg, #a3141f, #3a0509); --ink: #ffe08a; --ink2: #ffd35a; --line: rgba(255,224,138,0.6); --glow: rgba(255,80,60,0.6); --plate: rgba(0,0,0,0.35);
+  --art: repeating-conic-gradient(from 200deg at 75% 95%, rgba(255,211,90,0.28) 0 4deg, transparent 4deg 14deg), radial-gradient(ellipse at 70% 85%, rgba(255,120,80,0.5), transparent 60%); }
+/* Ídolo: blanco perla y violeta con aura */
+.fc-idol { --frame: linear-gradient(160deg, #ffffff, #b6a6ff 50%, #5a3fd6); --face: linear-gradient(170deg, #f6f3ff, #d9d0ff); --ink: #2a1a6e; --ink2: #5a3fd6; --line: rgba(90,63,214,0.55); --glow: rgba(150,120,255,0.7); --plate: rgba(90,63,214,0.14);
+  --art: radial-gradient(circle at 70% 70%, rgba(123,92,255,0.45), transparent 55%), repeating-radial-gradient(circle at 70% 70%, rgba(123,92,255,0.18) 0 0.4em, transparent 0.4em 1.2em); }
+.fc-idol { filter: drop-shadow(0 0 0.7em rgba(150,120,255,0.55)) drop-shadow(0 0.5em 0.9em rgba(0,0,0,0.5)); }
+/* Relámpago: azul eléctrico con rayos amarillos */
+.fc-flash { --frame: linear-gradient(160deg, #fff35a, #2fd3ff 55%, #0a3a8a); --face: linear-gradient(175deg, #0b2a6e, #040d26); --ink: #fff35a; --ink2: #8fe6ff; --line: rgba(255,243,90,0.55); --glow: rgba(47,211,255,0.65); --plate: rgba(0,0,0,0.35);
+  --art: linear-gradient(115deg, transparent 30%, rgba(255,243,90,0.55) 31%, transparent 33%, transparent 55%, rgba(255,243,90,0.4) 56%, transparent 58%), repeating-linear-gradient(115deg, rgba(47,211,255,0.2) 0 2px, transparent 2px 1em); }
+/* Titán: acero oscuro con remaches */
+.fc-titan { --frame: linear-gradient(160deg, #e6ecf3, #6f7c8f 45%, #2a3340); --face: linear-gradient(175deg, #3e4a5c, #141a24); --ink: #e6f3ff; --ink2: #5ee7ff; --line: rgba(230,243,255,0.5); --glow: rgba(94,231,255,0.5); --plate: rgba(0,0,0,0.35);
+  --art: repeating-linear-gradient(90deg, rgba(255,255,255,0.06) 0 1px, transparent 1px 0.7em), radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35) 0 0.18em, transparent 0.2em), radial-gradient(circle at 80% 20%, rgba(255,255,255,0.35) 0 0.18em, transparent 0.2em), linear-gradient(200deg, rgba(94,231,255,0.3), transparent 60%); }
+/* Maestro: verde turquesa con trazos de pizarra */
+.fc-maestro { --frame: linear-gradient(160deg, #ffe27a, #2fe6c8 50%, #0e5c50); --face: linear-gradient(175deg, #0e7c6b, #03241f); --ink: #ffe27a; --ink2: #9ff5e6; --line: rgba(255,226,122,0.55); --glow: rgba(47,230,200,0.6); --plate: rgba(0,0,0,0.33);
+  --art: radial-gradient(ellipse at 30% 100%, transparent 40%, rgba(255,226,122,0.35) 41%, transparent 43%), radial-gradient(ellipse at 90% 110%, transparent 50%, rgba(255,226,122,0.3) 51%, transparent 53%), repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 0.9em); }
+.fc-hero .fc-name, .fc-flash .fc-name, .fc-titan .fc-name, .fc-maestro .fc-name { text-shadow: 0 0.08em 0.3em rgba(0,0,0,0.55); }
+.fc-hero .fc-foil, .fc-idol .fc-foil, .fc-titan .fc-foil { opacity: 0.7; }
+.fc-hero .fc-evotag, .fc-flash .fc-evotag, .fc-titan .fc-evotag, .fc-maestro .fc-evotag { color: #e3b8ff; }
