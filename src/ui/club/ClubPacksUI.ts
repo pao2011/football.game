@@ -216,7 +216,7 @@ export function packsScreen(host: ClubHost): void {
       body = `<div class="cp-stage cp-done"><h3>Sobre completado</h3>
         <div class="cp-sum"><div><b class="num">${kept.length}</b><span>al club</span></div><div><b class="num">${sold.length}</b><span>vendidas</span></div><div><b class="num">+${fmt(coins)}</b><span>monedas</span></div><div><b class="num">${disc}</b><span>descartadas</span></div></div>
         ${best ? `<div class="cp-bestline">Mejor carta: <b>${esc(best.name)}</b> · ${RARITY_NAMES[best.rarity]} ${best.ovr}</div>` : ''}
-        <div class="cp-actions cp-actions-row">${again}<button class="btn cp-btn" data-act="leave">Volver a la tienda</button></div>
+        <div class="cp-actions cp-actions-row">${canFree ? again : ''}<button class="btn cp-btn" data-act="leave">Volver a la tienda</button>${canFree ? '' : again}</div>
         ${pack.buyable && !canFree && !canBuy ? '<div class="cp-warn">No tienes monedas para otro sobre.</div>' : ''}</div>`;
     }
     return `<div class="cp-scene cp-sc-${sc.stage}" style="--pc:${pack.color}"><div class="cp-rays"></div><div class="cp-flash"></div>${body}${head}</div>`;

@@ -435,3 +435,7 @@ El plan de mejoras futuras está en **[ROADMAP.md](ROADMAP.md)**.
 Marcador y placas siguen el estilo de las transmisiones del fútbol argentino (marcador horizontal compacto: competición · periodo y reloj · local · goles · visitante; colores propios de cada liga o copa en `src/ui/competition.ts`). Es un diseño propio inspirado en esas gráficas: **no es oficial ni implica afiliación con la AFA ni con ninguna liga**.
 
 Tipografías (todas SIL Open Font License 1.1, incluidas en `src/assets/fonts` con su licencia y declaradas en `src/ui/fonts.css`): **Barlow Condensed** (títulos, equipos, jugadores y placas), **Montserrat** (números: marcadores, reloj, tablas y estadísticas, con cifras tabulares) y **Barlow** (texto secundario). Las variables `--display`, `--num`, `--body` y la paleta (`--celeste`, `--navy`…) están en `src/ui/styles.css`.
+
+## Soffti Club
+
+Modo coleccionable con cartas, sobres, mercado local simulado, plantillas con química y competiciones contra la IA. Ver `docs/CLUB.md`.
