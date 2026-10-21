@@ -58,7 +58,7 @@ await check('Título táctil y valores por defecto para móvil (calidad baja, si
 
 await check('Menús navegables con toques', async () => {
   await page.tap('[data-act=go]');
-  await page.waitForSelector('.main-menu');
+  await page.waitForSelector('.mm');
   await page.screenshot({ path: join(OUT, 'm-menu.png') });
   await page.tap('[data-act=quick]');
   await page.waitForSelector('[data-act=play]');
@@ -350,7 +350,7 @@ await check('Botón de pausa táctil y salir al menú', async () => {
   await page.waitForSelector('.overlay [data-act=quit]', { timeout: 20000 });
   await page.screenshot({ path: join(OUT, 'm-pause.png') });
   await page.tap('[data-act=quit]');
-  await page.waitForSelector('.main-menu');
+  await page.waitForSelector('.mm');
   assert(!(await page.evaluate(() => document.querySelector('.touch-controls'))), 'controles táctiles no eliminados');
 });
 

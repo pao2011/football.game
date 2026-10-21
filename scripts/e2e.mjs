@@ -56,7 +56,7 @@ const click = (sel) => page.click(sel);
 
 // Calidad baja para que el renderizado por software sea fluido
 await page.addInitScript(() => {
-  localStorage.setItem('football-elite-3d:settings', JSON.stringify({ quality: 'low', shadows: false, resolutionScale: 0.6, halfMinutes: 2 }));
+  localStorage.setItem('football-elite-3d:settings', JSON.stringify({ quality: 'low', shadows: false, resolutionScale: 0.6, halfMinutes: 2, menuReel: false }));
 });
 await page.goto(`http://localhost:${port}/`);
 
@@ -67,7 +67,7 @@ await check('La pantalla de título carga sin errores', async () => {
 
 await check('Menú principal y navegación con teclado', async () => {
   await page.keyboard.press('Enter');
-  await page.waitForSelector('.main-menu');
+  await page.waitForSelector('.mm');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowUp');
   await page.screenshot({ path: join(OUT, 'menu.png') });
@@ -193,10 +193,11 @@ await check('Revancha desde la pantalla de resultado', async () => {
   await page.keyboard.press('Escape');
   await page.waitForSelector('.overlay [data-act=quit]', { timeout: 15000 });
   await click('[data-act=quit]');
-  await page.waitForSelector('.main-menu', { timeout: 15000 });
+  await page.waitForSelector('.mm', { timeout: 15000 });
 });
 
 await check('Copa Élite: elegir equipo, jugar y registrar resultado', async () => {
+  await click('[data-act=compete]');
   await click('[data-act=tournament]');
   await page.waitForSelector('[data-act=ok]');
   await click('[data-act=ok]');
@@ -214,7 +215,9 @@ await check('Copa Élite: elegir equipo, jugar y registrar resultado', async () 
 });
 
 await check('Carrera: crear, ver plantilla y alineación', async () => {
+  await click('[data-act=compete]');
   await click('[data-act=career]');
+  await click('[data-act=lg-lpf]');
   await page.waitForSelector('[data-act=ok]');
   await click('[data-act=ok]');
   await page.waitForSelector('[data-act=squad]');
@@ -228,6 +231,7 @@ await check('Carrera: crear, ver plantilla y alineación', async () => {
 });
 
 await check('Entrenamiento de penales: lanzar y marcar/fallar', async () => {
+  await click('[data-act=more]');
   await click('[data-act=training]');
   await click('[data-act=pens]');
   await waitFor(() => window.__runner && window.__runner.match.restart?.stage === 'ready', 60000);
@@ -250,6 +254,7 @@ await check('Configuración y reasignación de teclas', async () => {
   await page.waitForSelector('[data-act=qualNext]');
   await click('[data-act=tog][data-key=showRadar]');
   await click('[data-act=back]');
+  await click('[data-act=more]');
   await click('[data-act=controls]');
   await page.click('[data-act=rebind][data-a=shoot]');
   await page.keyboard.press('KeyF');
@@ -259,6 +264,35 @@ await check('Configuración y reasignación de teclas', async () => {
   const b2 = await ev(() => window.__app.settings.bindings.shoot[0]);
   assert(b2 === 'KeyD', 'el esquema clásico no se restauró');
   await click('[data-act=back]');
+});
+
+await check('Fondo del menú: partido en vivo detrás del menú principal, congelado en otras pantallas y apagado al jugar', async () => {
+  await ev(() => { window.__reelNoGuard = true; window.__app.settings.menuReel = true; window.__app.mainMenu(); });
+  await waitFor(() => !!window.__showcase && window.__showcase.active, 60000);
+  const t0 = await ev(() => window.__showcase.match.time);
+  await page.waitForTimeout(2500);
+  const t1 = await ev(() => window.__showcase.match.time);
+  assert(t1 > t0, 'el partido de fondo no avanza: ' + t0 + ' → ' + t1);
+  assert(await ev(() => !document.querySelector('#game').classList.contains('hidden')), 'el canvas está oculto');
+  await page.screenshot({ path: join(OUT, 'menu-reel.png') });
+  await click('[data-act=more]');
+  assert(await ev(() => window.__showcase.active), 'el fondo debe seguir en los submenús');
+  await click('[data-act=back]');
+  await click('[data-act=quick]');
+  await page.waitForSelector('[data-act=play]');
+  assert(await ev(() => !window.__showcase.active), 'el fondo debe congelarse en otras pantallas');
+  await click('[data-act=back]');
+  await waitFor(() => window.__showcase && window.__showcase.active, 20000);
+  await click('[data-act=quick]');
+  await click('[data-act=play]');
+  await waitFor(() => window.__runner && window.__runner.match.time > 0.2, 60000);
+  assert(await ev(() => !window.__app.showcase), 'el fondo debe apagarse al empezar un partido');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.overlay [data-act=quit]', { timeout: 15000 });
+  await click('[data-act=quit]');
+  await page.waitForSelector('.mm', { timeout: 15000 });
+  await ev(() => { window.__app.settings.menuReel = false; window.__app.mainMenu(); });
+  assert(await ev(() => !window.__app.showcase && document.querySelector('#game').classList.contains('hidden')), 'sin fondo vivo el canvas debe ocultarse');
 });
 
 await check('Sin errores de JavaScript durante toda la sesión', async () => {

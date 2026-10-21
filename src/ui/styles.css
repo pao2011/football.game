@@ -86,7 +86,6 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .version-tag { position: fixed; bottom: 14px; right: 18px; color: var(--muted); font-size: 12px; }
 
 /* ---------- Menú principal ---------- */
-.main-menu { display: grid; grid-template-columns: minmax(260px, 420px) 1fr; gap: 4vw; align-items: center; height: 100%; }
 .menu-list { display: flex; flex-direction: column; gap: 10px; }
 .menu-item {
   position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px;
@@ -99,9 +98,6 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .menu-item::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--accent); transform: scaleY(0); transition: transform 0.15s; }
 .menu-item:hover, .menu-item.focus { transform: translateX(8px); background: var(--panel-2); border-color: rgba(116,172,223,0.5); }
 .menu-item:hover::before, .menu-item.focus::before { transform: scaleY(1); }
-.menu-hero { display: flex; flex-direction: column; gap: 20px; align-items: flex-end; text-align: right; }
-.menu-hero .logo .l1 { font-size: clamp(40px, 6vw, 90px); }
-.menu-hero .crest-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* ---------- Botones y controles ---------- */
 .btn {
@@ -245,8 +241,6 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
 .ovr { font-family: var(--display); font-weight: 700; font-size: 18px; }
 
 @media (max-width: 760px) {
-  .main-menu { grid-template-columns: 1fr; }
-  .menu-hero { display: none; }
   .lineup { grid-template-columns: 1fr; }
   .sb-comp { font-size: 19px; padding-right: 8px; }
   .sb-team { font-size: 19px; padding: 0 8px; }
@@ -550,7 +544,6 @@ body.touch .lower-third { bottom: 230px; }
 .remote-pause b { font-family: var(--display); font-size: clamp(36px, 7vw, 64px); letter-spacing: .12em; }
 .remote-pause span { color: #cfd8ee; font-size: 16px; }
 .remote-pause .rp-sec { color: #19e68c; font-weight: 800; }
-.menu-item.apk-item { border-color: rgba(61,220,132,0.5); } .menu-item.apk-item small { color: #3ddc84; }
 .mute-toast { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 60; background: rgba(10,14,24,0.92); border: 1px solid rgba(255,255,255,0.15); padding: 8px 16px; border-radius: 8px; font-size: 16px; font-weight: 700; pointer-events: none; animation: screenIn 0.2s; }
 .mute-toast small { color: var(--muted); font-weight: 400; }
 .adv-badge { position: absolute; top: 66px; left: 50%; transform: translateX(-50%); font-family: var(--display); font-size: 14px; letter-spacing: 0.16em; background: rgba(25,230,140,0.92); color: #06281a; padding: 4px 14px; border-radius: 10px; font-weight: 800; animation: screenIn 0.2s; }
@@ -610,12 +603,6 @@ body.touch .commentary { bottom: auto; top: 84px; font-size: 14px; padding: 6px 
   .toggle::after { width: 18px; height: 18px; }
   .toggle.on::after { left: 23px; }
   input[type=range] { width: 120px; }
-  /* menú principal: dos columnas de botones bajos, sin el logo grande */
-  .main-menu { grid-template-columns: 1fr; gap: 0; align-content: center; height: 100%; overflow: auto; }
-  .menu-hero { display: none; }
-  .main-menu .menu-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .main-menu .menu-item { padding: 6px 12px; font-size: 14px; min-height: 0; }
-  .main-menu .menu-item small { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .version-tag { bottom: 4px; font-size: 10px; }
   body.touch .version-tag { display: none; }
   .team-picker { padding: 6px; gap: 4px; }
@@ -640,17 +627,11 @@ body.touch .commentary { bottom: auto; top: 84px; font-size: 14px; padding: 6px 
   .overlay .modal > .menu-list { display: grid; grid-template-columns: 1fr 1fr; }
   .overlay .modal > .menu-list > .muted { grid-column: 1 / -1; }
 }
-@media (max-height: 330px) {
-  .main-menu .menu-item small { display: none; }
-  .main-menu .menu-item { padding: 9px 12px; }
-}
 /* Vertical (poco ancho): una columna, paneles apilados y pasos más estrechos */
 @media (max-width: 520px) {
   .screen { padding: max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom)); }
   .screen-header h2 { font-size: 22px; }
   .grid2, .grid3 { grid-template-columns: 1fr; }
-  .main-menu { height: auto; max-height: 100%; overflow: auto; align-items: start; }
-  .main-menu .menu-item { padding: 9px 14px; font-size: 16px; }
   .stepper .val { min-width: 90px; font-size: 14px; }
   .row label { flex: 0 1 38%; min-width: 0; }
   .row .stepper { flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
@@ -671,13 +652,6 @@ body.touch .commentary { bottom: auto; top: 84px; font-size: 14px; padding: 6px 
 
 /* en pantallas táctiles el botón enfocado no se desplaza (se saldría de la pantalla) */
 @media (hover: none) { .menu-item:hover, .menu-item.focus { transform: none; } }
-/* Pantallas medianas (portátiles, tabletas apaisadas): menú en dos columnas para que entren todas las opciones */
-@media (max-height: 820px) and (min-height: 521px) and (min-width: 761px) {
-  .main-menu { grid-template-columns: minmax(460px, 680px) 1fr; }
-  .main-menu .menu-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .main-menu .menu-item { padding: 10px 16px; font-size: clamp(15px, 1.6vw, 20px); }
-  .main-menu .menu-item small { font-size: 11px; }
-}
 
 /* ---------- Modo foto ---------- */
 .photo-mode { position: fixed; inset: 0; z-index: 20; }

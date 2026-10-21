@@ -34,7 +34,7 @@ async function newPlayer(name) {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`${name}: ${m.text()}`); });
   await page.addInitScript((n) => {
     if (!localStorage.getItem('football-elite-3d:settings')) {
-      localStorage.setItem('football-elite-3d:settings', JSON.stringify({ quality: 'low', shadows: false, resolutionScale: 0.5, antialias: false, halfMinutes: 2, onlineName: n, replays: false }));
+      localStorage.setItem('football-elite-3d:settings', JSON.stringify({ quality: 'low', shadows: false, resolutionScale: 0.5, antialias: false, halfMinutes: 2, onlineName: n, replays: false, menuReel: false }));
     }
   }, name);
   await page.goto(`http://localhost:${PORT}/`);
@@ -70,7 +70,7 @@ const waitFor = async (page, fn, ms = 30000, arg) => {
 async function toOnlineHub(page) {
   await page.waitForSelector('.title-screen');
   await page.keyboard.press('Enter');
-  await page.waitForSelector('.main-menu');
+  await page.waitForSelector('.mm');
   await page.click('[data-act=online]');
   await page.waitForSelector('#on-name');
   await page.click('.screen-footer [data-act=connect]');
@@ -280,7 +280,7 @@ await check('Soffti Club online: dos clubes se enfrentan con sus plantillas y el
     await p.reload();
     await p.waitForSelector('.title-screen');
     await p.keyboard.press('Enter');
-    await p.waitForSelector('.main-menu');
+    await p.waitForSelector('.mm');
     await p.click('[data-act=club]');
     await p.waitForSelector('.club-create [data-act=create]');
     await p.click('.club-create [data-act=create]');
