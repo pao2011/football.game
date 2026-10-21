@@ -827,7 +827,7 @@ export class Match {
         bx = gk.pos.x + (d.x / hl) * 1.1; bz = gk.pos.z + (d.z / hl) * 1.1; by = 0.4 + lift;
         radius = 0.4;
         // la estirada solo es eficaz en su primera parte
-        if (gk.action.time > 0.75) continue;
+        if (gk.action.time > 0.9) continue;
       }
       const abx = bx - ax, aby = by - ay, abz = bz - az;
       const apx = b.pos.x - ax, apy = b.pos.y - ay, apz = b.pos.z - az;
