@@ -36,6 +36,7 @@ const THEMES: Record<string, Theme> = {
   europa: { label: 'EUROPA LEAGUE', dark: '#1b1b1f', light: '#ff6c00', lightInk: '#ffffff' },
   conference: { label: 'CONFERENCE LEAGUE', dark: '#08261d', light: '#00c389', lightInk: '#08261d' },
   tournament: { label: 'COPA', dark: NAVY, light: '#d4d6dd' },
+  club: { label: 'SOFFTI CLUB', dark: '#0b1a3a', light: '#74acdf', lightInk: '#071238' },
   friendly: { label: 'AMISTOSO', dark: NAVY, light: '#d4d6dd' },
 };
 

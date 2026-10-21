@@ -1,5 +1,7 @@
 import './ui/fonts.css';
 import './ui/styles.css';
+import './ui/club.css';
+import './ui/club-hub.css';
 import { App } from './ui/App';
 
 function boot() {

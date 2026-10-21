@@ -1,0 +1,60 @@
+/* ===================== Soffti Club: cartas ===================== */
+.fc { --c1: #8a5a2b; --c2: #3b2410; --ink: #fff8ec; --accent: #e8b878; position: relative; display: inline-block; flex: none; width: 12em; height: 17em; font-size: 10px; color: var(--ink); user-select: none; cursor: pointer;
+  filter: drop-shadow(0 0.5em 0.9em rgba(0,0,0,0.5)); transition: transform 0.25s var(--ease), filter 0.25s; font-family: var(--display); }
+.fc-xs { font-size: 6px; } .fc-sm { font-size: 7.5px; } .fc-md { font-size: 10px; } .fc-lg { font-size: 14px; }
+.fc:hover { transform: translateY(-0.4em) scale(1.03); filter: drop-shadow(0 1em 1.2em rgba(0,0,0,0.6)); }
+.fc-bg { position: absolute; inset: 0; clip-path: polygon(14% 0, 86% 0, 100% 9%, 100% 100%, 0 100%, 0 9%); background: linear-gradient(160deg, var(--c1), var(--c2)); }
+.fc-bg::before { content: ''; position: absolute; inset: 0.35em; clip-path: inherit; border: 0; background: radial-gradient(ellipse at 50% 18%, rgba(255,255,255,0.28), transparent 60%), repeating-linear-gradient(115deg, rgba(255,255,255,0.05) 0 0.6em, transparent 0.6em 1.4em); box-shadow: inset 0 0 0 0.12em rgba(255,255,255,0.28); }
+.fc-bg::after { content: ''; position: absolute; inset: 0; clip-path: inherit; background: linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.35) 50%, transparent 65%) -150% 0 / 250% 100% no-repeat; transition: background-position 0.8s var(--ease); }
+.fc:hover .fc-bg::after { background-position: 150% 0; }
+.fc-top { position: absolute; left: 1.3em; top: 1.5em; width: 3.2em; text-align: center; line-height: 1; }
+.fc-ovr { font-size: 2.9em; font-weight: 800; letter-spacing: -0.04em; text-shadow: 0 0.04em 0 rgba(0,0,0,0.25); }
+.fc-ovr.up { color: #aaffc8; } .fc-ovr.down { color: #ffb4b4; }
+.fc-pos { font-size: 1.35em; font-weight: 700; letter-spacing: 0.04em; margin-top: 0.1em; }
+.fc-nat { font-size: 0.95em; font-weight: 600; opacity: 0.85; margin-top: 0.35em; letter-spacing: 0.05em; padding-top: 0.3em; border-top: 0.1em solid rgba(255,255,255,0.3); }
+.fc-club { margin-top: 0.4em; display: flex; justify-content: center; } .fc-club svg { width: 2.4em; height: 2.4em; }
+.fc-photo { position: absolute; right: 0.6em; top: 1.4em; width: 7.6em; height: 7.6em; overflow: hidden; display: flex; align-items: flex-end; justify-content: center; }
+.fc-face { width: 100%; height: 100%; display: block; }
+.fc-name { position: absolute; left: 0.6em; right: 0.6em; top: 9.5em; text-align: center; font-size: 1.55em; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 0.08em solid rgba(255,255,255,0.35); padding-bottom: 0.1em; text-shadow: 0 0.05em 0.1em rgba(0,0,0,0.35); }
+.fc-stats { position: absolute; left: 1.2em; right: 1.2em; top: 11.9em; display: grid; grid-template-columns: repeat(6, 1fr); gap: 0.2em; text-align: center; font-size: 0.95em; }
+.fc-stats span { display: flex; flex-direction: column; font-size: 0.8em; opacity: 0.9; font-family: var(--display); font-weight: 600; letter-spacing: 0.04em; }
+.fc-stats b { font-family: var(--num); font-size: 1.45em; font-weight: 800; opacity: 1; letter-spacing: -0.03em; }
+.fc-foot { position: absolute; left: 1em; right: 1em; bottom: 1.1em; display: flex; justify-content: space-between; font-size: 0.95em; font-weight: 600; opacity: 0.85; letter-spacing: 0.04em; }
+.fc-foot span:first-child { color: var(--accent); letter-spacing: 0; }
+.fc-tag { position: absolute; left: 0; right: 0; top: 0.55em; text-align: center; font-size: 0.8em; font-weight: 800; letter-spacing: 0.3em; padding-left: 0.3em; color: var(--accent); }
+.fc-chem { position: absolute; right: 1.4em; top: 1.2em; display: flex; gap: 0.2em; } .fc-chem i { width: 0.65em; height: 0.65em; border-radius: 50%; background: rgba(0,0,0,0.35); border: 0.08em solid rgba(255,255,255,0.4); } .fc-chem i.on { background: #4ade80; border-color: #fff; box-shadow: 0 0 0.5em #4ade80; }
+.fc-chem.c0 i { border-color: #f87171; }
+.fc-cap { position: absolute; left: 0.5em; bottom: 3em; width: 2em; height: 2em; border-radius: 50%; background: #111; color: var(--accent); font-weight: 800; display: grid; place-items: center; font-size: 1.1em; border: 0.1em solid var(--accent); }
+.fc-price { position: absolute; left: 50%; bottom: -1.7em; transform: translateX(-50%); font-size: 1.25em; font-weight: 800; color: #ffe27a; white-space: nowrap; font-family: var(--num); }
+.fc-badge { position: absolute; left: 50%; top: -1.2em; transform: translateX(-50%); font-size: 1.05em; font-weight: 800; padding: 0.15em 0.7em; background: #111; border-radius: 1em; white-space: nowrap; border: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.05em; }
+/* Rarezas */
+.fc-bronze { --c1: #b9743a; --c2: #5a3416; --ink: #fff1e0; --accent: #ffd2a0; }
+.fc-silver { --c1: #d4dbe6; --c2: #6f7b8e; --ink: #101826; --accent: #1f2a3d; }
+.fc-silver .fc-bg::before { box-shadow: inset 0 0 0 0.12em rgba(255,255,255,0.7); }
+.fc-gold { --c1: #f7d86a; --c2: #9a6a0a; --ink: #2a1c02; --accent: #5b3d00; }
+.fc-gold .fc-bg::before { box-shadow: inset 0 0 0 0.12em rgba(255,255,255,0.65); }
+.fc-rising { --c1: #19e6a2; --c2: #064b5c; --ink: #eafff7; --accent: #b6ffe4; }
+.fc-rising .fc-bg::before { background: radial-gradient(ellipse at 50% 15%, rgba(255,255,255,0.3), transparent 60%), repeating-linear-gradient(60deg, rgba(255,255,255,0.09) 0 0.4em, transparent 0.4em 1.2em); }
+.fc-special { --c1: #1b2a8a; --c2: #070b2e; --ink: #ffffff; --accent: #5ee7ff; }
+.fc-special .fc-bg { background: linear-gradient(160deg, #1d3bd6 0%, #0b1050 45%, #6a1aa8 100%); }
+.fc-special .fc-bg::after { background: linear-gradient(115deg, transparent 20%, rgba(94,231,255,0.5) 40%, rgba(255,100,220,0.45) 55%, transparent 75%) -150% 0 / 250% 100% no-repeat; }
+.fc-event { --c1: #ff7a2f; --c2: #4a1170; --ink: #fff7ee; --accent: #ffe08a; }
+.fc-event .fc-bg { background: linear-gradient(150deg, #ff8a2f 0%, #c2185b 48%, #3d0e6b 100%); }
+.fc-legend { --c1: #1a1a1a; --c2: #000; --ink: #fff1c2; --accent: #ffd35a; filter: drop-shadow(0 0 0.8em rgba(255,200,80,0.45)) drop-shadow(0 0.6em 0.9em rgba(0,0,0,0.6)); }
+.fc-legend .fc-bg { background: radial-gradient(ellipse at 50% 25%, #4a3a12 0%, #151208 55%, #000 100%); }
+.fc-legend .fc-bg::before { box-shadow: inset 0 0 0 0.16em #ffd35a, inset 0 0 0 0.34em rgba(0,0,0,0.6), inset 0 0 0 0.42em rgba(255,211,90,0.6); }
+.fc-legend .fc-bg::after { background: linear-gradient(115deg, transparent 30%, rgba(255,215,100,0.65) 50%, transparent 70%) -150% 0 / 250% 100% no-repeat; }
+/* Mini cartas (campo, listas) */
+.fm { --c1: #8a5a2b; --c2: #3b2410; --ink: #fff; --accent: #fff; position: relative; width: 5.2em; height: 6.6em; font-size: 10px; color: var(--ink); font-family: var(--display); cursor: grab; touch-action: none; }
+.fm-bg { position: absolute; inset: 0; clip-path: polygon(14% 0, 86% 0, 100% 10%, 100% 100%, 0 100%, 0 10%); background: linear-gradient(160deg, var(--c1), var(--c2)); box-shadow: inset 0 0 0 0.1em rgba(255,255,255,0.3); }
+.fm-ovr { position: absolute; left: 0.5em; top: 0.35em; font-size: 1.5em; font-weight: 800; line-height: 1; }
+.fm-pos { position: absolute; left: 0.55em; top: 2.1em; font-size: 0.8em; font-weight: 700; }
+.fm-photo { position: absolute; right: 0.1em; top: 0.4em; width: 3.4em; height: 3.4em; overflow: hidden; }
+.fm-name { position: absolute; left: 0.2em; right: 0.2em; bottom: 0.4em; text-align: center; font-size: 0.95em; font-weight: 800; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fm-chem { position: absolute; right: 0.3em; bottom: 1.8em; display: flex; gap: 0.15em; } .fm-chem i { width: 0.5em; height: 0.5em; border-radius: 50%; background: rgba(0,0,0,0.4); } .fm-chem i.on { background: #4ade80; box-shadow: 0 0 0.4em #4ade80; }
+.fm-cap { position: absolute; left: -0.3em; bottom: 1.3em; width: 1.5em; height: 1.5em; border-radius: 50%; background: #111; color: #ffd35a; font-size: 0.9em; font-weight: 800; display: grid; place-items: center; }
+.fm .fc-face { width: 100%; height: 100%; }
+.fm.fc-silver .fm-bg, .fm.fc-gold .fm-bg { box-shadow: inset 0 0 0 0.1em rgba(255,255,255,0.6); }
+.fm.fc-special .fm-bg { background: linear-gradient(160deg, #1d3bd6, #0b1050 50%, #6a1aa8); }
+.fm.fc-event .fm-bg { background: linear-gradient(150deg, #ff8a2f, #c2185b 50%, #3d0e6b); }
+.fm.fc-legend .fm-bg { background: radial-gradient(ellipse at 50% 25%, #4a3a12, #000); box-shadow: inset 0 0 0 0.14em #ffd35a; }

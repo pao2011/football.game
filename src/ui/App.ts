@@ -28,6 +28,8 @@ import { Career, SQUAD_MAX, SQUAD_MIN, buyPlayer, marketOffers, playerPrice, sel
 import { Tournament } from '../modes/Tournament';
 import type { Fixture, StandingRow } from '../modes/Competition';
 import { crestSVG, kitSVG } from './Crest';
+import { ClubUI } from './club/ClubUI';
+import type { ClubMatchMeta } from '../modes/club/Club';
 import { ceremonySeen, markCeremonySeen, playCeremony } from './Ceremony';
 import { TEAM_SORTS, leagueLabel, searchTeams, teamLeagueId, type TeamSort } from './teamSearch';
 import { Screen, el, esc, type Handlers } from './dom';
@@ -92,6 +94,7 @@ type MatchContext =
   | { mode: 'tournament'; fixture: Fixture }
   | { mode: 'career'; fixture: Fixture }
   | { mode: 'continental'; fixture: Fixture }
+  | { mode: 'club'; meta: ClubMatchMeta }
   | { mode: 'training' };
 
 export class App {
@@ -315,6 +318,7 @@ export class App {
           <button class="menu-item" data-act="tournament">Copa Élite<small>Torneo: fase de grupos y eliminatorias</small></button>
           <button class="menu-item" data-act="continental">Copas internacionales<small>Libertadores, Sudamericana, Champions, Europa y Conference League</small></button>
           <button class="menu-item" data-act="career">Carrera<small>21 ligas de Sudamérica y Europa</small></button>
+          <button class="menu-item" data-act="club">Soffti Club<small>Cartas, sobres, mercado, plantillas y competiciones</small></button>
           <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
           <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
           <button class="menu-item" data-act="editor">✏️ Editor de equipos<small>Crea tu equipo · exportar e importar</small></button>
@@ -335,6 +339,7 @@ export class App {
       online: () => this.onlineMenu(),
       tournament: () => this.tournamentHub(),
       career: () => this.careerHub(),
+      club: () => this.clubUI.open(),
       continental: () => this.continentalHub(),
       training: () => this.trainingScreen(),
       settings: () => this.settingsScreen(() => this.mainMenu()),
@@ -418,6 +423,23 @@ export class App {
     s.root.querySelector('.ts-item.cur')?.scrollIntoView({ block: 'center' });
   }
   private teamSort: TeamSort = 'az';
+
+  /** Modo Soffti Club: coleccionables, plantillas, mercado local y competiciones contra la IA. */
+  readonly clubUI: ClubUI = new ClubUI({
+    show: (html, handlers, back, cls) => this.show(html, handlers, back, cls),
+    audio: this.audio,
+    mainMenu: () => this.mainMenu(),
+    pickTeam: (title, onPick, back) => this.teamSearchScreen({ title, crumb: 'SOFFTI CLUB', teams: TEAMS, onPick, back }),
+    playClubMatch: (home, away, meta, o) => {
+      const cfg: MatchConfig = {
+        home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: 0,
+        halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty,
+        extraTime: o.knockout, penalties: o.knockout, weather: randomWeather(Math.random()),
+      };
+      const ctx: MatchContext = { mode: 'club', meta };
+      this.playMatch(cfg, this.stadiumForCtx(ctx), ctx);
+    },
+  });
 
   /** Ceremonia de campeón (una sola vez por copa): se lanza al abrir el menú de la competición ya terminada. */
   private celebrate(key: string, champion: TeamData | null, cup: string, detail: string, user: boolean, logo?: string) {
@@ -554,6 +576,7 @@ export class App {
   private competitionFor(config: MatchConfig, ctx: MatchContext): string {
     if (ctx.mode === 'continental') return Continental.load()?.state.cup ?? 'friendly';
     if (ctx.mode === 'tournament') return 'tournament';
+    if (ctx.mode === 'club') return 'club';
     const lh = leagueOfTeam(config.home.id);
     return lh && lh.id === leagueOfTeam(config.away.id)?.id ? lh.id : 'friendly';
   }
@@ -1142,6 +1165,7 @@ export class App {
   private stadiumForCtx(ctx: MatchContext): string {
     if (ctx.mode === 'quick') return STADIUMS[this.quick.stadium].id;
     if (ctx.mode === 'training') return STADIUMS[2].id;
+    if (ctx.mode === 'club') return GENERIC_STADIUMS[hashStr(ctx.meta.id) % GENERIC_STADIUMS.length].id;
     if (ctx.mode === 'online') return GENERIC_STADIUMS[ctx.start.seed % GENERIC_STADIUMS.length].id;
     if (ctx.fixture.venue) return ctx.fixture.venue;
     const home = ctx.fixture.home;
@@ -1151,6 +1175,7 @@ export class App {
   private leaveMatch() {
     const ctx = this.lastMatch?.ctx;
     const wasRunning = !!this.runner && !this.runner.match.finished;
+    if (ctx?.mode === 'club' && wasRunning) this.clubUI.club.finishMatch(ctx.meta, { gf: 0, ga: 3, passes: 0, passesOk: 0, shots: 0, tackles: 0, halfMinutes: this.settings.halfMinutes, forfeit: true }, Date.now());
     this.runner?.dispose();
     this.runner = null;
     if (ctx?.mode === 'online') {
@@ -1162,6 +1187,7 @@ export class App {
     if (ctx?.mode === 'tournament') this.tournamentHub();
     else if (ctx?.mode === 'career') this.careerHub();
     else if (ctx?.mode === 'continental') this.continentalHub();
+    else if (ctx?.mode === 'club') this.clubUI.hub();
     else if (ctx?.mode === 'training') this.trainingScreen();
     else this.mainMenu();
   }
@@ -1230,6 +1256,12 @@ export class App {
       availabilityMsgs = this.continental.recordUserResult(ctx.fixture, r.home, r.away, r.penalties ?? undefined, d);
       if (this.continental.state.champion === this.continental.state.userTeam) addAch('cup');
     }
+    let clubBlock = '';
+    if (ctx.mode === 'club') {
+      const st = m.teams[0].stats;
+      const out = this.clubUI.club.finishMatch(ctx.meta, { gf: r.home, ga: r.away, pensWin: r.penalties ? r.winner === 0 : undefined, passes: st.passes, passesOk: st.passesCompleted, shots: st.shots, tackles: st.tackles, halfMinutes: this.settings.halfMinutes }, Date.now());
+      if (out) clubBlock = this.clubUI.resultHTML(out);
+    }
     if (ctx.mode === 'online') {
       window.clearInterval(this.onlineWatch);
       this.net?.send({ t: 'result', home: r.home, away: r.away, pens: r.penalties ? r.winner : -1 });
@@ -1240,7 +1272,7 @@ export class App {
     this.setMenuMode(true);
     const scorers = (t: typeof h) => t.scorers.map((s) => `⚽ ${esc(s.name)} ${s.minute}'`).join('<br>') || '<span class="muted">—</span>';
     const pens = r.penalties ? `<div class="muted" style="text-align:center">Penales: ${r.penalties[0]} - ${r.penalties[1]}</div>` : '';
-    const cont = ctx.mode === 'online' ? 'Menú online' : ctx.mode === 'tournament' ? 'Volver al torneo' : ctx.mode === 'career' ? 'Volver a la carrera' : ctx.mode === 'continental' ? 'Volver a la copa' : ctx.mode === 'training' ? 'Entrenamiento' : 'Menú principal';
+    const cont = ctx.mode === 'online' ? 'Menú online' : ctx.mode === 'tournament' ? 'Volver al torneo' : ctx.mode === 'career' ? 'Volver a la carrera' : ctx.mode === 'continental' ? 'Volver a la copa' : ctx.mode === 'club' ? 'Volver al club' : ctx.mode === 'training' ? 'Entrenamiento' : 'Menú principal';
     this.show(`
       <div class="screen-header"><div><div class="crumb">RESULTADO FINAL</div><h2>${r.winner === -1 ? 'Empate' : `Gana ${esc(m.teams[r.winner].data.name)}`}</h2></div></div>
       <div class="screen-body"><div class="grid2">
@@ -1250,6 +1282,7 @@ export class App {
           <div class="scorers"><div style="text-align:right">${scorers(h)}</div><div>${scorers(a)}</div></div>
           ${ctx.mode === 'training' ? '' : this.ratingsHTML(m)}
           ${newAch.length ? `<div class="ach-msgs"><div class="crumb">LOGROS DESBLOQUEADOS</div>${newAch.map((a) => `<div>${a.icon} <b>${esc(a.name)}</b> <span class="muted">${esc(a.desc)}</span></div>`).join('')}</div>` : ''}
+          ${clubBlock}
           ${availabilityMsgs.length ? `<div class="avail-msgs"><div class="crumb">PARTE MÉDICO Y SANCIONES</div>${availabilityMsgs.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}
         </div>
         <div class="panel">${ctx.mode === 'online' && ctx.start.mode === 'rivals' ? '<div class="rivals-change"><div class="net-status"><span class="spinner"></span>Calculando puntos de Division Rivals…</div></div>' : ''}${this.statsHTML(m)}</div>
@@ -2246,3 +2279,5 @@ export class App {
 }
 
 export type { PlayerData };
+
+function hashStr(t: string): number { let h = 0; for (let i = 0; i < t.length; i++) h = (Math.imul(h, 31) + t.charCodeAt(i)) >>> 0; return h; }
