@@ -20,7 +20,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 540,
     backgroundColor: '#070b14',
-    title: 'Soffti's Football Game',
+    title: "Soffti's Football Game",
     autoHideMenuBar: true,
     webPreferences: {
       contextIsolation: true,
