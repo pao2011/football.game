@@ -9,7 +9,7 @@ rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 cpSync('dist', `${stage}/dist`, { recursive: true });
 cpSync('electron', `${stage}/electron`, { recursive: true });
-writeFileSync(`${stage}/package.json`, JSON.stringify({ name: 'football-elite-3d', productName: 'Soffti's Football Game', version: '1.0.0', main: 'electron/main.cjs' }, null, 2));
+writeFileSync(`${stage}/package.json`, JSON.stringify({ name: 'football-elite-3d', productName: "Soffti's Football Game", version: '1.0.0', main: 'electron/main.cjs' }, null, 2));
 const paths = await packager({
   dir: stage,
   out: 'release',
@@ -22,7 +22,7 @@ const paths = await packager({
   electronVersion: '33.2.1',
   overwrite: true,
   asar: true,
-  appCopyright: 'Soffti's Football Game — proyecto original',
+  appCopyright: "Soffti's Football Game — proyecto original",
 });
 rmSync(stage, { recursive: true, force: true });
 console.log('Ejecutables generados:\n' + paths.join('\n'));
