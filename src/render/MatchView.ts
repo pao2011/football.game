@@ -111,6 +111,9 @@ export class MatchView {
     this.refModel.attachToBone(BONE.handR, this.refCard);
     this.models.set('referee', this.refModel);
     this.scene.add(this.refModel.root);
+    this.varMonitor = makeVarMonitor();
+    this.varMonitor.visible = false;
+    this.scene.add(this.varMonitor);
     for (const t of match.teams) {
       if (t.human) {
         const ind = makeIndicator(t.index === 0 ? '#ffd23f' : '#3fd2ff');
@@ -170,6 +173,11 @@ export class MatchView {
 
   private refModel: PlayerModel;
   private refCard: THREE.Mesh;
+  /** Monitor del VAR junto a la línea de banda (aparece durante la revisión). */
+  private varMonitor: THREE.Group;
+  private varMonScale = 0;
+  private lastFootage = false;
+  private readonly varCam = new THREE.Vector3();
   /** Tiro libre directo en curso: recorrido previsto y punto de mira (lo actualiza el bucle del partido). */
   freeKick: { path: THREE.Vector3[]; target: THREE.Vector3 } | null = null;
   private fkLine: THREE.Line;
@@ -188,6 +196,15 @@ export class MatchView {
   /** Actualiza modelos y cámara para este fotograma. */
   update(dt: number, receiverPreview: Player | null, aimDir: THREE.Vector3 | null, aimTarget: THREE.Vector3 | null = null) {
     const m = this.match;
+    const vr = m.varReview;
+    const footage = m.phase === 'var' && vr?.stage === 'footage';
+    if (footage && !this.lastFootage && vr) {
+      this.replayFrames = vr.clip;
+      this.replayStart = m.time;
+      this.replayIdx = 0;
+    }
+    if (this.lastFootage && !footage) this.rosterVersion = -1;
+    this.lastFootage = footage;
     if (m.phase === 'replay' && this.lastPhase !== 'replay') {
       this.replayFrames = m.replayClip.length > 1 ? m.replayClip : m.replay.slice(-30 * 6);
       this.replayStart = m.time;
@@ -198,7 +215,7 @@ export class MatchView {
     if (this.lastPhase === 'replay' && m.phase !== 'replay') this.rosterVersion = -1;
     this.lastPhase = m.phase;
 
-    if (m.phase === 'replay' && this.replayFrames.length > 0) {
+    if ((m.phase === 'replay' || footage) && this.replayFrames.length > 0) {
       this.updateReplay(dt);
     } else {
       this.updateLive(dt, receiverPreview, aimDir, aimTarget);
@@ -245,6 +262,19 @@ export class MatchView {
     // cámara de la amonestación: árbitro e infractor en primer plano
     const g = ref.gesture;
     this.director.cardFocus = g && (g.kind === 'card' || g.kind === 'warn') && m.phase === 'stoppage' ? { a: ref.pos, b: g.at } : null;
+    // VAR: el árbitro (y el monitor cuando ya está montado) en primer plano
+    const vrv = m.varReview;
+    if (m.phase === 'var' && vrv) {
+      const early = vrv.stage === 'call' || vrv.stage === 'tv';
+      // al principio, plano del árbitro (con la mirada hacia donde mira); después, árbitro y monitor
+      this.varCam.set(ref.pos.x + Math.sin(ref.facing) * 2, 0, ref.pos.z + Math.cos(ref.facing) * 2);
+      this.director.cardFocus = { a: ref.pos, b: early ? this.varCam : vrv.monitor };
+    }
+    const monWant = m.phase === 'var' && vrv && vrv.stage !== 'call' && vrv.stage !== 'tv' ? 1 : 0;
+    this.varMonScale += (monWant - this.varMonScale) * Math.min(1, dt * 5);
+    this.varMonitor.visible = this.varMonScale > 0.02;
+    if (vrv) { this.varMonitor.position.copy(vrv.monitor); this.varMonitor.rotation.y = 0.85; }
+    this.varMonitor.scale.setScalar(Math.max(0.01, this.varMonScale));
     this.ball.update(m.ball.pos, m.ball.vel, m.ball.spin.y, dt);
     this.ball.mesh.visible = true;
 
@@ -365,7 +395,13 @@ export class MatchView {
     this.aimLine.visible = false;
     // tiempo de clip que queda: el final (el balón entrando) se ve siempre desde detrás del arco
     const left = (frames[frames.length - 1].tm - target) / REPLAY_SPEED;
-    this.director.updateReplay(bp, this.replayGoalX, t, left);
+    const vrw = m.varReview;
+    if (m.phase === 'var' && vrw) {
+      // el vídeo del VAR sigue al jugador que recibió el contacto
+      const vp = f.players.find((q) => q.id === vrw.incident.victim.id);
+      this.varCam.set(vp ? vp.x : bp.x, 0, vp ? vp.z : bp.z);
+      this.director.updateIncident(this.varCam, t);
+    } else this.director.updateReplay(bp, this.replayGoalX, t, left);
   }
 
   /** Modelo 3D de un jugador (los suplentes se crean al entrar). */
@@ -448,4 +484,53 @@ export class MatchView {
       if (mesh.geometry) mesh.geometry.dispose();
     });
   }
+}
+
+
+/** Monitor del VAR: pie, pantalla con el rótulo "VAR" y una visera, mirando al campo. */
+function makeVarMonitor(): THREE.Group {
+  const g = new THREE.Group();
+  const dark = new THREE.MeshStandardMaterial({ color: 0x14171f, roughness: 0.6, metalness: 0.3 });
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.1, 0.12), dark);
+  post.position.y = 0.55;
+  g.add(post);
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.6), dark);
+  base.position.y = 0.03;
+  g.add(base);
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.05, 0.1), dark);
+  frame.position.set(0, 1.55, 0);
+  g.add(frame);
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 160;
+  const x = c.getContext('2d')!;
+  const grad = x.createLinearGradient(0, 0, 0, 160);
+  grad.addColorStop(0, '#0b1d4a');
+  grad.addColorStop(1, '#050a1f');
+  x.fillStyle = grad;
+  x.fillRect(0, 0, 256, 160);
+  x.strokeStyle = 'rgba(116,172,223,0.5)';
+  x.lineWidth = 3;
+  x.strokeRect(8, 8, 240, 144);
+  x.fillStyle = '#fff';
+  x.font = '800 74px Montserrat, Arial, sans-serif';
+  x.textAlign = 'center';
+  x.textBaseline = 'middle';
+  x.fillText('VAR', 128, 78);
+  x.fillStyle = '#ff4d5e';
+  x.beginPath();
+  x.arc(34, 30, 7, 0, Math.PI * 2);
+  x.fill();
+  x.fillStyle = 'rgba(255,255,255,0.8)';
+  x.font = '700 18px Arial, sans-serif';
+  x.textAlign = 'left';
+  x.fillText('EN VIVO', 48, 32);
+  const tex = new THREE.CanvasTexture(c);
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.98), new THREE.MeshBasicMaterial({ map: tex }));
+  screen.position.set(0, 1.55, 0.06);
+  g.add(screen);
+  const hood = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.06, 0.55), dark);
+  hood.position.set(0, 2.12, 0.2);
+  g.add(hood);
+  return g;
 }

@@ -81,11 +81,16 @@ export class HostSync {
     for (const e of events) if (e.type !== 'bounce' || (e.power ?? 0) > 0.25) this.events.push(e);
   }
 
-  /** Llamar tras cada paso de simulación; devuelve una instantánea cada 1/30 s. */
+  /** Instantáneas por segundo: 30 por el servidor; más con enlace directo (menos retraso y movimiento más fino). */
+  hz = 30;
+
+  /** Llamar tras cada paso de simulación; devuelve una instantánea cada 1/hz s. */
   step(dt: number): Snapshot | null {
+    const period = 1 / this.hz;
     this.acc += dt;
-    if (this.acc < 1 / 30 - 1e-6) return null;
-    this.acc = 0;
+    if (this.acc < period - 1e-6) return null;
+    this.acc -= period;
+    if (this.acc > period) this.acc = 0;
     return this.build();
   }
 
@@ -193,7 +198,15 @@ export class GuestSync {
 
   constructor(private readonly match: Match) {}
 
+  /** Tiempos de instantáneas ya recibidas (el mismo paquete puede llegar por el enlace directo y por el servidor). */
+  private seen = new Set<number>();
+  /** Eventos de instantáneas que llegaron tarde (desordenadas): no se pierden aunque la imagen ya pasó. */
+  private late: MatchEvent[] = [];
+
   push(s: Snapshot, nowMs: number) {
+    if (this.seen.has(s.tm)) return;
+    this.seen.add(s.tm);
+    if (this.seen.size > 400) this.seen.delete(this.seen.values().next().value as number);
     this.received++;
     this.lastRecv = nowMs;
     // regularidad de la conexión → colchón justo (menos retraso con buena conexión, menos tirones con mala)
@@ -205,7 +218,11 @@ export class GuestSync {
       if (this.adaptive) this.delay = adaptiveDelay(this.arrMean, this.arrJitter);
     }
     this.lastArr = now;
-    if (this.buf.length && s.tm <= this.buf[this.buf.length - 1].tm) return; // desordenada
+    if (this.buf.length && s.tm <= this.buf[this.buf.length - 1].tm) {
+      // desordenada: la imagen ya no sirve, pero sus eventos (goles, tarjetas…) sí
+      if (s.tm > this.applied) for (const e of s.ev) this.late.push(e);
+      return;
+    }
     this.buf.push(s);
     const measured = s.tm - nowMs / 1000;
     if (Number.isNaN(this.offset) || Math.abs(measured - this.offset) > 0.6) {
@@ -250,7 +267,7 @@ export class GuestSync {
 
   /** Aplica el estado interpolado para este fotograma. Devuelve los eventos nuevos. */
   update(nowMs: number): MatchEvent[] {
-    const out: MatchEvent[] = [];
+    const out: MatchEvent[] = this.late.splice(0);
     if (!this.buf.length) return out;
     const target = nowMs / 1000 + this.offset - this.delay;
     this.renderTm = Math.max(this.renderTm, target);
@@ -441,5 +458,5 @@ export class GuestSync {
 
 /** Colchón de interpolación según el intervalo medio entre instantáneas y su variación (s). */
 export function adaptiveDelay(mean: number, jitter: number): number {
-  return Math.min(0.25, Math.max(0.06, mean * 1.6 + jitter * 2.5));
+  return Math.min(0.25, Math.max(0.045, mean * 1.6 + jitter * 2.5));
 }

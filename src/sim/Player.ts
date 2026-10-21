@@ -166,7 +166,7 @@ export class Player {
         const k = act.kind;
         const acrobatic = act.anim === 'bicycle' || act.anim === 'scissor' || act.anim === 'diving' || act.anim === 'scorpion';
         this.clearAction();
-        if (k === 'slide' || k === 'fallen') this.startAction('getup', 'getup', 0.7);
+        if (k === 'slide' || k === 'fallen' || k === 'dive') this.startAction('getup', 'getup', 0.7);
         else if (acrobatic) this.startAction('getup', 'getup', 0.75); // tras la chilena o la tijera, cae al césped
       }
     }

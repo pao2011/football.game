@@ -32,6 +32,10 @@ export interface OnlineLink {
   send(d: object): void;
   /** Nombre del rival (para los avisos). */
   opponentName?: string;
+  /** Hay enlace directo con el rival (permite más instantáneas por segundo). */
+  direct?(): boolean;
+  /** Latencia (ms) hasta el rival, si se conoce. */
+  latency?(): number;
   /** Espectador: recibe el partido del anfitrión pero no manda nada ni controla a nadie. */
   spectator?: boolean;
 }
@@ -150,7 +154,7 @@ export class MatchRunner {
     private readonly uiRoot: HTMLElement,
     online: OnlineLink | null = null,
   ) {
-    this.match = new Match(config);
+    this.match = new Match({ ...config, var: config.var ?? settings.varEnabled });
     this.online = online;
     this.localTeam = config.humanTeam;
     if (config.humanTeam >= 0) this.match.autoSubs[config.humanTeam as 0 | 1] = settings.autoSubs;
@@ -210,6 +214,12 @@ export class MatchRunner {
     }
     this.hud.showRadar = settings.showRadar;
     this.hud.popups = settings.popups;
+    if (online && !online.spectator) {
+      this.hud.netInfo = () => {
+        const ms = Math.round(online.latency?.() ?? 0);
+        return { text: `${ms ? `${ms} ms` : '— ms'} · ${online.direct?.() ? 'directo' : 'servidor'}`, level: !ms || ms > 150 ? 2 : ms > 80 ? 1 : 0 };
+      };
+    }
     if (config.humanTeam >= 0 && !config.training && !config.versus) {
       this.achievements = new AchievementTracker(this.match, config.humanTeam as 0 | 1);
       this.achievements.onUnlock = (a) => this.hud.showBanner(`🏆 ${a.icon} ${escapeHtml(a.name)}`, `Logro desbloqueado · ${escapeHtml(a.desc)}`, '#ffd23f', 3.2);
@@ -322,9 +332,11 @@ export class MatchRunner {
         // tras marcar el jugador del usuario: el stick derecho (o I/J/K/L, R) elige la celebración
         if (m.phase === 'goal') this.chooseCelebration();
         if (m.phase === 'replay' && (this.input.pressed('pass') || this.input.pressed('shoot') || !this.settings.replays)) m.skipReplay();
+        if (m.phase === 'var' && (this.input.pressed('pass') || this.input.pressed('shoot'))) m.skipVar();
         m.step(SIM_DT);
         for (const e of m.events) this.handleEvent(e);
         if (this.hostSync) {
+          this.hostSync.hz = this.online?.direct?.() ? 45 : 30;
           this.hostSync.collect(m.events);
           const snap = this.hostSync.step(SIM_DT);
           if (snap) this.online!.send(snap);
@@ -385,7 +397,7 @@ export class MatchRunner {
       const pt = m.possessionTeam;
       // con el balón suelto se mantiene el modo anterior (evita parpadeos de botones)
       if (pt !== -1 || m.phase !== 'play') this.touch.setContext(pt === team.index || m.gkHolding?.team === team.index || (m.phase !== 'play' && m.restart?.team === team.index));
-      this.touch.setVisible(!this.paused && !this.inIntro && m.phase !== 'replay' && !m.finished);
+      this.touch.setVisible(!this.paused && !this.inIntro && m.phase !== 'replay' && m.phase !== 'var' && !m.finished);
     }
     if (this.autoQuality && !this.paused) {
       const step = this.autoQuality.sample(this.realDt);

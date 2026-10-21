@@ -1,4 +1,4 @@
-// Servidor online de Football Elite 3D (gratis: tu PC, la red local o un plan gratuito como Render).
+// Servidor online de Soffti's Football Game (gratis: tu PC, la red local o un plan gratuito como Render).
 //   npm run server            (tras `npm run build` sirve también el juego desde dist/)
 // Variables de entorno: PORT (8080), DATA_DIR (server/data).
 import http from 'node:http';
@@ -9,6 +9,8 @@ import { networkInterfaces } from 'node:os';
 import { WebSocketServer } from 'ws';
 import { Lobby } from './lobby.mjs';
 import { JsonStore } from './store.mjs';
+import { Accounts } from './accounts.mjs';
+import { handleApi } from './api.mjs';
 
 const PORT = Number(process.env.PORT) || 8080;
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -22,6 +24,7 @@ const TYPES = {
 const APK_URL = 'https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk';
 const store = new JsonStore(process.env.DATA_DIR || join(ROOT, 'server', 'data'));
 const lobby = new Lobby(store);
+const accounts = new Accounts(process.env.DATA_DIR || join(ROOT, 'server', 'data'));
 
 function lanIps() {
   return Object.values(networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
@@ -29,9 +32,15 @@ function lanIps() {
 
 async function serve(req, res) {
   const url = new URL(req.url, 'http://x');
+  if (await handleApi(req, res, { accounts, lobby, store })) return;
   if (url.pathname === '/estado') {
     res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'no-store' });
     res.end(JSON.stringify({ ok: true, juego: 'football-elite-3d', online: lobby.clients.size, partidos: lobby.matches.size }));
+    return;
+  }
+  if (url.pathname === '/sitio') {
+    res.writeHead(302, { location: '/sitio/' });
+    res.end();
     return;
   }
   if (url.pathname === '/apk' || url.pathname === '/apk/') {
@@ -56,9 +65,9 @@ async function serve(req, res) {
   } catch {
     if (path === '/index.html') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      res.end(`<!doctype html><meta charset="utf-8"><title>Football Elite 3D</title>
+      res.end(`<!doctype html><meta charset="utf-8"><title>Soffti's Football Game</title>
         <body style="font-family:sans-serif;background:#07101f;color:#fff;padding:40px">
-        <h1>Servidor de Football Elite 3D en marcha ✅</h1>
+        <h1>Servidor de Soffti's Football Game en marcha ✅</h1>
         <p>Ejecuta <code>npm run build</code> para servir también el juego desde aquí.</p>
         <p>WebSocket: <code>ws://${String(req.headers.host).replace(/[<>"]/g, '')}/ws</code></p></body>`);
     } else {
@@ -87,7 +96,7 @@ server.on('error', (err) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`\n  Servidor online de Football Elite 3D en el puerto ${PORT}`);
+  console.log(`\n  Servidor online de Soffti's Football Game en el puerto ${PORT}`);
   console.log(`  · Este ordenador:  http://localhost:${PORT}`);
   for (const ip of lanIps()) console.log(`  · Red local:       http://${ip}:${PORT}   (en el juego: ONLINE → Servidor → ${ip}:${PORT})`);
   console.log('');
@@ -95,6 +104,7 @@ server.listen(PORT, () => {
 
 function shutdown() {
   store.flush();
+  accounts.flush();
   process.exit(0);
 }
 process.on('SIGINT', shutdown);

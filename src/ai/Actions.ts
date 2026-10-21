@@ -124,7 +124,7 @@ export function buildCross(m: Match, p: Player, point: Vector3, style: CrossStyl
   if (style === 'normal' || style === 'high' || style === 'early') {
     const el = style === 'high' ? 36 : style === 'early' ? 20 : 24;
     const sp = style === 'early' ? spinY * 1.6 : spinY;
-    const beyond = new Vector3(point.x + hx * 1.0, 0.7, point.z + hz * 1.0);
+    const beyond = new Vector3(point.x + hx * 0.5, 1.1, point.z + hz * 0.5);
     const lofted = loftedVelocity(from, beyond, el).length();
     const s2 = solveKickThrough(from, beyond, Math.min(30, lofted), sp, (el * Math.PI) / 180);
     if (s2) return { kind: 'cross', velocity: s2.velocity, spin: s2.spin, targetId: receiver?.id, power: clamp(s2.velocity.length() / 32, 0.3, 1), errorScale };

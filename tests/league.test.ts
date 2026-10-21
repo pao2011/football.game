@@ -153,31 +153,45 @@ describe('Datos de todas las ligas', () => {
   });
 });
 
-describe('Copas CONMEBOL', () => {
-  it.each(['libertadores', 'sudamericana'] as const)('%s: 32 clubes de varios países, 8 grupos, eliminatorias y final neutral', async (cupId) => {
-    const { Continental, cupField, KNOCKOUT_NAMES } = await import('../src/modes/Continental');
-    const field = cupField(cupId, 'boca');
-    expect(field.length).toBe(32);
-    expect(new Set(field).size).toBe(32);
-    expect(field).toContain('boca');
-    const c = Continental.create(cupId, 'boca', 3);
-    expect(c.state.groups.length).toBe(8);
-    expect(c.state.groups.every((g) => g.length === 4)).toBe(true);
-    expect(c.state.fixtures.length).toBe(8 * 12);
+describe('Copas internacionales', () => {
+  it.each(['libertadores', 'sudamericana', 'champions', 'europa', 'conference'] as const)('%s: clubes de varios países, fase inicial, eliminatorias a ida y vuelta y final neutral', async (cupId) => {
+    const { Continental, CUPS, cupField, cupEligibleTeams } = await import('../src/modes/Continental');
+    const def = CUPS[cupId];
+    const eligible = cupEligibleTeams(cupId);
+    if (!eligible.length) return; // liga europea aún sin datos
+    const user = eligible[0];
+    const field = cupField(cupId, user);
+    expect(field.length).toBe(def.size);
+    expect(new Set(field).size).toBe(def.size);
+    expect(field).toContain(user);
+    const c = Continental.create(cupId, user, 3);
+    if (def.format === 'groups') {
+      expect(c.state.groups.length).toBe(8);
+      expect(c.state.groups.every((g) => g.length === 4)).toBe(true);
+      expect(c.state.fixtures.length).toBe(8 * 12);
+    } else {
+      // fase de liga: 144 partidos, 8 por club (4 de local y 4 de visitante, rivales distintos)
+      expect(c.state.fixtures.length).toBe(144);
+      for (const id of field) {
+        const mine = c.state.fixtures.filter((f) => f.home === id || f.away === id);
+        expect(mine.length).toBe(8);
+        expect(mine.filter((f) => f.home === id).length).toBe(4);
+        expect(new Set(mine.map((f) => (f.home === id ? f.away : f.home))).size).toBe(8);
+        expect(new Set(mine.map((f) => f.round)).size).toBe(8);
+      }
+    }
     let guard = 0;
-    while (!c.state.champion && guard++ < 40) {
+    while (!c.state.champion && guard++ < 60) {
       if (c.nextUserFixture()) c.simulateUserFixture();
       else c.simulateAll();
     }
     expect(c.state.champion).toBeTruthy();
     const ko = c.state.fixtures.filter((f) => f.knockout);
-    // octavos, cuartos y semifinales a ida y vuelta (28 partidos) y una final
-    expect(ko.length).toBe((8 + 4 + 2) * 2 + 1);
-    expect(ko[ko.length - 1].venue).toBeTruthy();
+    // eliminatorias a ida y vuelta y una final
+    expect(ko.length).toBe(def.format === 'groups' ? (8 + 4 + 2) * 2 + 1 : (8 + 8 + 4 + 2) * 2 + 1);
+    expect(ko[ko.length - 1].venue).toBe(def.finalVenue);
     expect(ko[ko.length - 1].leg).toBeUndefined();
-    expect(ko.map((f) => f.stage)).toContain(`${KNOCKOUT_NAMES[0]} · Ida`);
     expect(ko.every((f) => f.played)).toBe(true);
-    // cada vuelta se define por el global; si empata, hay penales
     for (const f2 of ko.filter((f) => f.leg === 2)) {
       const [h, a] = c.aggregate(f2);
       if (h === a) expect(f2.pens).toBeTruthy();

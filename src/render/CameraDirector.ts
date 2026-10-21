@@ -80,9 +80,9 @@ export class CameraDirector {
     let fov = 38;
     let damp = 3.2;
 
-    if (m.phase === 'replay') {
+    if (m.phase === 'replay' || (m.phase === 'var' && m.varReview?.stage === 'footage')) {
       this.replayT += dt;
-      return; // la vista de repetición controla la cámara con updateReplay
+      return; // la vista de repetición controla la cámara con updateReplay / updateIncident
     }
     this.replayT = 0;
 
@@ -107,7 +107,7 @@ export class CameraDirector {
     const focus = focusOverride ?? ball;
     const fk = this.freeKickAim;
     const cf = this.cardFocus;
-    if (cf && m.phase === 'stoppage') {
+    if (cf && (m.phase === 'stoppage' || m.phase === 'var')) {
       // plano medio lateral del árbitro mostrando la tarjeta (o haciendo el aviso) al jugador
       const mx = (cf.a.x + cf.b.x) / 2;
       const mz = (cf.a.z + cf.b.z) / 2;
@@ -236,6 +236,28 @@ export class CameraDirector {
     // cambio de plano: corte directo (sin barrido por el estadio)
     if (cut) this.camera.position.copy(pos);
     else this.camera.position.lerp(pos, 0.15);
+    this.camera.updateProjectionMatrix();
+    this.camera.lookAt(look);
+    this.look.copy(look);
+    this.pos.copy(this.camera.position);
+  }
+
+  /** Cámara del vídeo del VAR: planos lentos y cercanos al contacto (lateral bajo / alto por detrás). */
+  updateIncident(p: THREE.Vector3, t: number) {
+    const shot = Math.floor(t / 3.4) % 2;
+    const cut = shot !== this.replayShot || t < 0.05;
+    this.replayShot = shot;
+    const look = new THREE.Vector3(p.x, 1.0, p.z);
+    const pos = new THREE.Vector3();
+    if (shot === 0) {
+      pos.set(p.x - 2.5 + t * 0.15, 1.7, p.z + 9);
+      this.camera.fov = 34;
+    } else {
+      pos.set(p.x + 7, 6.5, p.z + 8.5);
+      this.camera.fov = 30;
+    }
+    if (cut) this.camera.position.copy(pos);
+    else this.camera.position.lerp(pos, 0.12);
     this.camera.updateProjectionMatrix();
     this.camera.lookAt(look);
     this.look.copy(look);

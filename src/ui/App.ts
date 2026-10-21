@@ -10,10 +10,8 @@ import type { MatchView } from '../render/MatchView';
 import { deleteReplay, encodeFrames, lastSeconds, listReplays, MAX_SAVED_REPLAYS, saveReplay, type SavedReplay } from '../modes/SavedReplays';
 import { loadSettings, saveSettings, DEFAULT_SETTINGS, type GameSettings } from '../config/Settings';
 import { FORMATION_IDS, FORMATIONS } from '../data/formations';
-import { LEAGUE_IDS, classicName, matchHeat } from '../data/classics';
-import sudamericanaLogo from '../assets/leagues/sudamericana.webp?url';
-import libertadoresLogo from '../assets/leagues/libertadores.webp?url';
-import { LEAGUES, getLeague } from '../data/leagues';
+import { classicName, matchHeat } from '../data/classics';
+import { LEAGUES, getLeague, leagueLogo, leagueOfTeam } from '../data/leagues';
 import { GENERIC_STADIUMS, STADIUMS, getStadium, stadiumForHome } from '../data/stadiums';
 import { BUILTIN_TEAM_COUNT, TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
 import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
@@ -21,6 +19,7 @@ import { disciplineOf, isAvailable } from '../modes/Availability';
 import { ACHIEVEMENTS, unlock, unlockedSet, type AchievementDef } from '../modes/Achievements';
 import { deleteCustomTeam, exportTeam, importTeam, isCustom, loadCustomTeams, newCustomTeam, registerCustomTeams, saveCustomTeam, setTeamLevel, shortOf, teamLevel } from '../data/customTeams';
 import type { Difficulty, FormationId, PlayerData, TeamData } from '../data/types';
+import { MenuShowcase } from '../game/MenuShowcase';
 import { MatchRunner, type MatchResultInfo } from '../game/MatchRunner';
 import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, versusDevicesLabel, type Action } from '../input/Input';
 import { MAX_SUBS, type MatchConfig } from '../sim/Match';
@@ -30,11 +29,17 @@ import { Career, SQUAD_MAX, SQUAD_MIN, buyPlayer, marketOffers, playerPrice, sel
 import { Tournament } from '../modes/Tournament';
 import type { Fixture, StandingRow } from '../modes/Competition';
 import { crestSVG, kitSVG } from './Crest';
+import { ClubUI } from './club/ClubUI';
+import type { ClubMatchMeta } from '../modes/club/Club';
+import { sanitizeOnlineTeam } from '../modes/club/squads';
+import { ceremonySeen, markCeremonySeen, playCeremony } from './Ceremony';
+import { TEAM_SORTS, leagueLabel, searchTeams, teamLeagueId, type TeamSort } from './teamSearch';
 import { Screen, el, esc, type Handlers } from './dom';
 import { isTouchDevice } from '../input/TouchControls';
 import { gamepadBlocked } from '../input/pads';
 import { NetClient, cachedProfile, serverCandidates, type FinalMsg, type MatchStart, type OnlineProfile, type ServerMsg } from '../net/NetClient';
 import { DIVISIONS } from '../../server/divisions.mjs';
+import { login, logout, register, session, setAccountServer, startSync, syncNow } from '../net/Account';
 import type { OnlineLink } from '../game/MatchRunner';
 
 /** Descarga directa de la APK de Android (la publica GitHub Actions en cada actualización de main). */
@@ -92,6 +97,7 @@ type MatchContext =
   | { mode: 'tournament'; fixture: Fixture }
   | { mode: 'career'; fixture: Fixture }
   | { mode: 'continental'; fixture: Fixture }
+  | { mode: 'club'; meta: ClubMatchMeta }
   | { mode: 'training' };
 
 export class App {
@@ -120,6 +126,8 @@ export class App {
   private onlineTeam = 0;
   /** Resultado online pendiente de los puntos de Rivals. */
   private onlineFinal: FinalMsg | null = null;
+  /** Partido online de Soffti Club en curso: se contabiliza en el club al llegar el resultado del servidor. */
+  private clubOnline: { meta: ClubMatchMeta; stats?: { passes: number; passesOk: number; shots: number; tackles: number }; half: number; role: 'host' | 'guest' } | null = null;
   private onlineWatch = 0;
 
   constructor(private canvas: HTMLCanvasElement, ui: HTMLElement) {
@@ -202,10 +210,13 @@ export class App {
     this.renderer.setSize(w, h, false);
     this.runner?.resize(w, h);
     this.replayViewer?.resize(w, h);
+    this.showcase?.resize(w, h);
   }
 
   private show(html: string, handlers: Handlers, back: (() => void) | null, cls = '') {
-    this.screen?.dispose();
+    // el partido de fondo corre solo en el título, el menú principal y sus submenús; en el resto queda congelado y atenuado
+    if (this.showcase) this.reel(cls.includes('mm-sub') || cls.includes('title-screen') || html.includes('class="mm"'));
+    this.screen?.dispose(true);
     this.screen = new Screen(this.ui, html, handlers, this.audio, cls);
     this.screen.onBack = back;
     return this.screen;
@@ -213,8 +224,76 @@ export class App {
 
   private setMenuMode(on: boolean) {
     this.bg.classList.toggle('hidden', !on);
-    this.canvas.classList.toggle('hidden', on);
-    if (on) this.audio.startMenuMusic();
+    if (on) {
+      // las pantallas que no son el menú principal dejan el fondo congelado y atenuado
+      this.reel(false);
+      this.canvas.classList.toggle('hidden', !this.showcase);
+      this.audio.startMenuMusic();
+    } else {
+      this.dropReel();
+      this.canvas.classList.remove('hidden');
+    }
+  }
+
+  // ---------- Fondo vivo del menú (partido 3D con cámaras de cine, ver MenuShowcase) ----------
+  private showcase: MenuShowcase | null = null;
+  private reelBroken = false;
+  private reelTimer = 0;
+  private reelFocus = false;
+
+  /** `focus`: el fondo corre (menú principal y título); si no, queda congelado y atenuado detrás de otras pantallas. */
+  private reel(focus: boolean) {
+    this.reelFocus = focus;
+    if (!this.settings.menuReel || this.reelBroken) { this.dropReel(); return; }
+    if (this.showcase) {
+      this.bg.classList.add('reel');
+      this.bg.classList.toggle('dim', !focus);
+      this.canvas.classList.remove('hidden');
+      if (focus) this.showcase.start(); else this.showcase.pause();
+      return;
+    }
+    this.bg.classList.remove('reel', 'dim');
+    if (focus && !this.reelTimer) this.reelTimer = window.setTimeout(() => { this.reelTimer = 0; this.createReel(); }, 450);
+  }
+
+  private createReel() {
+    if (this.showcase || this.runner || this.reelBroken || !this.settings.menuReel) return;
+    try {
+      const sc = new MenuShowcase(this.renderer, this.settings);
+      sc.onSlow = () => { this.reelBroken = true; this.dropReel(true); };
+      sc.onSwap = (ph) => this.canvas.classList.toggle('reel-swap', ph === 'out');
+      sc.onGoal = (g) => {
+        if (!this.reelFocus) return;
+        this.audio.cheer(0.4);
+        const root = this.screen?.root.querySelector('.mm');
+        if (!root) return;
+        const b = el('div', 'mm-goal', `<b>¡GOOOL!</b><span>${esc(g.scorer)}</span><small>${esc(g.team)} · ${g.minute}'</small>`);
+        root.appendChild(b);
+        setTimeout(() => b.remove(), 4200);
+      };
+      sc.resize(window.innerWidth, window.innerHeight);
+      this.showcase = sc;
+      (window as any).__showcase = sc; // acceso para pruebas automáticas
+      this.canvas.classList.remove('hidden');
+      this.canvas.classList.add('reel-in');
+      this.bg.classList.add('reel');
+      this.bg.classList.toggle('dim', !this.reelFocus);
+      if (this.reelFocus) sc.start();
+    } catch (err) {
+      console.warn('Fondo del menú no disponible:', err);
+      this.reelBroken = true;
+      this.dropReel(true);
+    }
+  }
+
+  private dropReel(menu = false) {
+    window.clearTimeout(this.reelTimer);
+    this.reelTimer = 0;
+    this.showcase?.dispose();
+    this.showcase = null;
+    this.bg.classList.remove('reel', 'dim');
+    this.canvas.classList.remove('reel-in', 'reel-swap');
+    if (menu) this.canvas.classList.add('hidden');
   }
 
   // ==================================================================
@@ -222,15 +301,20 @@ export class App {
   // ==================================================================
 
   start() {
+    setAccountServer(this.settings.onlineServer);
+    startSync();
+    // al abrir: trae el progreso más reciente de la cuenta; si cambió algo, recarga una vez para usarlo
+    if (session()) syncNow(true).then((changed) => { if (changed) location.reload(); }).catch(() => undefined);
     this.setMenuMode(true);
     const s = this.show(`
-      <div class="logo"><div class="l1">FOOTBALL ELITE</div><div class="l2">3D</div></div>
+      <div class="logo"><div class="l1">SOFFTI'S FOOTBALL</div><div class="l2">GAME</div></div>
       <button class="press btn" data-act="go" style="background:none;border:none">${isTouchDevice() ? 'TOCA PARA EMPEZAR' : 'PULSA ENTER PARA EMPEZAR'}</button>
       <div class="pad-hint">${gamepadBlocked()
         ? '🎮 El navegador bloquea el mando dentro de esta página incrustada. Abre el juego en su propia pestaña (enlace directo) para usarlo.'
         : '🎮 ¿Usas mando? Pulsa cualquier botón para conectarlo'}</div>
       <div class="version-tag">v${VERSION}</div>`, { go: () => { this.enterMobileFullscreen(); this.mainMenu(); } }, null, 'title-screen');
     void s;
+    this.reel(true);
     this.watchPads();
     this.playSplash();
   }
@@ -272,8 +356,13 @@ export class App {
       <svg class="sp-goal" viewBox="0 0 200 100" preserveAspectRatio="none"><g class="sp-net">${net}</g><path class="sp-frame" d="M20 98V8h160v90"/></svg>
       <div class="sp-ball"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#fff" stroke="#111" stroke-width="1"/><path d="M12 6.5l4.2 3-1.6 5h-5.2l-1.6-5z" fill="#111"/><path d="M12 6.5V1.5M16.2 9.5l4.6-1.6M14.6 14.5l3 4M9.4 14.5l-3 4M7.8 9.5L3.2 7.9" stroke="#111" stroke-width="1"/></svg></div>
       <div class="sp-flash"></div>
-      <div class="sp-logo"><span class="s1">FOOTBALL ELITE</span><span class="s2">3D</span></div>
-      <div class="sp-sub">11 contra 11 · IA táctica · física real</div>`;
+      <div class="sp-beams"><i></i><i></i><i></i><i></i></div>
+      <div class="sp-floor"></div>
+      <div class="sp-sparks">${Array.from({ length: 28 }, (_, i) => `<i style="--a:${(i * 360) / 28 + (i % 2) * 6}deg;--d:${22 + (i % 5) * 7}vmin;--s:${0.6 + (i % 3) * 0.3};--h:${i % 3 === 0 ? '#f6b40e' : i % 3 === 1 ? '#fff' : '#74acdf'}"></i>`).join('')}</div>
+      <div class="sp-logo"><span class="s1">${[...`SOFFTI'S FOOTBALL`].map((ch, i) => (ch === ' ' ? '<b class="sp-sp"></b>' : `<b style="--i:${i}">${ch}</b>`)).join('')}</span><span class="sp-stripe"><i></i><i></i><i></i></span><span class="s2">GAME</span><span class="sp-shine"></span></div>
+      <div class="sp-sub">11 contra 11 · IA táctica · física real</div>
+      <div class="sp-progress"><i></i></div>
+      <div class="sp-skip">toca para saltar</div>`;
     document.body.appendChild(el);
     let done = false;
     const end = () => {
@@ -285,7 +374,7 @@ export class App {
     };
     el.addEventListener('pointerdown', end);
     window.addEventListener('keydown', end, true);
-    setTimeout(end, 3300);
+    setTimeout(end, 4700);
   }
 
   /** En móvil: pantalla completa y orientación horizontal (si el navegador lo permite). */
@@ -298,54 +387,157 @@ export class App {
     } catch { /* no soportado */ }
   }
 
+  // ---------- Menú principal: pocas opciones grandes sobre el partido en vivo ----------
+  private static readonly ICON_GEAR = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
+  private static readonly ICON_SOUND = (on: boolean) => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/>${on ? '<path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>' : '<path d="m22 9-6 6m0-6 6 6"/>'}</svg>`;
+  private liveTimer = 0;
+
+  /** Marcador "en vivo" del partido que se ve de fondo (se actualiza solo mientras el menú está en pantalla). */
+  private liveChip() {
+    window.clearInterval(this.liveTimer);
+    const paint = () => {
+      const box = this.screen?.root.querySelector('.mm-live');
+      if (!box) { window.clearInterval(this.liveTimer); return; }
+      const st = this.showcase?.status();
+      box.innerHTML = st && this.showcase?.active
+        ? `<span class="mm-live-dot"></span><b>${st.replay ? 'REPETICIÓN' : 'EN VIVO'}</b><span class="mm-live-t">${crestSVG(st.home, 22)}<em>${esc(st.home.short)}</em><strong class="num">${st.hg} - ${st.ag}</strong><em>${esc(st.away.short)}</em>${crestSVG(st.away, 22)}</span><span class="mm-live-m num">${st.minute}'</span><small>${esc(st.stadium)}</small>`
+        : '';
+    };
+    paint();
+    this.liveTimer = window.setInterval(paint, 1000);
+  }
+
+  private menuChrome(mutedNow = this.settings.muted) {
+    return `<div class="mm-tools">
+      <button class="mm-icon" data-act="mute" data-nofocus="1" title="Sonido (M)" aria-label="Sonido">${App.ICON_SOUND(!mutedNow)}</button>
+      <button class="mm-icon" data-act="settings" data-nofocus="1" title="Configuración" aria-label="Configuración">${App.ICON_GEAR}</button>
+    </div>`;
+  }
+
+  private menuHandlers(): Handlers {
+    return {
+      mute: (t) => { this.toggleMute(); t.innerHTML = App.ICON_SOUND(!this.settings.muted); },
+      settings: () => this.settingsScreen(() => this.mainMenu()),
+    };
+  }
+
   mainMenu() {
     this.setMenuMode(true);
-    const crests = TEAMS.filter((t) => LEAGUE_IDS.includes(t.id)).map((t) => crestSVG(t, 56)).join(''); // el muro de escudos del menú: los 30 de la Liga Profesional
-    const isElectron = typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent);
+    const item = (act: string, title: string, sub: string, cls = '') => `<button class="mm-item ${cls}" data-act="${act}"><span class="mm-t">${title}</span><small>${sub}</small></button>`;
     this.show(`
-      <div class="main-menu">
-        <div class="menu-list">
-          <button class="menu-item" data-act="quick">Partido rápido<small>Elige equipos, estadio y dificultad</small></button>
-          <button class="menu-item" data-act="online">Online<small>Division Rivals, amistosos y salas con amigos</small></button>
-          <button class="menu-item" data-act="tournament">Copa Élite<small>Torneo: fase de grupos y eliminatorias</small></button>
-          <button class="menu-item" data-act="continental">Copas CONMEBOL<small>Libertadores y Sudamericana con clubes de toda Sudamérica</small></button>
-          <button class="menu-item" data-act="career">Carrera<small>11 ligas: Argentina (1.ª y 2.ª), Brasil y 8 países más</small></button>
-          <button class="menu-item" data-act="training">Entrenamiento<small>Tiros, pases, penales y tiros libres</small></button>
-          <button class="menu-item" data-act="settings">Configuración<small>Gráficos, sonido y jugabilidad</small></button>
-          <button class="menu-item" data-act="editor">✏️ Editor de equipos<small>Crea tu equipo · exportar e importar</small></button>
-          <button class="menu-item" data-act="replays">🎬 Repeticiones<small>Tus jugadas guardadas</small></button>
-          <button class="menu-item" data-act="achievements">🏆 Logros<small>${Object.keys(unlockedSet()).length}/${ACHIEVEMENTS.length} desbloqueados</small></button>
-          <button class="menu-item" data-act="controls">Controles<small>Teclado y mando · reasignar teclas</small></button>
-          ${!isElectron && !isNativeApp() ? '<button class="menu-item apk-item" data-act="apk">📲 Descargar APK<small>Instala el juego en tu Android</small></button>' : ''}
-          ${isElectron ? '<button class="menu-item" data-act="quit">Salir</button>' : ''}
-        </div>
-        <div class="menu-hero">
-          <div class="logo"><div class="l1">FOOTBALL ELITE</div><div class="l2">3D</div></div>
-          <div class="crest-row">${crests}</div>
-        </div>
-      </div>
-      <div class="version-tag">v${VERSION} · ${isTouchDevice() ? 'Toca una opción para elegir' : '↑↓ para navegar · Enter/S para elegir · Esc para volver'}</div>`, {
+      <div class="mm">
+        <div class="mm-brand"><div class="mm-l1">SOFFTI'S FOOTBALL</div><div class="mm-l2">GAME</div></div>
+        ${this.menuChrome()}
+        <nav class="mm-list">
+          ${item('quick', 'Partido rápido', 'Elige equipos, estadio y dificultad', 'mm-primary')}
+          ${item('online', 'Online', 'Division Rivals, amistosos y salas con amigos')}
+          ${item('club', 'Soffti Club', 'Cartas, sobres, mercado, plantillas y competiciones')}
+          ${item('compete', 'Competiciones', 'Copa Élite, copas internacionales y modo carrera')}
+          ${item('more', 'Más', 'Entrenamiento, editor, repeticiones, logros y controles')}
+        </nav>
+        <div class="mm-live"></div>
+        <div class="mm-hint">${isTouchDevice() ? 'Toca una opción para elegir' : '↑↓ navegar · Enter elegir · Esc volver · M sonido'}<span>v${VERSION}</span></div>
+      </div>`, {
+      ...this.menuHandlers(),
       quick: () => this.quickMatchScreen(),
-      replays: () => this.replaysScreen(),
       online: () => this.onlineMenu(),
-      tournament: () => this.tournamentHub(),
-      career: () => this.careerHub(),
-      continental: () => this.continentalHub(),
-      training: () => this.trainingScreen(),
-      settings: () => this.settingsScreen(() => this.mainMenu()),
-      controls: () => this.controlsScreen(() => this.mainMenu()),
-      achievements: () => this.achievementsScreen(),
-      editor: () => this.teamEditorList(),
-      quit: () => window.close(),
-      apk: () => { window.open(APK_URL, '_blank', 'noopener'); },
+      club: () => this.clubUI.open(),
+      compete: () => this.competeMenu(),
+      more: () => this.moreMenu(),
     }, () => this.start());
+    this.reel(true);
+    this.liveChip();
+  }
+
+  /** Pantalla de tarjetas grandes (submenús del menú principal). */
+  private cardsMenu(crumb: string, title: string, cards: { act: string; icon: string; title: string; sub: string; cls?: string; go: () => void }[]) {
+    const handlers: Handlers = { ...this.menuHandlers(), back: () => this.mainMenu() };
+    for (const c of cards) handlers[c.act] = c.go;
+    this.show(`
+      <div class="screen-header"><div><div class="crumb">${crumb}</div><h2>${title}</h2></div></div>
+      <div class="screen-body mm-body"><div class="mm-cards">${cards.map((c) => `<button class="mm-card ${c.cls ?? ''}" data-act="${c.act}"><span class="mm-ico">${c.icon}</span><span class="mm-ct">${c.title}</span><small>${c.sub}</small></button>`).join('')}</div></div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, handlers, () => this.mainMenu(), 'mm-sub');
+    this.reel(true);
+  }
+
+  private competeMenu() {
+    this.cardsMenu('SOFFTI\'S FOOTBALL GAME', 'Competiciones', [
+      { act: 'tournament', icon: '🏆', title: 'Copa Élite', sub: 'Torneo: fase de grupos y eliminatorias', go: () => this.tournamentHub() },
+      { act: 'continental', icon: '🌎', title: 'Copas internacionales', sub: 'Libertadores, Sudamericana, Champions, Europa y Conference League', go: () => this.continentalHub() },
+      { act: 'career', icon: '📈', title: 'Carrera', sub: '21 ligas de Sudamérica y Europa', go: () => this.careerHub() },
+    ]);
+  }
+
+  private moreMenu() {
+    const isElectron = typeof navigator !== 'undefined' && /Electron/i.test(navigator.userAgent);
+    const cards = [
+      { act: 'training', icon: '🎯', title: 'Entrenamiento', sub: 'Tiros, pases, penales y tiros libres', go: () => this.trainingScreen() },
+      { act: 'editor', icon: '✏️', title: 'Editor de equipos', sub: 'Crea tu equipo · exportar e importar', go: () => this.teamEditorList() },
+      { act: 'replays', icon: '🎬', title: 'Repeticiones', sub: 'Tus jugadas guardadas', go: () => this.replaysScreen() },
+      { act: 'achievements', icon: '🏅', title: 'Logros', sub: `${Object.keys(unlockedSet()).length}/${ACHIEVEMENTS.length} desbloqueados`, go: () => this.achievementsScreen() },
+      { act: 'account', icon: '☁️', title: 'Cuenta', sub: session() ? `${esc(session()!.name)} · progreso en la nube` : 'Guarda tu progreso y juega en otro dispositivo', go: () => this.accountScreen() },
+      { act: 'controls', icon: '🎮', title: 'Controles', sub: 'Teclado y mando · reasignar teclas', go: () => this.controlsScreen(() => this.moreMenu()) },
+      { act: 'settings', icon: '⚙️', title: 'Configuración', sub: 'Gráficos, sonido y jugabilidad', go: () => this.settingsScreen(() => this.moreMenu()) },
+    ];
+    if (!isElectron && !isNativeApp()) cards.push({ act: 'apk', icon: '📲', title: 'Descargar APK', sub: 'Instala el juego en tu Android', go: () => { window.open(APK_URL, '_blank', 'noopener'); } });
+    if (isElectron) cards.push({ act: 'quit', icon: '⏻', title: 'Salir', sub: 'Cerrar el juego', go: () => window.close() });
+    this.cardsMenu('SOFFTI\'S FOOTBALL GAME', 'Más', cards);
+  }
+
+
+  // ==================================================================
+  // Cuenta (progreso en la nube)
+  // ==================================================================
+
+  private accountScreen(msg = '', error = '', tab: 'login' | 'register' = 'login', keep: { name?: string; mail?: string; who?: string } = {}) {
+    this.setMenuMode(true);
+    const s = session();
+    const form = s
+      ? `<h3 style="margin-top:0">${esc(s.name)}</h3><div class="muted">${esc(s.email)}</div>
+         <p class="muted">Tu club, carrera, copas y logros se guardan en la nube y se sincronizan al abrir el juego y poco después de cada cambio.</p>
+         <div class="row"><button class="btn primary" data-act="sync">Sincronizar ahora</button><button class="btn" data-act="logout">Cerrar sesión</button></div>`
+      : `<div class="acc-tabs"><button class="btn ${tab === 'login' ? 'primary' : ''}" data-act="tabLogin">Entrar</button><button class="btn ${tab === 'register' ? 'primary' : ''}" data-act="tabRegister">Crear cuenta</button></div>
+         ${tab === 'register' ? `<div class="row"><label for="ac-name">Nombre</label><input class="text-in" id="ac-name" maxlength="20" autocomplete="username" value="${esc(keep.name ?? '')}"></div>
+           <div class="row"><label for="ac-mail">Gmail</label><input class="text-in" id="ac-mail" type="email" autocomplete="email" value="${esc(keep.mail ?? '')}"></div>`
+           : `<div class="row"><label for="ac-who">Gmail o nombre</label><input class="text-in" id="ac-who" autocomplete="username" value="${esc(keep.who ?? '')}"></div>`}
+         <div class="row"><label for="ac-pw">Contraseña</label><input class="text-in" id="ac-pw" type="password" minlength="8" autocomplete="${tab === 'register' ? 'new-password' : 'current-password'}" data-enter="submit"></div>
+         <div class="muted" style="font-size:12px;margin:8px 0">Mínimo 8 caracteres. Aún no hay recuperación de contraseña: guárdala bien.</div>`;
+    const sc = this.show(`
+      <div class="screen-header"><div><div class="crumb">MÁS</div><h2>Cuenta</h2></div></div>
+      <div class="screen-body"><div class="panel" style="max-width:520px;margin:0 auto">
+        ${form}
+        ${msg ? `<div class="net-status">${esc(msg)}</div>` : ''}${error ? `<div class="sub-msg" role="alert">${esc(error)}</div>` : ''}
+      </div></div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button>${s ? '' : `<button class="btn primary" data-act="submit">${tab === 'register' ? 'Crear cuenta' : 'Entrar'}</button>`}</div>`, {
+      back: () => this.moreMenu(),
+      tabLogin: () => this.accountScreen('', '', 'login'),
+      tabRegister: () => this.accountScreen('', '', 'register'),
+      logout: async () => { await logout(); this.accountScreen('Sesión cerrada. Tu progreso sigue en este dispositivo.'); },
+      sync: async () => {
+        this.accountScreen('Sincronizando…');
+        try { if (await syncNow(true)) location.reload(); else this.accountScreen('Todo está al día ✔'); } catch (e) { this.accountScreen('', (e as Error).message); }
+      },
+      submit: async () => {
+        const v = (id: string) => ((sc.root.querySelector(id) as HTMLInputElement)?.value ?? '').trim();
+        const pw = (sc.root.querySelector('#ac-pw') as HTMLInputElement)?.value ?? '';
+        const [name, mail, who] = [v('#ac-name'), v('#ac-mail'), v('#ac-who')];
+        this.accountScreen(tab === 'register' ? 'Creando cuenta…' : 'Entrando…', '', tab, { name, mail, who });
+        try {
+          if (tab === 'register') await register(name, mail, pw);
+          else await login(who, pw);
+          // primera vez en este dispositivo: sube lo local y trae lo de la nube
+          if (await syncNow(true)) { location.reload(); return; }
+          this.accountScreen('¡Listo! Tu progreso ya está en la nube ☁️');
+        } catch (e) { this.accountScreen('', (e as Error).message, tab, { name, mail, who }); }
+      },
+    }, () => this.moreMenu(), 'mm-sub');
   }
 
   // ==================================================================
   // Partido rápido
   // ==================================================================
 
-  private teamCard(t: TeamData, side: string, prefix: string, extra = '') {
+  private teamCard(t: TeamData, side: string, prefix: string, extra = '', search = false) {
     const stars = '★'.repeat(Math.max(1, Math.round((t.rating - 70) / 3.5))).padEnd(5, '☆');
     return `<div class="panel team-picker">
       <div class="side">${side}</div>
@@ -354,8 +546,140 @@ export class App {
       <div class="stars">${stars} <span class="muted">${t.rating}</span></div>
       <div class="muted">${esc(t.city)} · ${t.formation}</div>
       ${extra}
+      ${search ? `<button class="btn ts-open" data-act="${prefix}Search">🔍 Buscar equipo</button>` : ''}
     </div>`;
   }
+
+  /**
+   * Buscador de equipos: por nombre (texto), por liga y con varios órdenes (A-Z, Z-A, valoración, por liga).
+   * `onPick` recibe el id del equipo elegido; `back` vuelve a la pantalla anterior sin cambiar nada.
+   */
+  private teamSearchScreen(opts: { title: string; crumb: string; teams: TeamData[]; current?: string; league?: string; onPick: (id: string) => void; back: () => void }) {
+    const leagueIds = [...new Set(opts.teams.map(teamLeagueId))];
+    const leagueOpts = [...LEAGUES.map((l) => l.id).filter((id) => leagueIds.includes(id)), ...(leagueIds.includes('') ? ['custom'] : [])];
+    let league = opts.league && leagueOpts.includes(opts.league) ? opts.league : 'all';
+    let sort: TeamSort = this.teamSort;
+    let query = '';
+    let limit = 60;
+    const handlers: Handlers = { back: opts.back };
+    const listHTML = () => {
+      const found = searchTeams(opts.teams, query, league, sort);
+      const shown = found.slice(0, limit);
+      for (const k of Object.keys(handlers)) if (k.startsWith('pick-')) delete handlers[k];
+      let html = '';
+      let last = '\0';
+      for (const t of shown) {
+        const lid = teamLeagueId(t);
+        if (sort === 'league' && lid !== last) { last = lid; html += `<div class="ts-head">${esc(leagueLabel(lid))}</div>`; }
+        handlers[`pick-${t.id}`] = () => opts.onPick(t.id);
+        html += `<button class="ts-item${t.id === opts.current ? ' cur' : ''}" data-act="pick-${esc(t.id)}">${crestSVG(t, 34)}<span class="ts-n">${esc(t.name)}<small>${esc(leagueLabel(lid))}</small></span><span class="ts-r num">${t.rating}</span></button>`;
+      }
+      if (!shown.length) html = '<p class="muted" style="padding:12px">No hay equipos que coincidan con la búsqueda.</p>';
+      if (found.length > shown.length) html += `<button class="btn" data-act="more" style="grid-column:1/-1">Mostrar más (${found.length - shown.length})</button>`;
+      return { html, count: found.length };
+    };
+    const first = listHTML();
+    const s = this.show(`
+      <div class="screen-header"><div><div class="crumb">${opts.crumb}</div><h2>${opts.title}</h2></div></div>
+      <div class="ts-bar">
+        <input class="text-in ts-q" type="search" placeholder="Buscar por nombre, sigla o ciudad…" autocomplete="off" autocapitalize="off" spellcheck="false" data-enter="pickFirst" aria-label="Buscar equipo">
+        <label class="ts-sel">Liga<select class="ts-league"><option value="all">Todas las ligas</option>${leagueOpts.map((id) => `<option value="${id}"${id === league ? ' selected' : ''}>${esc(id === 'custom' ? 'Equipos propios' : getLeague(id).name)}</option>`).join('')}</select></label>
+        <label class="ts-sel">Orden<select class="ts-sort">${TEAM_SORTS.map((o) => `<option value="${o.id}"${o.id === sort ? ' selected' : ''}>${o.label}</option>`).join('')}</select></label>
+        <span class="ts-count muted num">${first.count}</span>
+      </div>
+      <div class="screen-body"><div class="ts-list">${first.html}</div></div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, handlers, opts.back);
+    const list = s.root.querySelector('.ts-list') as HTMLElement;
+    const count = s.root.querySelector('.ts-count') as HTMLElement;
+    const redraw = () => { const r = listHTML(); list.innerHTML = r.html; count.textContent = String(r.count); s.applyFocus(); };
+    handlers.more = () => { limit += 80; redraw(); };
+    handlers.pickFirst = () => {
+      const f = searchTeams(opts.teams, query, league, sort)[0];
+      if (f) opts.onPick(f.id);
+    };
+    const q = s.root.querySelector('.ts-q') as HTMLInputElement;
+    q.addEventListener('input', () => { query = q.value; limit = 60; redraw(); });
+    (s.root.querySelector('.ts-league') as HTMLSelectElement).addEventListener('change', (e) => { league = (e.target as HTMLSelectElement).value; limit = 60; redraw(); });
+    (s.root.querySelector('.ts-sort') as HTMLSelectElement).addEventListener('change', (e) => { sort = this.teamSort = (e.target as HTMLSelectElement).value as TeamSort; limit = 60; redraw(); });
+    if (!isTouchDevice()) q.focus();
+    s.root.querySelector('.ts-item.cur')?.scrollIntoView({ block: 'center' });
+  }
+  private teamSort: TeamSort = 'az';
+
+  /** Modo Soffti Club: coleccionables, plantillas, mercado local y competiciones contra la IA. */
+  readonly clubUI: ClubUI = new ClubUI({
+    show: (html, handlers, back, cls) => this.show(html, handlers, back, cls),
+    audio: this.audio,
+    mainMenu: () => this.mainMenu(),
+    pickTeam: (title, onPick, back) => this.teamSearchScreen({ title, crumb: 'SOFFTI CLUB', teams: TEAMS, onPick, back }),
+    playClubMatch: (home, away, meta, o) => {
+      const cfg: MatchConfig = {
+        home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: 0,
+        halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty,
+        extraTime: o.knockout, penalties: o.knockout, weather: randomWeather(Math.random()),
+      };
+      const ctx: MatchContext = { mode: 'club', meta };
+      this.playMatch(cfg, this.stadiumForCtx(ctx), ctx);
+    },
+    clubOnline: () => {
+      if (this.net?.connected) { this.clubOnlineQueue(); return; }
+      if (!this.settings.onlineName) this.settings.onlineName = this.clubUI.club.s.identity.name.slice(0, 16);
+      this.connectOnline(() => this.clubOnlineQueue());
+    },
+  });
+
+  /** Busca otro club online con la plantilla activa de Soffti Club. */
+  private clubOnlineQueue() {
+    const net = this.net;
+    const club = this.clubUI.club;
+    const r = club.onlineTeam(Date.now());
+    if (!net?.connected) { this.onlineMenu(); return; }
+    if (!r.ok) { this.clubUI.toast(r.error, 'err'); this.clubUI.hub(); return; }
+    this.clubOnline = { meta: r.value.meta, half: 4, role: 'host' };
+    net.send({ t: 'queue', mode: 'club', team: r.value.team.id, squad: r.value.team });
+    const t0 = performance.now();
+    const ev = club.evalSquad();
+    const html = () => {
+      const sec = Math.floor((performance.now() - t0) / 1000);
+      return `<div class="panel modal" style="margin:auto;text-align:center">
+        <div class="crumb">SOFFTI CLUB · ONLINE</div><h2>Buscando club rival</h2>
+        <div style="display:flex;justify-content:center;margin:8px 0">${crestSVG(r.value.team, 72)}</div>
+        <div><b>${esc(club.s.identity.name)}</b> · valoración <b class="num">${ev.ovr}</b> · química <b class="num">${ev.chem}</b></div>
+        <div class="net-status" style="justify-content:center"><span class="spinner"></span>${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</div>
+        <div class="muted" style="margin:10px 0">Tu plantilla contra la de otro jugador real. Gana monedas, XP, puntos online y progreso de misiones y evoluciones. Abandonar cuenta como derrota.</div>
+        <button class="btn" data-act="cancel">Cancelar</button></div>`;
+    };
+    const cancel = () => { window.clearInterval(timer); net.send({ t: 'cancel' }); this.clubOnline = null; this.clubUI.hub(); };
+    const sc = this.show(html(), { cancel }, cancel);
+    const timer = window.setInterval(() => {
+      if (this.screen !== sc) { window.clearInterval(timer); return; }
+      const st = sc.root.querySelector('.net-status');
+      const sec = Math.floor((performance.now() - t0) / 1000);
+      if (st) st.innerHTML = `<span class="spinner"></span>${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    }, 500);
+  }
+
+  /** Contabiliza en el club el resultado online que confirmó el servidor. */
+  private creditClubOnline(f: FinalMsg): string {
+    const co = this.clubOnline;
+    if (!co || f.mode !== 'club') return '';
+    this.clubOnline = null;
+    if (!f.outcome) return '<div class="muted">Los dos jugadores informaron resultados distintos: el partido no cuenta para tu club.</div>';
+    const me = co.role === 'host' ? 0 : 1;
+    const o = f.outcome;
+    const gf = me === 0 ? o.home : o.away;
+    const ga = me === 0 ? o.away : o.home;
+    const out = this.clubUI.club.finishMatch(co.meta, { gf, ga, pensWin: gf === ga && o.pens >= 0 ? o.pens === me : undefined, ...(co.stats ?? { passes: 0, passesOk: 0, shots: 0, tackles: 0 }), halfMinutes: co.half, forfeit: o.forfeit === me }, Date.now());
+    return out ? this.clubUI.resultHTML(out) : '';
+  }
+
+  /** Ceremonia de campeón (una sola vez por copa): se lanza al abrir el menú de la competición ya terminada. */
+  private celebrate(key: string, champion: TeamData | null, cup: string, detail: string, user: boolean, logo?: string) {
+    if (!champion || ceremonySeen(key)) return;
+    markCeremonySeen(key);
+    setTimeout(() => playCeremony(document.body, { team: champion, cup, detail, user, logo, audio: this.audio }), 450);
+  }
+  private trainIdx = 0;
 
   quickMatchScreen() {
     const q = this.quick;
@@ -368,9 +692,9 @@ export class App {
       <div class="screen-header"><div><div class="crumb">PARTIDO RÁPIDO</div><h2>Configuración del encuentro</h2></div></div>
       <div class="screen-body">
         <div class="versus">
-          ${this.teamCard(home, 'LOCAL', 'home', `<div class="kits">${kitSVG(home.home)}</div>`)}
+          ${this.teamCard(home, 'LOCAL', 'home', `<div class="kits">${kitSVG(home.home)}</div>`, true)}
           <div class="vs">VS</div>
-          ${this.teamCard(away, 'VISITANTE', 'away', `<div class="kits">${kitSVG(awayKit)}</div>`)}
+          ${this.teamCard(away, 'VISITANTE', 'away', `<div class="kits">${kitSVG(awayKit)}</div>`, true)}
         </div>
         <div class="panel" style="margin-top:16px">
           ${this.stepper('Liga', q.league && q.league !== 'all' ? getLeague(q.league).name : 'Todas las ligas', 'lg')}
@@ -408,6 +732,11 @@ export class App {
       if (q.home === q.away && p.length > 1) q[key] = p[(i + d + p.length) % p.length];
       s.refresh(render());
     };
+    const search = (key: 'home' | 'away') => this.teamSearchScreen({
+      title: key === 'home' ? 'Elige el equipo local' : 'Elige el equipo visitante', crumb: 'PARTIDO RÁPIDO', teams: TEAMS, current: TEAMS[q[key]].id, league: q.league,
+      onPick: (id) => { q[key] = TEAMS.findIndex((t) => t.id === id); if (q.home === q.away) q[key === 'home' ? 'away' : 'home'] = pool().find((i) => i !== q[key]) ?? q.away; if (key === 'home') ownGround(); this.quickMatchScreen(); },
+      back: () => this.quickMatchScreen(),
+    });
     const LG = ['all', ...LEAGUES.filter((l) => l.teamIds().length).map((l) => l.id)];
     const league = (d: number) => {
       q.league = LG[(LG.indexOf(q.league ?? 'all') + d + LG.length) % LG.length];
@@ -422,6 +751,8 @@ export class App {
       lgNext: () => league(1),
       homePrev: () => { step('home', -1); ownGround(); },
       homeNext: () => { step('home', 1); ownGround(); },
+      homeSearch: () => search('home'),
+      awaySearch: () => search('away'),
       awayPrev: () => step('away', -1),
       awayNext: () => step('away', 1),
       stadPrev: () => cycle('stadium', STADIUMS.length, -1),
@@ -473,14 +804,25 @@ export class App {
   // Partido
   // ==================================================================
 
+  /** Competición que se muestra en el marcador: la copa en curso, la liga de ambos equipos o amistoso. */
+  private competitionFor(config: MatchConfig, ctx: MatchContext): string {
+    if (ctx.mode === 'continental') return Continental.load()?.state.cup ?? 'friendly';
+    if (ctx.mode === 'tournament') return 'tournament';
+    if (ctx.mode === 'club') return 'club';
+    const lh = leagueOfTeam(config.home.id);
+    return lh && lh.id === leagueOfTeam(config.away.id)?.id ? lh.id : 'friendly';
+  }
+
   playMatch(config: MatchConfig, stadiumId: string, ctx: MatchContext, online: OnlineLink | null = null) {
     // los clásicos son partidos calientes en cualquier modo
     if (config.heat === undefined && !config.training) {
       const cl = classicName(config.home.id, config.away.id);
       if (cl) config = { ...config, heat: matchHeat(config.home.id, config.away.id), classic: cl };
     }
+    if (!config.competition) config = { ...config, competition: this.competitionFor(config, ctx) };
     this.lastMatch = { config, ctx };
     this.lastStadiumId = stadiumId;
+    this.dropReel();
     const home = config.home;
     const away = config.away;
     const tip = TIPS[Math.floor(Math.random() * TIPS.length)];
@@ -608,7 +950,7 @@ export class App {
       const url = view.capture();
       const a = document.createElement('a');
       a.href = url;
-      a.download = `football-elite-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
+      a.download = `soffti-football-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -1056,6 +1398,7 @@ export class App {
   private stadiumForCtx(ctx: MatchContext): string {
     if (ctx.mode === 'quick') return STADIUMS[this.quick.stadium].id;
     if (ctx.mode === 'training') return STADIUMS[2].id;
+    if (ctx.mode === 'club') return GENERIC_STADIUMS[hashStr(ctx.meta.id) % GENERIC_STADIUMS.length].id;
     if (ctx.mode === 'online') return GENERIC_STADIUMS[ctx.start.seed % GENERIC_STADIUMS.length].id;
     if (ctx.fixture.venue) return ctx.fixture.venue;
     const home = ctx.fixture.home;
@@ -1065,17 +1408,19 @@ export class App {
   private leaveMatch() {
     const ctx = this.lastMatch?.ctx;
     const wasRunning = !!this.runner && !this.runner.match.finished;
+    if (ctx?.mode === 'club' && wasRunning) this.clubUI.club.finishMatch(ctx.meta, { gf: 0, ga: 3, passes: 0, passesOk: 0, shots: 0, tackles: 0, halfMinutes: this.settings.halfMinutes, forfeit: true }, Date.now());
     this.runner?.dispose();
     this.runner = null;
     if (ctx?.mode === 'online') {
       window.clearInterval(this.onlineWatch);
       if (wasRunning) this.net?.send({ t: 'leave' });
-      this.onlineHub();
+      if (ctx.start.mode === 'club') this.clubUI.hub(); else this.onlineHub();
       return;
     }
     if (ctx?.mode === 'tournament') this.tournamentHub();
     else if (ctx?.mode === 'career') this.careerHub();
     else if (ctx?.mode === 'continental') this.continentalHub();
+    else if (ctx?.mode === 'club') this.clubUI.hub();
     else if (ctx?.mode === 'training') this.trainingScreen();
     else this.mainMenu();
   }
@@ -1144,9 +1489,19 @@ export class App {
       availabilityMsgs = this.continental.recordUserResult(ctx.fixture, r.home, r.away, r.penalties ?? undefined, d);
       if (this.continental.state.champion === this.continental.state.userTeam) addAch('cup');
     }
+    let clubBlock = '';
+    if (ctx.mode === 'club') {
+      const st = m.teams[0].stats;
+      const out = this.clubUI.club.finishMatch(ctx.meta, { gf: r.home, ga: r.away, pensWin: r.penalties ? r.winner === 0 : undefined, passes: st.passes, passesOk: st.passesCompleted, shots: st.shots, tackles: st.tackles, halfMinutes: this.settings.halfMinutes }, Date.now());
+      if (out) clubBlock = this.clubUI.resultHTML(out);
+    }
     if (ctx.mode === 'online') {
       window.clearInterval(this.onlineWatch);
       this.net?.send({ t: 'result', home: r.home, away: r.away, pens: r.penalties ? r.winner : -1 });
+      if (ctx.start.mode === 'club' && this.clubOnline && m.config.humanTeam >= 0) {
+        const st = m.teams[m.config.humanTeam as 0 | 1].stats;
+        this.clubOnline.stats = { passes: st.passes, passesOk: st.passesCompleted, shots: st.shots, tackles: st.tackles };
+      }
       if (ctx.start.mode === 'rivals' && r.winner === m.config.humanTeam) addAch('rivals');
     }
     this.runner?.dispose();
@@ -1154,7 +1509,7 @@ export class App {
     this.setMenuMode(true);
     const scorers = (t: typeof h) => t.scorers.map((s) => `⚽ ${esc(s.name)} ${s.minute}'`).join('<br>') || '<span class="muted">—</span>';
     const pens = r.penalties ? `<div class="muted" style="text-align:center">Penales: ${r.penalties[0]} - ${r.penalties[1]}</div>` : '';
-    const cont = ctx.mode === 'online' ? 'Menú online' : ctx.mode === 'tournament' ? 'Volver al torneo' : ctx.mode === 'career' ? 'Volver a la carrera' : ctx.mode === 'continental' ? 'Volver a la copa' : ctx.mode === 'training' ? 'Entrenamiento' : 'Menú principal';
+    const cont = ctx.mode === 'online' ? (ctx.start.mode === 'club' ? 'Volver al club' : 'Menú online') : ctx.mode === 'tournament' ? 'Volver al torneo' : ctx.mode === 'career' ? 'Volver a la carrera' : ctx.mode === 'continental' ? 'Volver a la copa' : ctx.mode === 'club' ? 'Volver al club' : ctx.mode === 'training' ? 'Entrenamiento' : 'Menú principal';
     this.show(`
       <div class="screen-header"><div><div class="crumb">RESULTADO FINAL</div><h2>${r.winner === -1 ? 'Empate' : `Gana ${esc(m.teams[r.winner].data.name)}`}</h2></div></div>
       <div class="screen-body"><div class="grid2">
@@ -1164,9 +1519,10 @@ export class App {
           <div class="scorers"><div style="text-align:right">${scorers(h)}</div><div>${scorers(a)}</div></div>
           ${ctx.mode === 'training' ? '' : this.ratingsHTML(m)}
           ${newAch.length ? `<div class="ach-msgs"><div class="crumb">LOGROS DESBLOQUEADOS</div>${newAch.map((a) => `<div>${a.icon} <b>${esc(a.name)}</b> <span class="muted">${esc(a.desc)}</span></div>`).join('')}</div>` : ''}
+          ${clubBlock}
           ${availabilityMsgs.length ? `<div class="avail-msgs"><div class="crumb">PARTE MÉDICO Y SANCIONES</div>${availabilityMsgs.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}
         </div>
-        <div class="panel">${ctx.mode === 'online' && ctx.start.mode === 'rivals' ? '<div class="rivals-change"><div class="net-status"><span class="spinner"></span>Calculando puntos de Division Rivals…</div></div>' : ''}${this.statsHTML(m)}</div>
+        <div class="panel">${ctx.mode === 'online' && ctx.start.mode !== 'friendly' ? `<div class="rivals-change"><div class="net-status"><span class="spinner"></span>${ctx.start.mode === 'club' ? 'Esperando la confirmación del resultado…' : 'Calculando puntos de Division Rivals…'}</div></div>` : ''}${this.statsHTML(m)}</div>
       </div></div>
       <div class="screen-footer">
         ${ctx.mode === 'quick' ? '<button class="btn" data-act="rematch">Revancha</button>' : ''}
@@ -1233,7 +1589,7 @@ export class App {
     }, () => this.mainMenu());
   }
 
-  private async connectOnline() {
+  private async connectOnline(after?: () => void) {
     const net = this.net ?? new NetClient();
     this.net = net;
     this.onlineMenu('Conectando…');
@@ -1259,7 +1615,7 @@ export class App {
         this.onlineMenu('', 'Se perdió la conexión con el servidor.');
       }
     };
-    this.onlineHub();
+    if (after) after(); else this.onlineHub();
   }
 
   private onlineTeamStepper() {
@@ -1392,7 +1748,7 @@ export class App {
     this.setMenuMode(true);
     this.show(`<div class="panel modal" style="margin:auto;text-align:center"><h2>${esc(title)}</h2><p>${esc(text)}</p>
       ${rivalsBox ? '<div class="rivals-change"></div>' : ''}
-      <button class="btn primary" data-act="ok">Continuar</button></div>`, { ok: () => this.onlineHub() }, () => this.onlineHub());
+      <button class="btn primary" data-act="ok">Continuar</button></div>`, { ok: () => this.onlineBack() }, () => this.onlineBack());
     if (rivalsBox) this.showOnlineFinal();
   }
 
@@ -1449,10 +1805,13 @@ export class App {
           this.onlineNotice('Fin de la transmisión', (m as unknown as { forfeit: boolean }).forfeit ? 'Uno de los jugadores abandonó el partido.' : 'El partido terminó.');
         }
         break;
-      case 'final':
-        this.onlineFinal = m as unknown as FinalMsg;
+      case 'final': {
+        const f = m as unknown as FinalMsg;
+        this.onlineFinal = f;
+        if (f.mode === 'club') this.clubFinalHTML = this.creditClubOnline(f);
         this.showOnlineFinal();
         break;
+      }
     }
   }
 
@@ -1461,6 +1820,10 @@ export class App {
     const f = this.onlineFinal;
     const box = this.screen?.root.querySelector('.rivals-change') as HTMLElement | null;
     if (!f || !box) return;
+    if (f.mode === 'club') {
+      box.innerHTML = this.clubFinalHTML;
+      return;
+    }
     if (f.mode !== 'rivals') {
       box.innerHTML = '';
       return;
@@ -1473,20 +1836,29 @@ export class App {
     box.innerHTML = `<div class="rv-delta ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : ''}${d} puntos de Rivals</div>${this.divisionBadge(f.profile)}`;
   }
 
+  private clubFinalHTML = '';
+  /** Tras un aviso online: al club si era un partido de Soffti Club, si no al menú online. */
+  private onlineBack() {
+    const ctx = this.lastMatch?.ctx;
+    if (ctx?.mode === 'online' && ctx.start.mode === 'club') this.clubUI.hub(); else this.onlineHub();
+  }
+
   private startOnlineMatch(st: MatchStart) {
     const net = this.net;
     if (!net) return;
     this.overlay?.dispose();
     this.overlay = null;
     this.onlineFinal = null;
-    const teamOf = (p: OnlineProfile) => TEAMS.find((t) => t.id === p.team) ?? TEAMS[0];
+    this.clubFinalHTML = '';
+    if (st.mode === 'club' && this.clubOnline && st.role !== 'spectator') { this.clubOnline.role = st.role; this.clubOnline.half = st.half; }
+    const teamOf = (p: OnlineProfile) => (st.mode === 'club' ? sanitizeOnlineTeam(p.squad, p === st.home ? 'h-' : 'a-') : null) ?? TEAMS.find((t) => t.id === p.team) ?? TEAMS[0];
     const home = teamOf(st.home);
     const away = teamOf(st.away);
     const cfg: MatchConfig = {
       home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away),
       humanTeam: st.role === 'host' ? 0 : st.role === 'guest' ? 1 : -1,
       halfLengthSec: Math.max(2, Math.min(10, st.half)) * 60,
-      difficulty: 'pro', extraTime: false, penalties: false, seed: st.seed,
+      difficulty: 'pro', extraTime: false, penalties: false, seed: st.seed, var: false,
       // el mismo clima para los dos (sale de la semilla del partido)
       weather: randomWeather(((st.seed * 7919) % 1000) / 1000),
     };
@@ -1494,7 +1866,7 @@ export class App {
     const opp = st.role === 'host' ? st.away : st.home;
     const link: OnlineLink = st.role === 'spectator'
       ? { role: 'guest', spectator: true, send: () => {}, opponentName: `${st.home.name} - ${st.away.name}` }
-      : { role: st.role, send: (d) => net.relay(d), opponentName: opp.name };
+      : { role: st.role, send: (d) => net.relay(d as { k?: string }), opponentName: opp.name, direct: () => net.p2pOpen, latency: () => net.latency };
     this.playMatch(cfg, this.stadiumForCtx(ctx), ctx, link);
     // el invitado comprueba que siguen llegando datos del anfitrión
     window.clearInterval(this.onlineWatch);
@@ -1525,18 +1897,23 @@ export class App {
   // ==================================================================
 
   /** Elegir un equipo (opcionalmente solo entre los ids dados, p. ej. los de una liga). */
-  private pickTeamScreen(title: string, crumb: string, onPick: (id: string) => void, back: () => void, only?: string[]) {
+  private pickTeamScreen(title: string, crumb: string, onPick: (id: string) => void, back: () => void, only?: string[], startIdx = 0) {
     const list = only ? TEAMS.filter((t) => only.includes(t.id)) : TEAMS;
-    let idx = 0;
+    let idx = startIdx;
     const render = () => `
       <div class="screen-header"><div><div class="crumb">${crumb}</div><h2>${title}</h2></div></div>
       <div class="screen-body" style="display:flex;justify-content:center;align-items:center">
-        ${this.teamCard(list[idx], 'TU EQUIPO', 'team', `<div class="kits">${kitSVG(list[idx].home)}${kitSVG(list[idx].away)}</div>`)}
+        ${this.teamCard(list[idx], 'TU EQUIPO', 'team', `<div class="kits">${kitSVG(list[idx].home)}${kitSVG(list[idx].away)}</div>`, true)}
       </div>
       <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn primary" data-act="ok">Confirmar</button></div>`;
     const s = this.show(render(), {
       teamPrev: () => { idx = (idx + list.length - 1) % list.length; s.refresh(render()); },
       teamNext: () => { idx = (idx + 1) % list.length; s.refresh(render()); },
+      teamSearch: () => this.teamSearchScreen({
+        title, crumb, teams: list, current: list[idx].id,
+        onPick: (id) => { idx = Math.max(0, list.findIndex((t) => t.id === id)); this.pickTeamScreen(title, crumb, onPick, back, only, idx); },
+        back: () => this.pickTeamScreen(title, crumb, onPick, back, only, idx),
+      }),
       ok: () => onPick(list[idx].id),
       back,
     }, back);
@@ -1545,7 +1922,7 @@ export class App {
   /** Elegir la liga del modo carrera (con el logo de cada competencia). */
   private leaguePickScreen(onPick: (leagueId: string) => void, back: () => void) {
     const ls = LEAGUES.filter((l) => l.teamIds().length);
-    const item = (l: (typeof LEAGUES)[number]) => `<button class="menu-item" data-act="lg-${l.id}" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:10px 14px">${l.logo ? `<img src="${l.logo}" alt="" style="height:38px;width:38px;object-fit:contain;flex:none">` : '<span style="width:38px;flex:none"></span>'}<span style="font-size:15px">${esc(l.name)}<small>${esc(l.country)} · ${l.teamIds().length} equipos</small></span></button>`;
+    const item = (l: (typeof LEAGUES)[number]) => `<button class="menu-item" data-act="lg-${l.id}" style="display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:10px 14px">${l.logo ? `<img src="${l.logo}" alt="" style="height:38px;width:38px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box;flex:none">` : '<span style="width:38px;flex:none"></span>'}<span style="font-size:15px">${esc(l.name)}<small>${esc(l.country)} · ${l.teamIds().length} equipos</small></span></button>`;
     const handlers: Handlers = { back };
     for (const l of ls) handlers[`lg-${l.id}`] = () => onPick(l.id);
     this.show(`
@@ -1581,6 +1958,7 @@ export class App {
     const next = t.nextUserFixture();
     const knock = st.fixtures.filter((f) => f.knockout);
     const champion = st.champion ? getTeam(st.champion) : null;
+    if (champion) this.celebrate(`tournament:${st.seed}`, champion, 'Copa Élite', '', champion.id === st.userTeam);
     const status = champion
       ? `<div class="panel" style="text-align:center"><div class="crumb" style="color:var(--warn)">CAMPEÓN</div><div style="display:flex;justify-content:center;margin:10px">${crestSVG(champion, 110)}</div><h2>${esc(champion.name)}</h2>${champion.id === st.userTeam ? '<p>¡Has ganado la Copa Élite! 🏆</p>' : '<p class="muted">Mejor suerte la próxima vez.</p>'}</div>`
       : st.eliminated ? '<div class="panel"><b>Tu equipo quedó eliminado.</b> <span class="muted">El torneo se completó automáticamente.</span></div>' : '';
@@ -1669,6 +2047,7 @@ export class App {
       const recent = st.fixtures.filter((f) => f.played).slice(-8).reverse();
       const history = st.history.map((h) => `<div class="row"><span>Temporada ${h.season}</span><span>${h.champions.map((ch, i) => `${esc(fmt.torneos[i] ?? 'Torneo')}: ${esc(lookup(ch).short)}`).join(' · ')}${fmt.annual ? ` · Anual: ${esc(lookup(h.champion).short)}` : ''} · Tu puesto: ${h.userPosition}.º</span></div>`).join('');
       const champ = c.torneoChampion;
+      if (champ) this.celebrate(`career:${st.seed}:${st.season}:${st.torneoIdx}`, lookup(champ), `${c.torneoName} · ${c.league.name}`, `Temporada ${st.season}`, champ === st.userTeam, c.league.logo);
       body = `<div class="grid2"><div>
           <div class="panel"><h3>${zoneTitle(c.userZone)}</h3>${this.tableHTML(c.standings(), st.userTeam, lookup)}${zoneNote}</div>
           ${st.news?.length ? `<div class="panel" style="margin-top:16px"><h3>Noticias</h3>${st.news.slice(0, 6).map((n) => `<div class="muted" style="font-size:13px;margin-bottom:4px">${esc(n)}</div>`).join('')}</div>` : ''}
@@ -1684,7 +2063,7 @@ export class App {
       : st.phase === 'done' ? `<button class="btn primary" data-act="clausura">Empezar el ${esc(fmt.torneos[st.torneoIdx + 1] ?? 'siguiente torneo')}</button>`
       : next ? '<button class="btn primary" data-act="play">Jugar partido</button>' : '<button class="btn primary" data-act="simRest">Simular el resto</button>';
     this.show(`
-      <div class="screen-header"><div><div class="crumb">${esc(c.league.name.toUpperCase())} · TEMPORADA ${st.season} · ${esc(c.user.name)} · PRESUPUESTO ${(st.budget ?? 0).toFixed(1)} M${st.phase === 'regular' ? ` · ${zonePos}.º EN LA ZONA ${c.userZone}` : ''}</div><h2 style="display:flex;align-items:center;gap:12px">${c.league.logo ? `<img src="${c.league.logo}" alt="" style="height:46px;width:46px;object-fit:contain">` : ''}<span>${c.torneoName} · ${phaseName}</span></h2></div></div>
+      <div class="screen-header"><div><div class="crumb">${esc(c.league.name.toUpperCase())} · TEMPORADA ${st.season} · ${esc(c.user.name)} · PRESUPUESTO ${(st.budget ?? 0).toFixed(1)} M${st.phase === 'regular' ? ` · ${zonePos}.º EN LA ZONA ${c.userZone}` : ''}</div><h2 style="display:flex;align-items:center;gap:12px">${c.league.logo ? `<img src="${c.league.logo}" alt="" style="height:46px;width:46px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box">` : ''}<span>${c.torneoName} · ${phaseName}</span></h2></div></div>
       <div class="screen-body">
         ${this.stepper('Ver', VIEW_NAMES[view], 'view')}
         ${body}
@@ -1742,15 +2121,15 @@ export class App {
     this.continental = this.continental ?? Continental.load();
     const c = this.continental;
     if (!c) {
-      const ls = (['libertadores', 'sudamericana'] as CupId[]).map((id) => CUPS[id]);
+      const ls = (Object.keys(CUPS) as CupId[]).map((id) => CUPS[id]);
       const handlers: Handlers = { back: () => this.mainMenu() };
       for (const cup of ls) {
-        handlers[`cup-${cup.id}`] = () => this.pickTeamScreen(`Elige tu club para la ${cup.name}`, 'COPAS CONMEBOL', (id) => { this.continental = Continental.create(cup.id, id); this.continentalView = 'grupo'; this.continentalHub(); }, () => this.continentalHub(), cupEligibleTeams());
+        handlers[`cup-${cup.id}`] = () => this.pickTeamScreen(`Elige tu club para la ${cup.name}`, 'COPAS INTERNACIONALES', (id) => { this.continental = Continental.create(cup.id, id); this.continentalView = 'grupo'; this.continentalHub(); }, () => this.continentalHub(), cupEligibleTeams(cup.id));
       }
-      const logo = (id: CupId) => `<img src="${id === 'sudamericana' ? sudamericanaLogo : libertadoresLogo}" alt="" style="height:46px;width:46px;object-fit:contain;flex:none">`;
+      const logo = (id: CupId) => `<img src="${leagueLogo(id) ?? ''}" alt="" style="height:46px;width:46px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box;flex:none">`;
       this.show(`
-        <div class="screen-header"><div><div class="crumb">COPAS CONMEBOL</div><h2>Elige la copa</h2></div></div>
-        <div class="screen-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:860px;margin:0 auto">${ls.map((cup) => `<button class="menu-item" data-act="cup-${cup.id}" style="display:flex;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:12px 14px">${logo(cup.id)}<span>${esc(cup.name)}<small>32 clubes · 8 grupos · ida y vuelta · final neutral</small></span></button>`).join('')}</div></div>
+        <div class="screen-header"><div><div class="crumb">COPAS INTERNACIONALES</div><h2>Elige la copa</h2></div></div>
+        <div class="screen-body"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:860px;margin:0 auto">${ls.map((cup) => `<button class="menu-item" data-act="cup-${cup.id}" style="display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:12px 14px">${logo(cup.id)}<span>${esc(cup.name)}<small>${cup.size} clubes · ${cup.format === 'league' ? 'fase de liga' : '8 grupos'} · ida y vuelta · final neutral</small></span></button>`).join('')}</div></div>
         <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, handlers, () => this.mainMenu());
       return;
     }
@@ -1758,15 +2137,17 @@ export class App {
     const next = c.nextUserFixture();
     const lookup = (id: string) => getTeam(id);
     const knock = st.fixtures.filter((f) => f.knockout);
-    const VIEWS = ['grupo', 'grupos', 'eliminatorias'] as const;
-    const NAMES = { grupo: 'Mi grupo', grupos: 'Todos los grupos', eliminatorias: 'Eliminatorias' } as const;
-    const view = this.continentalView;
+    const isLeague = c.def.format === 'league';
+    const VIEWS = (isLeague ? ['grupo', 'eliminatorias'] : ['grupo', 'grupos', 'eliminatorias']) as ('grupo' | 'grupos' | 'eliminatorias')[];
+    const NAMES = { grupo: isLeague ? 'Tabla de la fase de liga' : 'Mi grupo', grupos: 'Todos los grupos', eliminatorias: 'Eliminatorias' } as const;
+    const view = VIEWS.includes(this.continentalView) ? this.continentalView : 'grupo';
     const champion = st.champion ? getTeam(st.champion) : null;
+    if (champion) this.celebrate(`cup:${st.cup}:${st.seed}`, champion, c.def.name, `${c.def.confed ?? ""}`, champion.id === st.userTeam, leagueLogo(st.cup));
     const status = champion
       ? `<div class="panel" style="text-align:center"><div class="crumb" style="color:var(--warn)">CAMPEÓN</div><div style="display:flex;justify-content:center;margin:10px">${crestSVG(champion, 110)}</div><h2>${esc(champion.name)}</h2>${champion.id === st.userTeam ? `<p>¡Has ganado la ${esc(c.def.name)}! 🏆</p>` : '<p class="muted">Mejor suerte la próxima vez.</p>'}</div>`
       : st.eliminated ? '<div class="panel"><b>Tu equipo quedó eliminado.</b> <span class="muted">Simula el resto para ver al campeón.</span></div>' : '';
     const groupFx = (g: number) => st.fixtures.filter((f) => !f.knockout && st.groups[g].includes(f.home));
-    const groupPanel = (g: number) => `<div class="panel" style="margin-bottom:12px"><h3>Grupo ${'ABCDEFGH'[g]}</h3>${this.tableHTML(c.standings(g), st.userTeam, lookup)}${view === 'grupo' ? `<div style="margin-top:10px">${groupFx(g).map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('')}</div>` : ''}</div>`;
+    const groupPanel = (g: number) => `<div class="panel" style="margin-bottom:12px"><h3>${isLeague ? 'Fase de liga' : `Grupo ${'ABCDEFGH'[g]}`}</h3>${this.tableHTML(c.standings(g), st.userTeam, lookup)}${isLeague ? '<div class="muted" style="font-size:12px;margin-top:6px">Los 8 primeros pasan directo a octavos; del 9.º al 24.º juegan el play-off a ida y vuelta.</div>' : ''}${view === 'grupo' ? `<div style="margin-top:10px">${(isLeague ? groupFx(g).filter((f) => f.home === st.userTeam || f.away === st.userTeam) : groupFx(g)).map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('')}</div>` : ''}</div>`;
     let body = '';
     if (view === 'grupo') body = groupPanel(c.userGroup);
     else if (view === 'grupos') body = st.groups.map((_, g) => groupPanel(g)).join('');
@@ -1774,10 +2155,10 @@ export class App {
       const rounds = [...new Set(knock.map((f) => f.round))];
       body = rounds.length
         ? rounds.map((r) => { const fx = knock.filter((f) => f.round === r); return `<div class="panel" style="margin-bottom:12px"><h3>${esc(fx[0].stage)}</h3>${fx.map((f) => this.fixtureHTML(f, st.userTeam, lookup) + (f.leg === 2 && f.played ? `<div class="muted" style="font-size:12px;text-align:center">Global: ${c.aggregate(f)[0]} - ${c.aggregate(f)[1]}</div>` : '')).join('')}${fx[0].venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(fx[0].venue).name)}</div>` : ''}</div>`; }).join('')
-        : '<div class="panel"><p class="muted">Pasan los dos primeros de cada grupo: octavos, cuartos y semifinales a ida y vuelta (define el global, con prórroga y penales). La final es a partido único en cancha neutral.</p></div>';
+        : `<div class="panel"><p class="muted">${isLeague ? 'Los 8 primeros pasan a octavos y del 9.º al 24.º juegan un play-off a ida y vuelta' : 'Pasan los dos primeros de cada grupo'}: octavos, cuartos y semifinales a ida y vuelta (define el global, con prórroga y penales). La final es a partido único en cancha neutral.</p></div>`;
     }
     this.show(`
-      <div class="screen-header"><div><div class="crumb">COPAS CONMEBOL · ${esc(getTeam(st.userTeam).name)}</div><h2 style="display:flex;align-items:center;gap:12px"><img src="${st.cup === 'sudamericana' ? sudamericanaLogo : libertadoresLogo}" alt="" style="height:46px;width:46px;object-fit:contain"><span>${esc(c.def.name)}</span></h2></div></div>
+      <div class="screen-header"><div><div class="crumb">COPAS INTERNACIONALES · ${esc(getTeam(st.userTeam).name)}</div><h2 style="display:flex;align-items:center;gap:12px"><img src="${leagueLogo(st.cup) ?? ''}" alt="" style="height:46px;width:46px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box"><span>${esc(c.def.name)}</span></h2></div></div>
       <div class="screen-body">
         ${status}
         ${next ? `<div class="panel" style="margin-bottom:16px"><div class="crumb">PRÓXIMO PARTIDO · ${esc(next.stage.toUpperCase())}</div>${this.fixtureHTML(next, st.userTeam, lookup)}${next.venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(next.venue).name)}</div>` : ''}</div>` : ''}
@@ -1912,7 +2293,7 @@ export class App {
 
   trainingScreen() {
     this.setMenuMode(true);
-    let idx = 0;
+    let idx = this.trainIdx;
     const start = (mode: 'free' | 'penalties' | 'freekicks') => {
       const home = TEAMS[idx];
       const away = TEAMS[(idx + 1) % TEAMS.length];
@@ -1924,7 +2305,7 @@ export class App {
     const render = () => `
       <div class="screen-header"><div><div class="crumb">ENTRENAMIENTO</div><h2>Campo de práctica</h2></div></div>
       <div class="screen-body"><div class="grid2">
-        ${this.teamCard(TEAMS[idx], 'EQUIPO', 'team')}
+        ${this.teamCard(TEAMS[idx], 'EQUIPO', 'team', '', true)}
         <div class="menu-list">
           <button class="menu-item" data-act="free">Práctica libre<small>Pases, conducción y tiros contra el arquero rival</small></button>
           <button class="menu-item" data-act="pens">Penales<small>Apunta, carga la potencia y engaña al arquero</small></button>
@@ -1936,6 +2317,10 @@ export class App {
     const s = this.show(render(), {
       teamPrev: () => { idx = (idx + TEAMS.length - 1) % TEAMS.length; s.refresh(render()); },
       teamNext: () => { idx = (idx + 1) % TEAMS.length; s.refresh(render()); },
+      teamSearch: () => this.teamSearchScreen({
+        title: 'Elige el equipo', crumb: 'ENTRENAMIENTO', teams: TEAMS, current: TEAMS[idx].id,
+        onPick: (id) => { this.trainIdx = TEAMS.findIndex((t) => t.id === id); this.trainingScreen(); }, back: () => this.trainingScreen(),
+      }),
       free: () => start('free'),
       pens: () => start('penalties'),
       fk: () => start('freekicks'),
@@ -1968,9 +2353,11 @@ export class App {
           ${toggle('Calidad automática (según FPS)', 'autoQuality')}
           ${this.stepper('Cámara', CL[st.cameraStyle], 'cam')}
           ${this.stepper('Zoom de cámara', st.cameraZoom.toFixed(1) + 'x', 'zoom')}
+          ${toggle('Fondo animado del menú', 'menuReel')}
           ${toggle('Radar', 'showRadar')}
           ${toggle('Indicadores y ayudas visuales', 'showIndicators')}
           ${toggle('Repeticiones de goles', 'replays')}
+          ${toggle('Árbitro falible y VAR', 'varEnabled')}
           ${toggle('Avisos en pantalla (atajada, falta, controles…)', 'popups')}
           ${this.stepper('Controles táctiles', ({ auto: 'Automático', on: 'Siempre', off: 'Desactivados' } as const)[st.touchControls], 'touch')}
         </div>
@@ -2147,3 +2534,5 @@ export class App {
 }
 
 export type { PlayerData };
+
+function hashStr(t: string): number { let h = 0; for (let i = 0; i < t.length; i++) h = (Math.imul(h, 31) + t.charCodeAt(i)) >>> 0; return h; }

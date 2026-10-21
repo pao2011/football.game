@@ -1,12 +1,14 @@
-# ⚽ Football Elite 3D — v1.0.0
+# ⚽ Soffti's Football Game — v1.0.0
 
-![Football Elite 3D](docs/art/key-art.png)
+![Soffti's Football Game](docs/art/key-art.png)
 
 <p align="center">
   <a href="https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk"><img alt="Descargar APK" src="https://img.shields.io/badge/DESCARGAR%20APK-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white"></a>
   <a href="https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D-Windows.zip"><img alt="Descargar para Windows" src="https://img.shields.io/badge/DESCARGAR-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white"></a>
   <img alt="Icono" src="docs/art/icon-1024.png" width="96">
 </p>
+
+**🌐 Jugar en el navegador (sin instalar): https://pao2011.github.io/football.game/** · sitio web: https://pao2011.github.io/football.game/sitio/
 
 **📲 [Descargar el APK para Android](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk)** — se publica automáticamente en *Releases* cada vez que se actualiza `main`. También desde el servidor online: **https://football-elite-3d-19vc.onrender.com/apk**, o con el botón *Descargar APK* del menú de la versión web.
 
@@ -233,10 +235,10 @@ El mando sigue el **esquema clásico de FIFA**: mismos botones y mismas combinac
 |---|---|
 | **Partido rápido** | Elección de equipos (8 clubes ficticios), estadio (3: día, atardecer y noche), duración de cada parte (2–10 min), dificultad (Amateur, Profesional, Clase mundial, Leyenda), bando controlado (local, visitante o espectador IA contra IA) y formación. |
 | **Copa Élite** (torneo) | 8 equipos en dos grupos de 4 (todos contra todos) con clasificación, cuadro de semifinales cruzadas y final. Las eliminatorias se deciden con prórroga y penales. Los demás partidos se simulan automáticamente y el progreso se guarda. |
-| **Carrera** | Eliges una de **11 ligas** (`src/data/leagues.ts`): **Liga Profesional** (30 equipos, zonas A y B, Apertura y Clausura, playoffs con final neutral y tabla anual), **Primera Nacional** (36, dos zonas, playoffs y final neutral), **Brasileirão** (20, ida y vuelta), **Chile** (16), **Colombia** (20, Apertura y Finalización con playoffs), **Perú** (18), **Paraguay** (12), **Uruguay** (16), **Ecuador** (16), **Bolivia** (16) y **Venezuela** (15). Cada una con sus clásicos calientes, mercado, evolución de jugadores e historial. Se guarda automáticamente. |
-| **Copas CONMEBOL** | **Libertadores** y **Sudamericana** (`src/modes/Continental.ts`): 32 clubes de las 10 ligas de primera división con cupos por país (el tuyo siempre juega), 8 grupos de 4 a ida y vuelta, octavos, cuartos y semifinales a **ida y vuelta** (define el global, con prórroga y penales) y final a partido único en cancha neutral (Centenario / Defensores del Chaco). |
+| **Carrera** | Eliges una de **21 ligas** (`src/data/leagues.ts`): Argentina (**Liga Profesional** con zonas, Apertura/Clausura, playoffs con final neutral y tabla anual; **Primera Nacional**), Brasil, Chile, Colombia, Perú, Paraguay, Uruguay, Ecuador, Bolivia y Venezuela, y Europa: **Premier League, LaLiga, Serie A, Bundesliga, Ligue 1, Liga Portugal, Eredivisie, Jupiler Pro League, Süper Lig y Scottish Premiership**. Cada una con su logo, sus clásicos calientes, mercado, evolución de jugadores e historial. Se guarda automáticamente. |
+| **Copas internacionales** | **CONMEBOL Libertadores y Sudamericana** (32 clubes, 8 grupos de 4) y **UEFA Champions League, Europa League y Conference League** (36 clubes, fase de liga de 8 partidos: los 8 primeros a octavos y del 9.º al 24.º play-off) (`src/modes/Continental.ts`), con cupos por país (el tuyo siempre juega). Octavos, cuartos y semifinales a **ida y vuelta** (define el global, con prórroga y penales) y final a partido único en cancha neutral. |
 
-**Ligas y plantillas:** los datos de cada liga están en `src/data/leagues/*.ts` (equipos, estadios, clásicos). Las plantillas de todas las ligas salvo la Liga Profesional son las reales de Transfermarkt (octubre de 2026, `src/data/leagues/tmRosters.ts`: titulares = los de más valor de mercado por puesto; el nivel de jugadores y equipos sale del valor de mercado; los dorsales no figuran en la fuente y se asignan por puesto). Los estadios (nombre y capacidad) también salen de Transfermarkt. Los escudos aportados están en `src/assets/crests/`; los clubes de los que no hay imagen del escudo se omiten (`withCrests` en `src/data/leagues/index.ts`, mientras la liga conserve al menos 8). Camisetas: las de los paquetes aportados donde había imagen; en el resto (Chile, Venezuela, parte de Uruguay, Ecuador y Bolivia) son de memoria y pueden estar desactualizadas.
+**Ligas y plantillas:** los datos de cada liga están en `src/data/leagues/*.ts` (equipos, estadios, clásicos). Las plantillas de todas las ligas salvo la Liga Profesional (Sudamérica, Primera Nacional y Europa) son las reales de Transfermarkt (octubre de 2026, `src/data/leagues/tmRosters.ts`: titulares = los de más valor de mercado por puesto; el nivel de jugadores y equipos sale del valor de mercado; los dorsales no figuran en la fuente y se asignan por puesto). Los estadios (nombre y capacidad) también salen de Transfermarkt. Los escudos aportados están en `src/assets/crests/`; los clubes de los que no hay imagen del escudo se omiten (`withCrests` en `src/data/leagues/index.ts`, mientras la liga conserve al menos 8). Camisetas: las de los paquetes aportados donde había imagen; en el resto (Chile, Venezuela, parte de Uruguay, Ecuador y Bolivia) son de memoria y pueden estar desactualizadas.
 
 **Clásicos calientes:** en cualquier modo, un clásico se juega con más roces, faltas y tarjetas, empujones constantes, peleas generales (`src/sim/Heat.ts`: el árbitro frena el tumulto y saca tarjetas), silbidos y abucheos continuos de la hinchada, y el relator los presenta como clásico.
 | **Entrenamiento** | Práctica libre (pases, conducción y tiros contra el arquero), **penales** y **tiros libres con barrera** desde posiciones aleatorias. |
@@ -428,3 +430,18 @@ El plan de mejoras futuras está en **[ROADMAP.md](ROADMAP.md)**.
 - El **instalador de Windows** y la **app de macOS** se compilan en GitHub Actions pero no se probaron en un PC real; la app de macOS no está firmada ni notarizada.
 - **Vibración del mando**: usa la API `vibrationActuator` de Chrome/Edge; Firefox y Safari no la admiten (no vibra, pero no da error).
 - **Móvil**: probado con emulación táctil en Chromium, no en un teléfono físico. El APK **no se pudo compilar en el entorno de desarrollo**: la política de red bloquea la descarga del Android SDK (dl.google.com). Se compila en GitHub Actions o con Android Studio. El rendimiento en teléfonos de gama baja no está medido; si va lento, reduce la escala de resolución.
+
+
+## Identidad gráfica y tipografías
+
+Marcador y placas siguen el estilo de las transmisiones del fútbol argentino (marcador horizontal compacto: competición · periodo y reloj · local · goles · visitante; colores propios de cada liga o copa en `src/ui/competition.ts`). Es un diseño propio inspirado en esas gráficas: **no es oficial ni implica afiliación con la AFA ni con ninguna liga**.
+
+Tipografías (todas SIL Open Font License 1.1, incluidas en `src/assets/fonts` con su licencia y declaradas en `src/ui/fonts.css`): **Barlow Condensed** (títulos, equipos, jugadores y placas), **Montserrat** (números: marcadores, reloj, tablas y estadísticas, con cifras tabulares) y **Barlow** (texto secundario). Las variables `--display`, `--num`, `--body` y la paleta (`--celeste`, `--navy`…) están en `src/ui/styles.css`.
+
+## Soffti Club
+
+Modo coleccionable con cartas, sobres, mercado local simulado, plantillas con química y competiciones contra la IA. Ver `docs/CLUB.md`.
+
+## Árbitro falible y VAR
+
+El árbitro puede equivocarse al sancionar faltas (no verlas, no dar un penal, pitar un penal fuera del área, mostrar una tarjeta de más o de menos). La probabilidad sube con la tensión del partido (calor de los clásicos, resultado apretado, tarjetas) y con el tiempo jugado (`refereeErrorChance` en `src/sim/Var.ts`). El VAR revisa penales, rojas directas y goles tras falta: cuando el juego se detiene o el balón sale, el árbitro recibe el aviso, hace la señal de la pantalla, va al monitor junto a la banda, se ve el vídeo en directo a cámara lenta (se puede saltar) y comunica la decisión final. Se desactiva en Configuración → "Árbitro falible y VAR" (y no se usa en online ni en entrenamiento).

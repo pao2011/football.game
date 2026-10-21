@@ -1,4 +1,4 @@
-# 🗺️ Plan de mejoras — Football Elite 3D
+# 🗺️ Plan de mejoras — Soffti's Football Game
 
 Plan de lo que falta o se puede mejorar, ordenado por fases. Cada punto dice **qué** hacer, **por qué** importa y **dónde** está el código que hay que tocar, para poder tomarlo como tarea suelta. Esfuerzo aproximado: **S** (horas), **M** (1–3 días), **L** (una semana o más).
 

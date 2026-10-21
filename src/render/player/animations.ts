@@ -732,8 +732,12 @@ function throwin(c: Ctx, p: Pose) {
 function gkDive(c: Ctx, p: Pose) {
   // versión hacia la DERECHA (-X); la izquierda es el espejo
   const n = c.n;
-  const rz = tr(n, [0, 0, 0.12, -4, 0.3, 38, 0.45, 72, 0.6, 86, 1, 88]);
-  const hy = tr(n, [0, 0.8, 0.12, 0.72, 0.28, 0.93, 0.4, 0.99, 0.55, 0.7, 0.68, 0.25, 0.8, 0.205, 1, 0.2]);
+  // variantes: 0 normal, 1 rasa (a ras de suelo), 2 alta (vuelo largo con las yemas de los dedos)
+  const hi = c.variant === 2, lo = c.variant === 1;
+  const rz = hi ? tr(n, [0, 0, 0.12, -4, 0.3, 30, 0.5, 58, 0.62, 66, 0.75, 84, 1, 88]) : lo ? tr(n, [0, 0, 0.1, -2, 0.25, 48, 0.4, 82, 0.55, 90, 1, 90]) : tr(n, [0, 0, 0.12, -4, 0.3, 38, 0.45, 72, 0.6, 86, 1, 88]);
+  const hy = hi ? tr(n, [0, 0.8, 0.12, 0.74, 0.28, 1.05, 0.45, 1.2, 0.62, 0.95, 0.74, 0.3, 0.85, 0.205, 1, 0.2])
+    : lo ? tr(n, [0, 0.8, 0.1, 0.66, 0.25, 0.72, 0.4, 0.5, 0.55, 0.22, 0.7, 0.2, 1, 0.2])
+    : tr(n, [0, 0.8, 0.12, 0.72, 0.28, 0.93, 0.4, 0.99, 0.55, 0.7, 0.68, 0.25, 0.8, 0.205, 1, 0.2]);
   const hx = tr(n, [0, 0, 0.12, 0.04, 0.4, -0.15, 0.7, -0.22, 1, -0.22]);
   p.hips.set(hx, hy, 0);
   p.rot(BONE.hips, tr(n, [0, 15, 0.3, 5, 1, 0]), 0, rz);
@@ -741,7 +745,7 @@ function gkDive(c: Ctx, p: Pose) {
   p.rot(BONE.chest, tr(n, [0, 5, 1, 0]), 0, tr(n, [0, 0, 0.4, 6, 1, 0]));
   p.rot(BONE.neck, tr(n, [0, -12, 0.4, 0, 1, 0]), 0, tr(n, [0, 0, 0.6, -14, 1, -18]));
   p.rot(BONE.head, -6, 0, tr(n, [0, 0, 0.6, -10, 1, -10]));
-  const ax = tr(n, [0, -38, 0.15, -75, 0.35, -165, 0.72, -172, 0.86, -125, 1, -85]);
+  const ax = hi ? tr(n, [0, -38, 0.15, -90, 0.35, -176, 0.8, -178, 0.92, -130, 1, -85]) : lo ? tr(n, [0, -38, 0.15, -70, 0.3, -150, 0.7, -150, 0.86, -115, 1, -85]) : tr(n, [0, -38, 0.15, -75, 0.35, -165, 0.72, -172, 0.86, -125, 1, -85]);
   const el = tr(n, [0, -45, 0.3, -12, 0.72, -12, 0.9, -60, 1, -95]);
   p.rot(BONE.uarmL, ax, 0, tr(n, [0, 32, 0.35, 8, 1, -8]));
   p.rot(BONE.uarmR, ax, 0, tr(n, [0, -32, 0.35, -10, 1, 6]));
@@ -1162,6 +1166,37 @@ function referee(c: Ctx, p: Pose) {
     const e = sstep(0, 0.15, n) * (1 - sstep(0.8, 1, n));
     p.rot(BONE.uarmR, -40 * e, 25 * e, -30 * e);
     p.rot(BONE.farmR, -125 * e);
+  } else if (c.state === 'ref_ear' || c.state === 'ref_look') {
+    // VAR: mano derecha al auricular; al mirar el monitor además baja la cabeza y se inclina hacia la pantalla
+    const e = sstep(0, 0.25, Math.min(1, c.t / 0.5));
+    p.rot(BONE.uarmR, -18 * e, 8 * e, -72 * e);
+    p.rot(BONE.farmR, -122 * e);
+    p.rot(BONE.uarmL, 0, 0, 10 * e);
+    p.rot(BONE.farmL, -25 * e);
+    if (c.state === 'ref_look') {
+      p.addRot(BONE.chest, 7 * e, 0, 0);
+      p.addRot(BONE.head, 24 * e + Math.sin(c.t * 1.6) * 2, Math.sin(c.t * 0.9) * 5, 0);
+    } else {
+      p.addRot(BONE.head, 4 * e, 0, -5 * e);
+    }
+  } else if (c.state === 'ref_tv') {
+    // las dos manos dibujan una pantalla en el aire (señal de revisión)
+    const e = sstep(0, 0.12, Math.min(1, c.t / 0.4));
+    const s = 0.5 + 0.5 * Math.sin(c.t * 4.2);
+    p.rot(BONE.uarmR, -62 * e, (-8 - 30 * s) * e, -14 * e);
+    p.rot(BONE.uarmL, -62 * e, (8 + 30 * s) * e, 14 * e);
+    p.rot(BONE.farmR, -78 * e);
+    p.rot(BONE.farmL, -78 * e);
+    p.addRot(BONE.chest, 3 * e, 0, 0);
+  } else if (c.state === 'ref_cancel') {
+    // cruza los brazos y los abre de golpe: decisión anulada
+    const e = sstep(0, 0.1, Math.min(1, c.t / 0.3));
+    const sw = sstep(0.25, 0.5, n);
+    p.rot(BONE.uarmR, -58 * e, 42 * e * (1 - sw), (-14 - 62 * sw) * e);
+    p.rot(BONE.uarmL, -58 * e, -42 * e * (1 - sw), (14 + 62 * sw) * e);
+    p.rot(BONE.farmR, -22 * e);
+    p.rot(BONE.farmL, -22 * e);
+    p.addRot(BONE.chest, -3 * sw * e, 0, 0);
   }
 }
 
@@ -1296,6 +1331,10 @@ function evalState(c: Ctx, p: Pose) {
     case 'ref_warn':
     case 'ref_point':
     case 'ref_whistle':
+    case 'ref_ear':
+    case 'ref_tv':
+    case 'ref_look':
+    case 'ref_cancel':
       return referee(c, p);
     default:
       return idle(c, p);

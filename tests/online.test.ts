@@ -70,6 +70,26 @@ describe('Servidor online (sala de espera)', () => {
     expect(a.last('final').profile.points).toBe(30);
   });
 
+  it('Soffti Club online: empareja con la plantilla de cada club y no toca los puntos de Rivals', () => {
+    const lobby = new Lobby(memStore());
+    const a = hello(lobby, 'Ana');
+    const b = hello(lobby, 'Beto');
+    const squad = (name: string) => ({ id: `club-${name}`, name, players: Array.from({ length: 14 }, (_, i) => ({ id: `p${i}`, name: `J${i}` })) });
+    a.msg({ t: 'queue', mode: 'club', team: 'club-a', squad: { players: [] } });
+    expect(a.last('error').text).toMatch(/no válida/);
+    a.msg({ t: 'queue', mode: 'club', team: 'club-a', squad: squad('A') });
+    b.msg({ t: 'queue', mode: 'club', team: 'club-b', squad: squad('B') });
+    const ma = a.last('match');
+    expect(ma.mode).toBe('club');
+    expect(ma.home.squad.name).toBe('A');
+    expect(b.last('match').away.squad.name).toBe('B');
+    a.msg({ t: 'result', home: 1, away: 0, pens: -1 });
+    b.msg({ t: 'result', home: 1, away: 0, pens: -1 });
+    expect(a.last('final').outcome.home).toBe(1);
+    expect(a.last('final').change).toBeNull();
+    expect(a.last('final').profile.points).toBe(0);
+  });
+
   it('resultados distintos no cuentan; abandonar es derrota', () => {
     const lobby = new Lobby(memStore());
     const a = hello(lobby, 'Ana');

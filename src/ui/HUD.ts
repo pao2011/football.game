@@ -9,6 +9,7 @@ import type { Bindings } from '../input/Input';
 import { keyLabel } from '../input/Input';
 import type { StadiumData } from '../data/types';
 import { crestSVG } from './Crest';
+import { competitionStyle } from './competition';
 
 
 /** HUD del partido en DOM: marcador, reloj, radar, jugador controlado, potencia y avisos. */
@@ -18,6 +19,7 @@ export class HUD {
   private sbAway: HTMLElement;
   private sbScore: HTMLElement;
   private sbClock: HTMLElement;
+  private sbPeriod: HTMLElement;
   private sbAdded: HTMLElement;
   private banner: HTMLElement;
   private mentality: HTMLElement;
@@ -30,6 +32,12 @@ export class HUD {
   private replayTag: HTMLElement;
   private shootout: HTMLElement;
   private fps: HTMLElement;
+  private netEl: HTMLElement;
+  private varScreen: HTMLElement;
+  private varBar: HTMLElement;
+  /** Online: texto con la latencia y el tipo de conexión (se pone desde el MatchRunner). */
+  netInfo: (() => { text: string; level: 0 | 1 | 2 }) | null = null;
+  private netAcc = 0;
   private bannerUntil = 0;
   private toastUntil = 0;
   private lastText = new Map<HTMLElement, string>();
@@ -52,13 +60,16 @@ export class HUD {
     const r = document.createElement('div');
     r.className = 'hud';
     const [h, a] = match.teams;
+    const comp = competitionStyle(match.config);
+    for (const [k, v] of Object.entries(comp.vars)) r.style.setProperty(k, v);
     r.innerHTML = `
       <div class="scoreboard">
-        <div class="sb-team"><span class="chip" style="background:${h.kit.shirt}"></span><span class="h">${h.data.short}</span></div>
-        <div class="sb-score">0 - 0</div>
-        <div class="sb-team"><span class="a">${a.data.short}</span><span class="chip" style="background:${a.kit.shirt}"></span></div>
-        <div class="sb-clock">00:00</div>${match.weather !== 'clear' ? `<div class="sb-weather" title="${WEATHER_NAMES[match.weather]}">${WEATHER_ICONS[match.weather]}</div>` : ''}
-        <div class="sb-added hidden">+1</div>
+        <div class="sb-comp">${esc(comp.label)}</div>
+        <div class="sb-clock"><span class="sb-period">1T</span><span class="sb-time num">00:00</span></div>
+        <div class="sb-team sb-h"><span class="sb-crest">${crestSVG(h.data, 28)}</span><span class="h">${esc(h.data.short)}</span></div>
+        <div class="sb-mid"><i class="sb-tab" style="background:${h.kit.shirt}"></i><span class="sb-score num">0 - 0</span></div>
+        <div class="sb-team sb-a"><span class="a">${esc(a.data.short)}</span><span class="sb-crest">${crestSVG(a.data, 28)}</span></div>${match.weather !== 'clear' ? `<div class="sb-weather" title="${WEATHER_NAMES[match.weather]}">${WEATHER_ICONS[match.weather]}</div>` : ''}
+        <div class="sb-added num hidden">+1</div>
       </div>
       <div class="mentality hidden"></div>
       <div class="adv-badge hidden">VENTAJA ▶</div>
@@ -70,7 +81,10 @@ export class HUD {
       <div class="hint hidden"></div>
       <div class="replay-tag hidden">REPETICIÓN</div>
       <div class="shootout hidden"></div>
-      <div class="fps hidden"></div>`;
+      <div class="fps hidden"></div>
+      <div class="net-info hidden"></div>
+      <div class="var-screen hidden"></div>
+      <div class="var-bar hidden"></div>`;
     parent.appendChild(r);
     this.root = r;
     this.advBadge = r.querySelector('.adv-badge') as HTMLElement;
@@ -78,7 +92,8 @@ export class HUD {
     this.sbHome = q('.sb-team .h');
     this.sbAway = q('.sb-team .a');
     this.sbScore = q('.sb-score');
-    this.sbClock = q('.sb-clock');
+    this.sbClock = q('.sb-time');
+    this.sbPeriod = q('.sb-period');
     this.sbAdded = q('.sb-added');
     this.banner = q('.banner');
     this.mentality = q('.mentality');
@@ -91,8 +106,44 @@ export class HUD {
     this.replayTag = q('.replay-tag');
     this.shootout = q('.shootout');
     this.fps = q('.fps');
+    this.netEl = q('.net-info');
+    this.varScreen = q('.var-screen');
+    this.varBar = q('.var-bar');
+    this.varScreen.addEventListener('pointerdown', () => this.match.skipVar());
     void this.sbHome;
     void this.sbAway;
+  }
+
+  /** Gráficos del VAR: aviso, pantalla del vídeo en directo y decisión final. */
+  private updateVar() {
+    const v = this.match.varReview;
+    const on = this.match.phase === 'var' && !!v;
+    this.show(this.varBar, on && v!.stage !== 'footage');
+    this.show(this.varScreen, on && v!.stage === 'footage');
+    if (!on || !v) return;
+    const inc = v.incident;
+    if (v.stage === 'footage') {
+      const secs = Math.max(0, Math.ceil(Math.min(9, v.footageLen) - v.t));
+      this.setText(this.varScreen, `
+        <div class="vs-frame"></div><div class="vs-scan"></div>
+        <div class="vs-top"><span class="vs-logo">VAR</span><span class="vs-live"><i></i>EN VIVO</span><span class="vs-slow">CÁMARA LENTA</span></div>
+        <div class="vs-bottom"><b>${esc(inc.label)}</b><span>${esc(inc.detail)}</span></div>
+        <div class="vs-skip">${secs}s · pulsa pase o toca para saltar</div>`, true);
+      return;
+    }
+    const msg: Record<string, [string, string]> = {
+      call: [inc.label, 'El VAR llama al árbitro'],
+      tv: [inc.label, 'Revisión en curso'],
+      walk: ['REVISIÓN EN CURSO', 'El árbitro se dirige al monitor'],
+      review: ['REVISIÓN EN CURSO', 'El árbitro prepara el vídeo'],
+      back: ['REVISIÓN EN CURSO', 'El árbitro termina de revisar la jugada'],
+    };
+    if (v.stage === 'verdict') {
+      this.setText(this.varBar, `<div class="vb-final ${inc.overturn ? 'chg' : 'ok'}"><span class="vb-logo">VAR</span><div><small>DECISIÓN FINAL</small><b>${esc(inc.verdict)}</b></div></div>`, true);
+    } else {
+      const [t, s] = msg[v.stage] ?? ['VAR', ''];
+      this.setText(this.varBar, `<div class="vb-wait"><span class="vb-logo">VAR</span><div><b>${esc(t)}</b><small>${esc(s)}</small></div></div>`, true);
+    }
   }
 
   private setText(el: HTMLElement, text: string, html = false) {
@@ -189,6 +240,9 @@ export class HUD {
       case 'whistle':
         this.advUntil = -1;
         break;
+      case 'var':
+        if (e.kind === 'start') this.showToast(`📺 VAR: ${e.text ?? ''}`, '#74acdf', 2.4);
+        break;
       case 'injury':
         this.showToast(`🚑 Lesionado: ${e.text ?? ''}`, '#ff6b76');
         break;
@@ -275,6 +329,7 @@ export class HUD {
     const [h, a] = m.teams;
     this.setText(this.sbScore, `${h.stats.goals} - ${a.stats.goals}`);
     this.setText(this.sbClock, m.config.training ? 'ENTRENO' : m.clockText.split(' ')[0]);
+    this.setText(this.sbPeriod, m.config.training ? '' : m.phase === 'shootout' ? 'PEN' : ['1T', '2T', '1TE', '2TE'][m.half - 1] ?? '');
     const added = m.announcedAdded > 0 && m.matchSeconds >= m.halfEndSeconds;
     this.show(this.sbAdded, added);
     if (added) this.setText(this.sbAdded, `+${m.announcedAdded}`);
@@ -288,7 +343,7 @@ export class HUD {
     const c = human?.controlled;
     this.show(this.ptag, !!c && m.phase !== 'replay');
     if (c) {
-      this.setText(this.ptag.querySelector('.nm') as HTMLElement, `${c.data.number} · ${c.data.name}`);
+      this.setText(this.ptag.querySelector('.nm') as HTMLElement, `<span class="no">${c.data.number}</span> ${esc(c.data.name)}`, true);
       this.setText(this.ptag.querySelector('.meta') as HTMLElement, `${c.slot.role} · VEL ${c.data.attrs.speed} · PAS ${c.data.attrs.passing} · TIR ${c.data.attrs.shooting}`);
       (this.ptag.querySelector('.stamina > div') as HTMLElement).style.width = `${Math.round(c.stamina * 100)}%`;
     }
@@ -319,6 +374,17 @@ export class HUD {
       this.fpsAcc = 0;
     }
     this.show(this.fps, this.showFps);
+    this.updateVar();
+    if (this.netInfo) {
+      this.netAcc += dt;
+      if (this.netAcc > 1 || !this.netEl.textContent) {
+        this.netAcc = 0;
+        const n = this.netInfo();
+        this.setText(this.netEl, n.text);
+        this.netEl.dataset.level = String(n.level);
+      }
+      this.show(this.netEl, true);
+    }
   }
 
   private k(action: keyof Bindings) {

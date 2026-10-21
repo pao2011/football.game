@@ -37,6 +37,10 @@ export type AnimState =
   | 'ref_warn' // árbitro: aviso verbal (dedo índice)
   | 'ref_point' // árbitro: señala la dirección del tiro libre
   | 'ref_whistle' // árbitro: silba
+  | 'ref_ear' // árbitro: se lleva la mano al auricular (escucha al VAR)
+  | 'ref_tv' // árbitro: dibuja la pantalla con las manos (revisión VAR)
+  | 'ref_look' // árbitro: mira el monitor del VAR con la mano en el oído
+  | 'ref_cancel' // árbitro: cruza y abre los brazos (decisión anulada)
   | 'shove'; // empujón / roce con un rival (clásicos y peleas)
 
 export interface AnimInfo {
@@ -64,6 +68,7 @@ export type MatchEventType =
   | 'goal'
   | 'save'
   | 'foul'
+  | 'var' // revisión del VAR (kind: 'start' | 'verdict', text: rótulo o decisión)
   | 'advantage' // el árbitro da la ley de la ventaja (no para el juego)
   | 'handball' // mano (text: nombre del jugador)
   | 'injury' // lesión (text: nombre; power: partidos que se perderá)

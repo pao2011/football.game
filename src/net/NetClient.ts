@@ -1,5 +1,6 @@
 import { loadJSON, saveJSON } from '../save/Storage';
 import type { DivisionInfo } from '../../server/divisions.mjs';
+import { PeerLink, type SignalMsg } from './PeerLink';
 
 // Conexión con el servidor online (WebSocket). Gratis: el servidor de `server/` se puede abrir en tu PC
 // (`npm run server`, para jugar en la red local) o publicar con un clic en un plan gratuito (render.yaml).
@@ -15,12 +16,14 @@ export interface OnlineProfile {
   draws: number;
   losses: number;
   division: DivisionInfo;
+  /** Plantilla del club (solo en partidos de Soffti Club). */
+  squad?: unknown;
 }
 
 export interface MatchStart {
   t: 'match';
   id: string;
-  mode: 'friendly' | 'rivals';
+  mode: 'friendly' | 'rivals' | 'club';
   role: 'host' | 'guest' | 'spectator';
   seed: number;
   half: number;
@@ -30,7 +33,7 @@ export interface MatchStart {
 
 export interface FinalMsg {
   t: 'final';
-  mode: 'friendly' | 'rivals';
+  mode: 'friendly' | 'rivals' | 'club';
   outcome: { home: number; away: number; pens: number; forfeit: number } | null;
   change: { before: number; after: number; delta: number } | null;
   profile: OnlineProfile;
@@ -88,6 +91,9 @@ export class NetClient {
   /** Latencia (ms) medida con ping. */
   rtt = 0;
   private pingTimer = 0;
+  /** Enlace directo con el rival (WebRTC) durante un partido; si falla, todo va por el servidor. */
+  peer: PeerLink | null = null;
+  private specTick = 0;
   onClose: (() => void) | null = null;
 
   get connected() {
@@ -188,6 +194,13 @@ export class NetClient {
             saveJSON('online-profile', msg.profile);
           }
         }
+        // señalización del enlace directo: no llega a la aplicación
+        if (msg.t === 'relay' && msg.d && msg.d.k === 'rtc') {
+          void this.peer?.handleSignal(msg.d as SignalMsg);
+          return;
+        }
+        if (msg.t === 'match') this.startPeer(msg as MatchStart);
+        else if (msg.t === 'final' || msg.t === 'opponentLeft') this.closePeer();
         for (const h of [...this.handlers]) h(msg);
       };
     });
@@ -199,15 +212,44 @@ export class NetClient {
   }
 
   send(msg: object) {
+    if ((msg as { t?: string }).t === 'leave') this.closePeer();
     if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
   }
 
-  /** Mensaje para el rival (reenviado por el servidor). */
-  relay(d: object) {
+  /** Mensaje para el rival: por el enlace directo si está abierto; si no, reenviado por el servidor. */
+  relay(d: { k?: string; [key: string]: unknown }) {
+    if (this.peer?.send(d)) {
+      // los espectadores solo reciben del servidor: se les manda una de cada 5 instantáneas
+      if (d.k === 's' && this.peer.role === 'host' && ++this.specTick % 5 === 0) this.send({ t: 'relay', d, to: 'spec' });
+      return;
+    }
     this.send({ t: 'relay', d });
   }
 
+  get p2pOpen() {
+    return !!this.peer?.open;
+  }
+
+  /** Latencia (ms) hasta el rival: directa si hay enlace, si no la del servidor. */
+  get latency() {
+    return this.peer?.open && this.peer.rtt ? this.peer.rtt : this.rtt;
+  }
+
+  private startPeer(m: MatchStart) {
+    this.closePeer();
+    if (m.role === 'spectator' || !PeerLink.supported()) return;
+    const peer = new PeerLink(m.role, (s) => this.send({ t: 'relay', d: s }), (d) => { for (const h of [...this.handlers]) h({ t: 'relay', d }); });
+    this.peer = peer;
+    peer.start();
+  }
+
+  private closePeer() {
+    this.peer?.close();
+    this.peer = null;
+  }
+
   close() {
+    this.closePeer();
     window.clearInterval(this.pingTimer);
     const ws = this.ws;
     this.ws = null;

@@ -1,8 +1,8 @@
 {
   "name": "football-elite-3d",
-  "productName": "Football Elite 3D",
+  "productName": "Soffti's Football Game",
   "version": "1.0.0",
-  "description": "Football Elite 3D - juego de fútbol 3D 11 contra 11",
+  "description": "Soffti's Football Game - juego de fútbol 3D 11 contra 11",
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",
@@ -22,6 +22,7 @@
     "art": "npm run build && node scripts/make-art.mjs all",
     "server": "node server/index.mjs",
     "test:e2e:online": "node scripts/e2e-online.mjs",
+    "test:e2e:account": "node scripts/e2e-account.mjs",
     "test:e2e:file": "node scripts/e2e-file.mjs index.html",
     "test:audio": "node scripts/e2e-audio.mjs",
     "prepare": "node scripts/hooks.mjs"

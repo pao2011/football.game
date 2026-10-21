@@ -10,6 +10,10 @@ const BASE_STADIUMS: StadiumData[] = [
   { id: 'monumental', name: 'Gran Monumental', capacity: 95000, timeOfDay: 'sunset', standColor: '#2b3550', roofColor: '#dfe4ec', grassHue: 0.29 },
   // Estadios de los clubes de la Liga Profesional (capacidad aproximada). look: techo, bandeja alta, butacas,
   // pista y palcos según la cancha real (aproximado con lo que permite el generador de estadios)
+  // sedes neutrales de las finales de las copas de la UEFA (2026)
+  { id: 'puskas-arena', name: 'Puskás Aréna', capacity: 67215, timeOfDay: 'night', standColor: '#2a3a5a', roofColor: '#cfd6de', grassHue: 0.28, look: { roof: 'ring', upper: 'both', seats: ['#2a5aa8', '#ffffff'] } },
+  { id: 'besiktas-park', name: 'Beşiktaş Park', capacity: 42590, timeOfDay: 'night', standColor: '#1a1a1a', roofColor: '#cfd6de', grassHue: 0.28, look: { roof: 'ring', upper: 'both', seats: ['#111111', '#ffffff'] } },
+  { id: 'leipzig-arena', name: 'Red Bull Arena Leipzig', capacity: 47069, timeOfDay: 'night', standColor: '#8a1a24', roofColor: '#cfd6de', grassHue: 0.28, look: { roof: 'ring', upper: 'both', seats: ['#d71920', '#ffffff'] } },
   // sedes neutrales de las finales de las copas de la CONMEBOL
   { id: 'centenario', name: 'Estadio Centenario', capacity: 60235, timeOfDay: 'night', standColor: '#3a2a2a', roofColor: '#cfd6de', grassHue: 0.28, look: { roof: 'none', upper: 'both', seats: ['#6cb4e4', '#ffffff'] } },
   { id: 'defensores-chaco', name: 'Defensores del Chaco', capacity: 42354, timeOfDay: 'night', standColor: '#2a3a5a', roofColor: '#cfd6de', grassHue: 0.28, look: { roof: 'sides', upper: 'both', seats: ['#c8102e', '#ffffff', '#0b2d6b'] } },

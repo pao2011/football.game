@@ -1,0 +1,25 @@
+/* Pulido general de la interfaz: accesibilidad (foco visible, objetivos táctiles, movimiento reducido) y detalles de acabado. */
+:focus-visible { outline: 2px solid var(--celeste-2); outline-offset: 2px; }
+.btn:focus-visible, .mm-icon:focus-visible, .mm-card:focus-visible, .menu-item:focus-visible { outline: 2px solid #fff; outline-offset: 3px; box-shadow: 0 0 0 5px rgba(116, 172, 223, 0.45); }
+.text-in:focus-visible { outline: none; }
+::selection { background: rgba(116, 172, 223, 0.45); color: #fff; }
+* { scrollbar-width: thin; scrollbar-color: rgba(116, 172, 223, 0.35) transparent; }
+
+/* paneles con borde de luz superior y sombra más limpia */
+.panel { border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28), 0 1px 0 rgba(255, 255, 255, 0.06) inset; }
+.sub-msg, .net-status { border-radius: 8px; }
+.sub-msg { padding: 10px 14px; font-weight: 500; }
+
+/* objetivos táctiles de al menos 44 px */
+@media (pointer: coarse) { .btn, .text-in, select { min-height: 44px; } }
+
+/* pantalla de cuenta */
+.acc-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.acc-tabs .btn { flex: 1; }
+.text-in[type="password"], .text-in[type="email"] { letter-spacing: 0; }
+
+/* quien prefiere menos movimiento: sin entradas animadas ni desplazamientos */
+@media (prefers-reduced-motion: reduce) {
+  .screen, .screen.enter .menu-item, .screen.enter .screen-header, .btn, .menu-item { animation: none !important; transition-duration: 0.01ms !important; }
+  .btn:hover, .btn.focus, .menu-item:hover, .menu-item.focus { transform: none; }
+}
