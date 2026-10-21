@@ -233,3 +233,14 @@
 .cp-front { visibility: hidden; }
 .cp-flipper.on .cp-front { visibility: visible; transition: visibility 0s .3s; }
 @media (prefers-reduced-motion: reduce) { .cp-flipper.on .cp-front { transition: none; } }
+.cp-d-potm { background: #19e6a2; } .cp-d-totgs { background: #5dff9a; box-shadow: 0 0 0 2px #0a5a2e inset; } .cp-d-halloween { background: #ff6a00; box-shadow: 0 0 6px #7a2cff; } .cp-d-navidad { background: #ff3d4e; box-shadow: 0 0 0 2px #1fae5a inset; } .cp-d-carnaval { background: linear-gradient(135deg, #ff3dc8, #2fe6ff); }
+.cp-r-potm { --rc: #19e6a2; } .cp-r-totgs { --rc: #5dff9a; } .cp-r-halloween { --rc: #ff7a1a; } .cp-r-navidad { --rc: #ff5a68; } .cp-r-carnaval { --rc: #ff3dc8; }
+.cp-r-potm .cp-glow { background: radial-gradient(circle, rgba(25,230,162,.65), transparent 66%); }
+.cp-r-totgs .cp-glow { background: radial-gradient(circle, rgba(93,255,154,.7), rgba(255,255,255,.25) 45%, transparent 68%); }
+.cp-r-halloween .cp-glow { background: radial-gradient(circle, rgba(255,106,0,.8), rgba(122,44,255,.35) 45%, transparent 70%); }
+.cp-r-navidad .cp-glow { background: radial-gradient(circle, rgba(255,61,78,.75), rgba(255,255,255,.3) 45%, transparent 70%); }
+.cp-r-carnaval .cp-glow { background: radial-gradient(circle, rgba(255,61,200,.75), rgba(47,230,255,.35) 45%, transparent 70%); }
+.cp-cardstage.revealed:is(.cp-r-potm, .cp-r-totgs, .cp-r-halloween, .cp-r-navidad, .cp-r-carnaval) .cp-beams { opacity: 1; }
+:is(.cp-r-totgs, .cp-r-halloween, .cp-r-navidad, .cp-r-carnaval).revealed .cp-glow { animation: cpGlow 1.6s ease-in-out infinite; }
+:is(.cp-r-potm, .cp-r-totgs, .cp-r-halloween, .cp-r-navidad, .cp-r-carnaval) .cp-back-in { filter: drop-shadow(0 0 16px var(--rc)); animation: cpAura 1s ease-in-out infinite; }
+.cp-ch-potm { background: rgba(25,230,162,.22); color: #b5ffe6; } .cp-ch-totgs { background: rgba(93,255,154,.22); color: #d8ffe6; } .cp-ch-halloween { background: rgba(255,106,0,.25); color: #ffc088; } .cp-ch-navidad { background: rgba(255,61,78,.25); color: #ffd0d4; } .cp-ch-carnaval { background: rgba(255,61,200,.25); color: #ffd0f0; }

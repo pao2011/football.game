@@ -24,7 +24,7 @@ export interface PackDef {
   minOvr?: number;
 }
 
-export const RARE: Rarity[] = ['rising', 'flash', 'maestro', 'titan', 'motm', 'totw', 'special', 'hero', 'idol', 'totm', 'event', 'tots', 'toty', 'legend'];
+export const RARE: Rarity[] = ['rising', 'flash', 'maestro', 'titan', 'motm', 'totw', 'potm', 'special', 'hero', 'idol', 'totm', 'totgs', 'halloween', 'navidad', 'carnaval', 'event', 'tots', 'toty', 'legend'];
 
 export const PACKS: PackDef[] = [
   { id: 'basic', name: 'Sobre básico', blurb: 'Jugadores de bronce y plata para empezar a armar el club.', price: 2000, cards: 5, odds: { bronze: 62, silver: 35, gold: 3 }, buyable: true, color: '#b87333' },
@@ -34,7 +34,7 @@ export const PACKS: PackDef[] = [
   { id: 'mega', name: 'Mega sobre', blurb: 'Doce cartas: para llenar la colección y los desafíos.', price: 24000, cards: 12, odds: { silver: 62, gold: 34, rising: 3, special: 0.8, event: 0.1, legend: 0.1 }, guarantee: ['gold', 'rising', 'special', 'event', 'legend'], pityAfter: 4, buyable: true, color: '#ff5d8f' },
   { id: 'pick82', name: 'Sobre 82+', blurb: 'Una carta de 82 o más de valoración. Recompensa de misiones y del pase.', price: 0, cards: 1, odds: { gold: 66, special: 12, hero: 8, idol: 6, titan: 5, event: 2, legend: 1 }, buyable: false, color: '#46e3b7', minOvr: 82 },
   { id: 'legend', name: 'Sobre de leyenda', blurb: 'Una leyenda asegurada. Solo en el pase premium y en misiones.', price: 0, cards: 1, odds: { legend: 100 }, buyable: false, color: '#fff1b8' },
-  { id: 'stars', name: 'Sobre de destacados', blurb: 'Jugador del partido, Equipo de la semana, del mes, de la temporada y del año (los vigentes).', price: 30000, cards: 3, odds: { gold: 64, motm: 16, totw: 12, totm: 5, tots: 2.4, toty: 0.6 }, guarantee: ['motm', 'totw', 'totm', 'tots', 'toty'], buyable: true, color: '#ff3d6e' },
+  { id: 'stars', name: 'Sobre de destacados', blurb: 'Jugador del partido y del mes, equipos de la semana, la fase de grupos, el mes, la temporada y el año, y las promociones de calendario (los vigentes).', price: 30000, cards: 3, odds: { gold: 52, motm: 14, totw: 10, potm: 5, totgs: 4, totm: 4, halloween: 3, navidad: 3, carnaval: 3, tots: 2, toty: 0.5 }, guarantee: ['motm', 'totw', 'potm', 'totgs', 'totm', 'halloween', 'navidad', 'carnaval', 'tots', 'toty'], buyable: true, color: '#ff3d6e' },
   { id: 'promo', name: 'Sobre promocional', blurb: 'Regalo por objetivos, recompensas y hitos. No se compra.', price: 0, cards: 3, odds: { silver: 60, gold: 36, rising: 4 }, buyable: false, color: '#c28bff' },
 ];
 

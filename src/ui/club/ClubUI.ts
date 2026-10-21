@@ -2,7 +2,7 @@ import type { AudioEngine } from '../../audio/AudioEngine';
 import { FORMATIONS } from '../../data/formations';
 import { getTeam } from '../../data/teams';
 import type { FormationId, KitData, TeamData } from '../../data/types';
-import { eventDefs, evolvedId, getCardDef, periodDefs, periodOf, statLabels, STAT_KEYS, type PeriodKind } from '../../modes/club/catalog';
+import { SEASONAL, eventDefs, evolvedId, getCardDef, periodDefs, periodEnd, periodOf, statLabels, STAT_KEYS, type PeriodKind } from '../../modes/club/catalog';
 import { LEAGUES } from '../../data/leagues';
 import { COACHES } from '../../modes/club/chemistry';
 import { Club, ONLINE_POINTS, type ClubMatchKind, type ClubMatchMeta } from '../../modes/club/Club';
@@ -506,20 +506,17 @@ export class ClubUI implements ClubHost {
     const now = this.now();
     const season = currentSeason(now);
     const left = (ms: number) => { const h = Math.max(0, Math.floor(ms / 3600000)); return h >= 48 ? `${Math.floor(h / 24)} días` : `${h} h`; };
-    const d = new Date(now);
-    const ends: Record<PeriodKind, number> = {
-      motm: Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1),
-      totw: Date.parse(`${weekId(now)}T00:00:00Z`) + 7 * 86400000,
-      totm: Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1),
-      tots: season.end,
-      toty: Date.UTC(d.getUTCFullYear() + 1, 0, 1),
-    };
     const info: [PeriodKind, string, string][] = [
       ['motm', 'Jugadores del partido', 'Seis actuaciones destacadas cada día.'],
       ['totw', 'Equipo de la semana', 'Un once nuevo cada lunes.'],
+      ['potm', 'Jugadores del mes', 'El mejor de cada liga, cada mes.'],
+      ['totgs', 'Equipo de la fase de grupos', 'Un once nuevo cada dos semanas.'],
       ['totm', 'Equipo del mes', 'Los mejores del mes, con más mejora.'],
       ['tots', 'Equipos de la temporada', `Un once por liga durante ${season.name}.`],
       ['toty', 'Equipo del año', 'El once de los mejores del juego: la carta más valiosa.'],
+      ['halloween', 'Noche de brujas', 'Promoción de calendario: 22 cartas con mejora.'],
+      ['navidad', 'Navidad', 'Promoción de calendario: 22 cartas con mejora.'],
+      ['carnaval', 'Carnaval', 'Promoción de calendario: 22 cartas con mejora.'],
     ];
     const handlers: Handlers = { back: () => this.hub(), packs: () => this.goto('packs') };
     const sections = info.map(([k, title, blurb]) => {
@@ -531,11 +528,14 @@ export class ClubUI implements ClubHost {
         picker = `<div class="cb-chips">${lgs.map((id) => { handlers[`fl-${id}`] = () => { this.featLeague = id; this.featured(); }; return `<button class="cb-chip ${id === this.featLeague ? 'on' : ''}" data-act="fl-${id}">${esc(LEAGUES.find((l) => l.id === id)?.name ?? id)}</button>`; }).join('')}</div>`;
         defs = defs.filter((x) => x.league === this.featLeague);
       }
-      return `<div class="panel cb-feat"><div class="cb-feathead"><div><h3>${esc(title)}</h3><small class="muted">${esc(blurb)}</small></div><span class="cb-featleft">Termina en ${left(ends[k] - now)}</span></div>
+      if (!defs.length) return ''; // promoción de calendario fuera de fecha
+      return `<div class="panel cb-feat"><div class="cb-feathead"><div><h3>${esc(title)}</h3><small class="muted">${esc(blurb)}</small></div><span class="cb-featleft">Termina en ${left(periodEnd(k, now, season.end) - now)}</span></div>
         ${picker}<div class="cb-featgrid">${defs.map((x) => cardHTML(x, { size: 'xs' })).join('')}</div></div>`;
     }).join('');
+    const soon = info.filter(([k]) => SEASONAL[k] && !periodOf(k, now, season.id)).map(([k, title]) => `<b>${esc(title)}</b> · ${esc(SEASONAL[k]!.text)}`);
     this.show(`<div class="screen-header"><div><div class="crumb">SOFFTI CLUB</div><h2>Destacados</h2></div></div>
-      <div class="screen-body"><p class="muted">Cartas especiales que cambian con el tiempo. Salen en el <b>Sobre de destacados</b> (y algunas en el mercado) solo mientras están vigentes; las que consigas se quedan para siempre.</p>${sections}</div>
+      <div class="screen-body"><p class="muted">Cartas especiales que cambian con el tiempo. Salen en el <b>Sobre de destacados</b> (y algunas en el mercado) solo mientras están vigentes; las que consigas se quedan para siempre.</p>${sections}
+      ${soon.length ? `<div class="panel cb-feat"><div class="cb-feathead"><div><h3>Próximas promociones</h3><small class="muted">${soon.join(' &nbsp;·&nbsp; ')}</small></div></div></div>` : ''}</div>
       <div class="screen-footer"><button class="btn" data-act="back">Volver</button><button class="btn primary" data-act="packs">Ir a los sobres</button></div>`, handlers, () => this.hub(), 'club-screen club-featured');
   }
 

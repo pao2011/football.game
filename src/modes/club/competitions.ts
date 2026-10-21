@@ -104,7 +104,7 @@ export interface SbcDef {
 }
 const avg = (c: CardDef[]) => (c.length ? c.reduce((t, x) => t + x.ovr, 0) / c.length : 0);
 const maxSame = (c: CardDef[], f: (d: CardDef) => string) => { const m = new Map<string, number>(); for (const d of c) { const k = f(d); if (k) m.set(k, (m.get(k) ?? 0) + 1); } return Math.max(0, ...m.values()); };
-const RANK: Record<Rarity, number> = { bronze: 0, silver: 1, gold: 2, rising: 2, flash: 2, maestro: 2, titan: 3, special: 3, hero: 3, idol: 3, event: 3, legend: 4, motm: 3, totw: 3, totm: 3, tots: 4, toty: 4 };
+const RANK: Record<Rarity, number> = { bronze: 0, silver: 1, gold: 2, rising: 2, flash: 2, maestro: 2, titan: 3, special: 3, hero: 3, idol: 3, event: 3, legend: 4, motm: 3, totw: 3, totm: 3, tots: 4, toty: 4, potm: 3, totgs: 3, halloween: 3, navidad: 3, carnaval: 3 };
 export const SBCS: SbcDef[] = [
   { id: 'sbc_basic', name: 'Primeros pasos', blurb: 'Reúne once cartas cualquiera con buena media.', cards: 11, limit: 3, weekly: true, reward: { packs: { basic: 1 } },
     reqs: [{ text: 'Media de valoración 62 o más', ok: (c) => avg(c) >= 62, progress: (c) => `${avg(c).toFixed(1)}/62` }] },

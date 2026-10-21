@@ -152,3 +152,24 @@
 :is(.fc-motm, .fc-totw, .fc-totm, .fc-tots, .fc-toty) .fc-name { text-shadow: 0 0.08em 0.3em rgba(0,0,0,0.55); }
 :is(.fc-motm, .fc-totw, .fc-totm, .fc-tots, .fc-toty) .fc-tag { letter-spacing: 0.12em; font-size: 0.72em; }
 :is(.fc-totm, .fc-tots, .fc-toty) .fc-foil { opacity: 0.8; }
+
+/* ---------- Jugador del mes, Equipo de la fase de grupos y promociones de calendario ---------- */
+/* Jugador del mes: azul marino y menta */
+.fc-potm { --frame: linear-gradient(160deg, #c8fff0, #19e6a2 50%, #07503f); --face: linear-gradient(175deg, #0d3a66, #04152b); --ink: #7dffd6; --ink2: #ffffff; --line: rgba(125,255,214,0.55); --glow: rgba(25,230,162,0.65); --plate: rgba(0,0,0,0.35);
+  --art: repeating-linear-gradient(0deg, rgba(25,230,162,0.14) 0 1px, transparent 1px 0.7em), radial-gradient(ellipse at 70% 85%, rgba(25,230,162,0.45), transparent 60%), radial-gradient(circle at 20% 25%, rgba(255,255,255,0.5) 0 0.1em, transparent 0.14em); }
+/* Equipo de la fase de grupos: verde césped y plata */
+.fc-totgs { --frame: linear-gradient(160deg, #f1fff6, #5dff9a 40%, #0a5a2e); --face: linear-gradient(175deg, #0f6b35, #031c0e); --ink: #d8ffe6; --ink2: #5dff9a; --line: rgba(216,255,230,0.5); --glow: rgba(93,255,154,0.6); --plate: rgba(0,0,0,0.33);
+  --art: repeating-linear-gradient(90deg, rgba(255,255,255,0.07) 0 0.9em, transparent 0.9em 1.8em), radial-gradient(circle at 70% 100%, transparent 0 3.2em, rgba(216,255,230,0.3) 3.25em 3.4em, transparent 3.45em), radial-gradient(ellipse at 70% 85%, rgba(93,255,154,0.4), transparent 60%); }
+/* Noche de brujas: negro, naranja y violeta con telarañas */
+.fc-halloween { --frame: linear-gradient(160deg, #ffb25a, #ff6a00 45%, #5a1a8a); --face: linear-gradient(175deg, #241033, #07020d); --ink: #ff9a2e; --ink2: #d6a8ff; --line: rgba(255,154,46,0.55); --glow: rgba(255,106,0,0.7); --plate: rgba(0,0,0,0.4);
+  --art: conic-gradient(from 200deg at 100% 0, transparent 0 8deg, rgba(214,168,255,0.28) 8deg 9deg, transparent 9deg 22deg, rgba(214,168,255,0.28) 22deg 23deg, transparent 23deg 36deg, rgba(214,168,255,0.28) 36deg 37deg, transparent 37deg 50deg, rgba(214,168,255,0.28) 50deg 51deg, transparent 51deg), radial-gradient(circle at 25% 80%, rgba(255,106,0,0.4), transparent 45%), radial-gradient(ellipse at 70% 90%, rgba(122,44,255,0.45), transparent 60%); }
+/* Navidad: rojo, blanco y verde con copos */
+.fc-navidad { --frame: linear-gradient(160deg, #ffffff, #ff3d4e 45%, #1a7a3e); --face: linear-gradient(175deg, #b3162a, #4a0610); --ink: #ffffff; --ink2: #b6ffd0; --line: rgba(255,255,255,0.55); --glow: rgba(255,61,78,0.65); --plate: rgba(0,0,0,0.3);
+  --art: radial-gradient(circle at 18% 22%, rgba(255,255,255,0.9) 0 0.12em, transparent 0.16em), radial-gradient(circle at 78% 16%, rgba(255,255,255,0.8) 0 0.1em, transparent 0.14em), radial-gradient(circle at 60% 42%, rgba(255,255,255,0.7) 0 0.08em, transparent 0.12em), radial-gradient(circle at 34% 58%, rgba(255,255,255,0.8) 0 0.1em, transparent 0.14em), repeating-linear-gradient(-45deg, rgba(255,255,255,0.08) 0 0.5em, transparent 0.5em 1em), radial-gradient(ellipse at 70% 90%, rgba(31,174,90,0.4), transparent 60%); }
+/* Carnaval: fucsia, cian y amarillo con confeti */
+.fc-carnaval { --frame: linear-gradient(135deg, #ffe23a, #ff3dc8 45%, #2fe6ff); --face: linear-gradient(175deg, #5a1a8a, #1a0638); --ink: #ffe23a; --ink2: #8ff3ff; --line: rgba(255,226,58,0.6); --glow: rgba(255,61,200,0.7); --plate: rgba(0,0,0,0.33);
+  --art: radial-gradient(circle at 15% 25%, #ffe23a 0 0.12em, transparent 0.15em), radial-gradient(circle at 85% 20%, #2fe6ff 0 0.14em, transparent 0.17em), radial-gradient(circle at 45% 12%, #ff3dc8 0 0.12em, transparent 0.15em), radial-gradient(circle at 70% 50%, #ffe23a 0 0.1em, transparent 0.13em), radial-gradient(circle at 25% 60%, #2fe6ff 0 0.1em, transparent 0.13em), radial-gradient(circle at 90% 70%, #ff3dc8 0 0.12em, transparent 0.15em), radial-gradient(ellipse at 70% 90%, rgba(255,61,200,0.45), transparent 60%); }
+:is(.fc-potm, .fc-totgs, .fc-halloween, .fc-navidad, .fc-carnaval) .fc-name { text-shadow: 0 0.08em 0.3em rgba(0,0,0,0.55); }
+:is(.fc-potm, .fc-totgs, .fc-halloween, .fc-navidad, .fc-carnaval) .fc-tag { letter-spacing: 0.1em; font-size: 0.68em; }
+:is(.fc-halloween, .fc-navidad, .fc-carnaval, .fc-totgs, .fc-potm) .fc-foil { opacity: 0.7; }
+.fc-halloween { filter: drop-shadow(0 0 0.7em rgba(255,106,0,0.55)) drop-shadow(0 0.5em 0.9em rgba(0,0,0,0.55)); }

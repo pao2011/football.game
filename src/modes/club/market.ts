@@ -22,7 +22,7 @@ export interface MarketBackend {
   list(cardUid: string, price: number, hours: number): Promise<Result<void>>;
 }
 
-const RARITY_WEIGHT: [Rarity, number][] = [['bronze', 24], ['silver', 34], ['gold', 30], ['rising', 6], ['flash', 2], ['maestro', 2], ['titan', 1.5], ['special', 3.5], ['hero', 1.2], ['idol', 0.9], ['event', 1.8], ['legend', 0.7], ['motm', 1.2], ['totw', 1], ['totm', 0.5], ['tots', 0.3], ['toty', 0.12]];
+const RARITY_WEIGHT: [Rarity, number][] = [['bronze', 24], ['silver', 34], ['gold', 30], ['rising', 6], ['flash', 2], ['maestro', 2], ['titan', 1.5], ['special', 3.5], ['hero', 1.2], ['idol', 0.9], ['event', 1.8], ['legend', 0.7], ['motm', 1.2], ['totw', 1], ['totm', 0.5], ['tots', 0.3], ['toty', 0.12], ['potm', 0.6], ['totgs', 0.5], ['halloween', 0.6], ['navidad', 0.6], ['carnaval', 0.6]];
 
 let defsByRarityCache: Map<Rarity, CardDef[]> | null = null;
 function defsOf(r: Rarity): CardDef[] {

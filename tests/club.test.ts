@@ -3,7 +3,7 @@ import { makeMatch } from './helpers';
 import { SIM_DT } from '../src/config/constants';
 import { FORMATIONS } from '../src/data/formations';
 import { TEAMS } from '../src/data/teams';
-import { catalog, eventDefs, getCardDef, periodDefs, periodOf } from '../src/modes/club/catalog';
+import { catalog, eventDefs, getCardDef, periodDefs, periodEnd, periodOf } from '../src/modes/club/catalog';
 import { evaluateSquad } from '../src/modes/club/chemistry';
 import { Club } from '../src/modes/club/Club';
 import { BATTLES, CHAMPIONS, SBCS, rivalsDivision } from '../src/modes/club/competitions';
@@ -704,12 +704,49 @@ describe('Club · evoluciones, pase, misiones y sobres nuevos', () => {
     }
     const stars = PACKS.find((p) => p.id === 'stars')!;
     const rand = seeded(17);
-    const current = new Set(['motm', 'totw', 'totm', 'tots', 'toty'].flatMap((k) => periodDefs(k as never, periodOf(k as never, now, 's1')).map((d) => d.id)));
+    const current = new Set(['motm', 'totw', 'totm', 'tots', 'toty', 'potm', 'totgs'].flatMap((k) => periodDefs(k as never, periodOf(k as never, now, 's1')).map((d) => d.id)));
     for (let i = 0; i < 200; i++) {
       const r = rollPack({ pack: stars, season: 's1', rand, owned: new Map(), pity: 0, now });
-      const special = r.defs.filter((d) => ['motm', 'totw', 'totm', 'tots', 'toty'].includes(d.rarity));
+      const special = r.defs.filter((d) => ['motm', 'totw', 'totm', 'tots', 'toty', 'potm', 'totgs'].includes(d.rarity));
       expect(special.length).toBeGreaterThan(0);
       for (const d of special) expect(current.has(d.id)).toBe(true);
     }
+  });
+  it('Jugador del mes, fase de grupos y promociones de calendario: solo salen en su fecha y se conservan', () => {
+    const at = (m: number, d: number) => Date.UTC(2026, m - 1, d, 12);
+    // jugador del mes: uno por liga
+    const potm = periodDefs('potm', periodOf('potm', at(10, 14), 's1'));
+    expect(potm.length).toBeGreaterThanOrEqual(15);
+    expect(new Set(potm.map((d) => d.league)).size).toBe(potm.length);
+    // fase de grupos: un once, distinto cada quincena
+    const g1 = periodDefs('totgs', periodOf('totgs', at(10, 14), 's1'));
+    const g2 = periodDefs('totgs', periodOf('totgs', at(10, 14) + 14 * 86400000, 's1'));
+    expect(g1.length).toBe(11);
+    expect(g1.map((d) => d.id).join()).not.toBe(g2.map((d) => d.id).join());
+    // calendario: activas solo en sus fechas (Navidad cruza el año)
+    expect(periodOf('halloween', at(10, 21), 's1')).toBe('');
+    expect(periodOf('halloween', at(10, 28), 's1')).toBe('2026');
+    expect(periodOf('halloween', at(11, 4), 's1')).toBe('');
+    expect(periodOf('navidad', at(12, 20), 's1')).toBe('2026');
+    expect(periodOf('navidad', at(1, 3), 's1')).toBe('2025');
+    expect(periodOf('navidad', at(2, 3), 's1')).toBe('');
+    expect(periodOf('carnaval', at(2, 10), 's1')).toBe('2026');
+    expect(periodDefs('navidad', '').length).toBe(0);
+    const hw = periodDefs('halloween', '2026');
+    expect(hw.length).toBe(22);
+    for (const d of [...potm, ...g1, ...hw]) {
+      expect(getCardDef(d.id)?.id).toBe(d.id); // se encuentra por id aunque ya no esté vigente
+      expect(d.ovr).toBeGreaterThanOrEqual(getCardDef(d.playerId)!.ovr);
+    }
+    expect(periodEnd('halloween', at(10, 28), 0)).toBe(Date.UTC(2026, 10, 4));
+    // el sobre de destacados solo da promociones vigentes (el 21 de octubre ninguna de calendario)
+    const stars = PACKS.find((p) => p.id === 'stars')!;
+    const rand = seeded(19);
+    for (let i = 0; i < 150; i++) {
+      for (const d of rollPack({ pack: stars, season: 's1', rand, owned: new Map(), pity: 0, now: at(10, 21) }).defs) expect(['halloween', 'navidad', 'carnaval']).not.toContain(d.rarity);
+    }
+    const seen = new Set<string>();
+    for (let i = 0; i < 400; i++) for (const d of rollPack({ pack: stars, season: 's1', rand, owned: new Map(), pity: 0, now: at(10, 28) }).defs) seen.add(d.rarity);
+    expect(seen.has('halloween')).toBe(true);
   });
 });

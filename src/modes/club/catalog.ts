@@ -21,7 +21,8 @@ const COUNTRY_ALIAS: Record<string, string> = { 'Brasil': 'Brasil', 'Reino Unido
 /** Valor de mercado (monedas) según la valoración: interpolación logarítmica entre estos puntos. */
 const PRICE_KNOTS: [number, number][] = [[40, 10], [50, 25], [60, 100], [70, 550], [75, 1200], [80, 2400], [85, 5000], [90, 14000], [95, 40000], [99, 100000]];
 export const RARITY_PRICE: Record<Rarity, number> = { bronze: 1, silver: 1, gold: 1, rising: 1.3, special: 1.6, event: 1.5, legend: 2, hero: 1.6, idol: 1.7, flash: 1.3, titan: 1.4, maestro: 1.4,
-  motm: 1.3, totw: 1.5, totm: 1.7, tots: 1.9, toty: 2.3 };
+  motm: 1.3, totw: 1.5, totm: 1.7, tots: 1.9, toty: 2.3,
+  potm: 1.5, totgs: 1.7, halloween: 1.6, navidad: 1.6, carnaval: 1.6 };
 
 export function basePrice(ovr: number): number {
   const o = clamp(ovr, 40, 99);
@@ -86,8 +87,9 @@ const KIND_BOOST: Partial<Record<Rarity, (a: PlayerAttributes) => PlayerAttribut
   titan: (a) => plus(a, { defending: 6, goalkeeping: 6, stamina: 3, passing: 1 }),
   maestro: (a) => plus(a, { passing: 6, control: 6, shooting: 2 }),
   motm: (a) => boostAttrs(a, 3), totw: (a) => boostAttrs(a, 4), totm: (a) => boostAttrs(a, 5), tots: (a) => boostAttrs(a, 6), toty: (a) => boostAttrs(a, 8),
+  potm: (a) => boostAttrs(a, 4), totgs: (a) => boostAttrs(a, 5), halloween: (a) => boostAttrs(a, 5), navidad: (a) => boostAttrs(a, 5), carnaval: (a) => boostAttrs(a, 5),
 };
-const KIND_CODE: Partial<Record<Rarity, string>> = { rising: 'rs', special: 'sp', hero: 'hr', idol: 'id', flash: 'fl', titan: 'tt', maestro: 'ms', motm: 'mm', totw: 'tw', totm: 'tm', tots: 'ts', toty: 'ty' };
+const KIND_CODE: Partial<Record<Rarity, string>> = { rising: 'rs', special: 'sp', hero: 'hr', idol: 'id', flash: 'fl', titan: 'tt', maestro: 'ms', motm: 'mm', totw: 'tw', totm: 'tm', tots: 'ts', toty: 'ty', potm: 'pm', totgs: 'tg', halloween: 'hw', navidad: 'nv', carnaval: 'cv' };
 
 const tierOf = (ovr: number): Rarity => (ovr < 65 ? 'bronze' : ovr < 75 ? 'silver' : 'gold');
 
@@ -249,20 +251,55 @@ function ctxOf(d: CardDef): Parameters<typeof make>[0] | null {
   return { p, role, teamId: t.id, teamName: t.name, league: lg?.id ?? '', country, fictional: !p.name };
 }
 
-// ---------- Cartas por periodo: Jugador del partido (día), Equipo de la semana, del mes, de la temporada y del año ----------
-export type PeriodKind = 'motm' | 'totw' | 'totm' | 'tots' | 'toty';
-export const PERIOD_KINDS: PeriodKind[] = ['motm', 'totw', 'totm', 'tots', 'toty'];
+// ---------- Cartas por periodo: Jugador del partido (día), Equipo de la semana, del mes, de la temporada y del año;
+// Jugador del mes, Equipo de la fase de grupos (cada 2 semanas) y promociones de calendario (Noche de brujas, Navidad, Carnaval) ----------
+export type PeriodKind = 'motm' | 'totw' | 'totm' | 'tots' | 'toty' | 'potm' | 'totgs' | 'halloween' | 'navidad' | 'carnaval';
+export const PERIOD_KINDS: PeriodKind[] = ['motm', 'totw', 'totm', 'tots', 'toty', 'potm', 'totgs', 'halloween', 'navidad', 'carnaval'];
 export const isPeriodKind = (r: string): r is PeriodKind => (PERIOD_KINDS as string[]).includes(r);
-const CODE_KIND: Record<string, PeriodKind> = { mm: 'motm', tw: 'totw', tm: 'totm', ts: 'tots', ty: 'toty' };
+const CODE_KIND: Record<string, PeriodKind> = { mm: 'motm', tw: 'totw', tm: 'totm', ts: 'tots', ty: 'toty', pm: 'potm', tg: 'totgs', hw: 'halloween', nv: 'navidad', cv: 'carnaval' };
+const DAY_MS = 86400000;
 
-/** Periodo vigente de cada tipo: día, semana (lunes), mes, temporada del club o año. */
+/** Promociones de calendario: [mes-día de inicio, mes-día de fin] (UTC). Navidad cruza el cambio de año. */
+export const SEASONAL: Partial<Record<PeriodKind, { from: number; to: number; text: string }>> = {
+  halloween: { from: 1024, to: 1103, text: 'Del 24 de octubre al 3 de noviembre' },
+  navidad: { from: 1215, to: 106, text: 'Del 15 de diciembre al 6 de enero' },
+  carnaval: { from: 201, to: 229, text: 'Todo febrero' },
+};
+const monthDay = (now: number) => { const d = new Date(now); return (d.getUTCMonth() + 1) * 100 + d.getUTCDate(); };
+
+/** Periodo vigente de cada tipo: día, semana (lunes), mes, quincena, temporada del club o año ('' = promoción fuera de fecha). */
 export function periodOf(k: PeriodKind, now: number, season: string): string {
+  const year = new Date(now).getUTCFullYear();
   switch (k) {
     case 'motm': return dayId(now);
     case 'totw': return weekId(now);
-    case 'totm': return dayId(now).slice(0, 7);
+    case 'totm': case 'potm': return dayId(now).slice(0, 7);
+    case 'totgs': return `g${Math.floor(Date.parse(weekId(now)) / (14 * DAY_MS))}`;
     case 'tots': return season;
-    default: return dayId(now).slice(0, 4);
+    case 'toty': return String(year);
+    default: {
+      const w = SEASONAL[k]!;
+      const md = monthDay(now);
+      if (w.from <= w.to) return md >= w.from && md <= w.to ? String(year) : '';
+      return md >= w.from ? String(year) : md <= w.to ? String(year - 1) : '';
+    }
+  }
+}
+
+/** Fin del periodo vigente (ms). */
+export function periodEnd(k: PeriodKind, now: number, seasonEnd: number): number {
+  const d = new Date(now);
+  const y = d.getUTCFullYear();
+  switch (k) {
+    case 'motm': return Date.UTC(y, d.getUTCMonth(), d.getUTCDate() + 1);
+    case 'totw': return Date.parse(`${weekId(now)}T00:00:00Z`) + 7 * DAY_MS;
+    case 'totm': case 'potm': return Date.UTC(y, d.getUTCMonth() + 1, 1);
+    case 'totgs': return (Math.floor(Date.parse(weekId(now)) / (14 * DAY_MS)) + 1) * 14 * DAY_MS;
+    case 'tots': return seasonEnd;
+    case 'toty': return Date.UTC(y + 1, 0, 1);
+    case 'halloween': return Date.UTC(y, 10, 4);
+    case 'carnaval': return Date.UTC(y, 2, 1);
+    default: return Date.UTC(monthDay(now) <= 106 ? y : y + 1, 0, 7); // navidad
   }
 }
 
@@ -276,6 +313,7 @@ function pickXI(list: CardDef[]): CardDef[] {
 const periodCache = new Map<string, CardDef[]>();
 /** Cartas de un periodo (deterministas: mismas para todos los clubes). */
 export function periodDefs(kind: PeriodKind, period: string): CardDef[] {
+  if (!period) return [];
   const key = `${kind}|${period}`;
   const hit = periodCache.get(key);
   if (hit) return hit;
@@ -290,6 +328,14 @@ export function periodDefs(kind: PeriodKind, period: string): CardDef[] {
     case 'totw': picked = pickXI(byLuck(base.filter((d) => d.ovr >= 76 && d.ovr <= 88))); break;
     case 'totm': picked = pickXI(byLuck(base.filter((d) => d.ovr >= 80 && d.ovr <= 90))); break;
     case 'toty': picked = pickXI(byRating(base)); break;
+    case 'totgs': picked = pickXI(byLuck(base.filter((d) => d.ovr >= 78 && d.ovr <= 90))); break;
+    case 'potm': {
+      // el mejor de cada liga del mes (un pequeño azar por mes decide los empates)
+      const leagues = [...new Set(base.map((d) => d.league).filter(Boolean))];
+      picked = leagues.map((lg) => byRating(base.filter((d) => d.league === lg && d.ovr <= 90))[0]).filter(Boolean);
+      break;
+    }
+    case 'halloween': case 'navidad': case 'carnaval': picked = byLuck(base.filter((d) => d.ovr >= 74 && d.ovr <= 88)).slice(0, 22); break;
     default: {
       // un once por liga
       const leagues = [...new Set(base.map((d) => d.league).filter(Boolean))];
@@ -309,7 +355,7 @@ export function getCardDef(id: string): CardDef | undefined {
   if (e) return evolvedDef(e[1], e[2], Number(e[3]));
   const m = /^(.+)~ev~(.+)$/.exec(id);
   if (m) return eventDefs(m[2]).find((d) => d.id === id);
-  const pk = /^(.+)~(mm|tw|tm|ts|ty)~(.+)$/.exec(id);
+  const pk = /^(.+)~(mm|tw|tm|ts|ty|pm|tg|hw|nv|cv)~(.+)$/.exec(id);
   if (pk) return periodDefs(CODE_KIND[pk[2]], pk[3]).find((d) => d.id === id);
   return undefined;
 }

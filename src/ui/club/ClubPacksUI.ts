@@ -16,7 +16,7 @@ interface LogEntry { defId: string; action: 'club' | 'sell' | 'discard'; value: 
 interface Scene { openingId: string; packId: string; stage: Stage; revealed: boolean; confirmDiscard: boolean; log: LogEntry[]; total: number; dealt?: boolean; walked?: boolean }
 
 const reduced = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-const RARE_FX: Rarity[] = ['special', 'event', 'legend', 'hero', 'idol', 'titan', 'totm', 'tots', 'toty'];
+const RARE_FX: Rarity[] = ['special', 'event', 'legend', 'hero', 'idol', 'titan', 'totm', 'tots', 'toty', 'totgs', 'halloween', 'navidad', 'carnaval'];
 const isWalkout = (d: CardDef) => RARE_FX.includes(d.rarity) || (d.rarity === 'gold' && d.ovr >= 85);
 
 let disposePrev: (() => void) | null = null;
@@ -59,6 +59,11 @@ export function packsScreen(host: ClubHost): void {
     totm: ['#c7a6ff', '#ffffff', '#5a2fd6', '#ffd35a'],
     tots: ['#5ee7ff', '#ffd35a', '#ffffff', '#0a5fa8'],
     toty: ['#ffd35a', '#1a4fff', '#ffffff', '#00113a'],
+    potm: ['#19e6a2', '#ffffff', '#0b3a5a', '#ffd35a'],
+    totgs: ['#5dff9a', '#c9ffd8', '#ffffff', '#0a5a2e'],
+    halloween: ['#ff7a1a', '#7a2cff', '#111111', '#ffd35a'],
+    navidad: ['#ff3d4e', '#ffffff', '#1fae5a', '#ffd35a'],
+    carnaval: ['#ff3dc8', '#2fe6ff', '#ffe23a', '#7a3dff'],
   };
   const confetti = (kind: string, big: boolean) => {
     if (reduced() || !ctx) return;
