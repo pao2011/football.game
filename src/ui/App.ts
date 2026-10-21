@@ -1605,7 +1605,7 @@ export class App {
       home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away),
       humanTeam: st.role === 'host' ? 0 : st.role === 'guest' ? 1 : -1,
       halfLengthSec: Math.max(2, Math.min(10, st.half)) * 60,
-      difficulty: 'pro', extraTime: false, penalties: false, seed: st.seed,
+      difficulty: 'pro', extraTime: false, penalties: false, seed: st.seed, var: false,
       // el mismo clima para los dos (sale de la semilla del partido)
       weather: randomWeather(((st.seed * 7919) % 1000) / 1000),
     };
@@ -2103,6 +2103,7 @@ export class App {
           ${toggle('Radar', 'showRadar')}
           ${toggle('Indicadores y ayudas visuales', 'showIndicators')}
           ${toggle('Repeticiones de goles', 'replays')}
+          ${toggle('Árbitro falible y VAR', 'varEnabled')}
           ${toggle('Avisos en pantalla (atajada, falta, controles…)', 'popups')}
           ${this.stepper('Controles táctiles', ({ auto: 'Automático', on: 'Siempre', off: 'Desactivados' } as const)[st.touchControls], 'touch')}
         </div>

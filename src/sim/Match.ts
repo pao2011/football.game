@@ -17,11 +17,12 @@ import { SKILL_KINDS, SKILL_NAMES, type MatchEvent, type SkillKind } from './typ
 import { evaluateOffsidePositions, isInPenaltyArea } from './Rules';
 import { placeForRestart, type RestartType } from './SetPieces';
 import { Referee } from './Referee';
+import { refereeErrorChance, VAR_TIMES, type FoulCall, type VarIncident, type VarKind, type VarReview, type VarStage } from './Var';
 import { HeatDirector } from './Heat';
 import { weatherEnv, type Weather } from './Weather';
 import { AERIAL_ERROR, AERIAL_NAMES, AERIAL_TIMING, aerialInReach, aerialShotVelocity, ballApproach } from './Aerial';
 
-export type MatchPhase = 'kickoff' | 'play' | 'stoppage' | 'goal' | 'replay' | 'halftime' | 'fulltime' | 'shootout';
+export type MatchPhase = 'kickoff' | 'play' | 'stoppage' | 'goal' | 'replay' | 'halftime' | 'fulltime' | 'shootout' | 'var';
 
 export interface MatchConfig {
   home: TeamData;
@@ -51,6 +52,8 @@ export interface MatchConfig {
   neutral?: boolean;
   /** Partido de vuelta: goles de la ida de [local, visitante] de este partido; la prórroga y los penales se deciden por el global. */
   aggregate?: [number, number];
+  /** VAR y errores arbitrales (por defecto activos; no se usan en entrenamiento, penales ni online). */
+  var?: boolean;
   /** Modo entrenamiento. */
   training?: 'free' | 'penalties' | 'freekicks';
   /** Clima (por defecto despejado). */
@@ -172,6 +175,16 @@ export class Match {
   advantage: { team: 0 | 1; until: number; spot: Vector3; offender: Player; card: 'yellow' | null; warn: boolean } | null = null;
   /** Duración (s) de la fase de repetición: el clip completo a cámara lenta. */
   replayLength = 6.5;
+  /** Revisión del VAR en curso (fase 'var'). */
+  varReview: VarReview | null = null;
+  /** Revisiones realizadas en el partido. */
+  varCount = 0;
+  private lastVarAt = -999;
+  private varCtx: { foul?: { offender: Player; victim: Player; severity: number }; restart?: { type: RestartType; team: 0 | 1; spot: Vector3; immediate: boolean } } | null = null;
+  /** Generador propio del árbitro/VAR: no altera la secuencia aleatoria del juego. */
+  private readonly varRng: Rng;
+  /** Falta que el árbitro no vio: el VAR puede llamarla cuando el juego se detenga. */
+  private missed: { offender: Player; victim: Player; truth: FoulCall; time: number; half: number; at: { x: number; z: number }; severity: number } | null = null;
   finished = false;
   /** Contadores para pruebas automáticas. */
   readonly debug = { kicks: 0, controls: 0, tackles: 0, fouls: 0, offsides: 0, outs: 0, saves: 0, stuckTime: 0 };
@@ -207,6 +220,7 @@ export class Match {
       this.config = config;
     }
     this.rng = new Rng(config.seed ?? Math.floor(Math.random() * 1e9));
+    this.varRng = new Rng(((config.seed ?? 1) * 7919 + 104729) >>> 0);
     this.heat = config.training ? 0 : clamp(config.heat ?? 0, 0, 1);
     this.heatDir = this.heat > 0 ? new HeatDirector(this, this.heat) : null;
     this.diff = DIFFICULTY[config.difficulty];
@@ -319,6 +333,9 @@ export class Match {
         break;
       case 'replay':
         if (this.phaseTimer > this.replayLength) this.afterGoal();
+        break;
+      case 'var':
+        this.stepVar(dt);
         break;
       case 'halftime':
         this.stepCelebration(dt);
@@ -1327,13 +1344,10 @@ export class Match {
     }
   }
 
-  /** Comete falta `offender` sobre `victim`. Determina sanción con datos objetivos. */
+  /** Comete falta `offender` sobre `victim`. Determina la sanción correcta con datos objetivos y la pasa por el juicio del árbitro. */
   private foul(offender: Player, victim: Player, slide: boolean) {
     const vTeam = this.teams[victim.team];
     const oTeam = this.teams[offender.team];
-    oTeam.stats.fouls++;
-    offender.ps.fouls++;
-    this.debug.fouls++;
     victim.startAction('fallen', 'fallen', 1.4);
     // Gravedad: por detrás, barrida a velocidad, lejos del balón
     const fromBehind = Math.cos(offender.facing - victim.facing) > 0.5;
@@ -1355,11 +1369,11 @@ export class Match {
       if (offender.warnings >= 1) card = 'yellow';
       else warn = true;
     }
-    this.emit({ type: 'foul', team: offender.team, playerId: offender.id, x: victim.pos.x, z: victim.pos.z });
     // Entrada muy dura: puede lesionar al rival
     if (severity >= 0.75 && !victim.injured && !victim.isGK && this.rng.next() < 0.45) this.injure(victim);
     // Ley de la ventaja: fuera del área, sin roja, y con el balón para un compañero libre en campo prometedor
     if (!inBox && card !== 'red' && this.advantageLikely(victim)) {
+      this.countFoul(offender, victim);
       this.advantage = {
         team: victim.team as 0 | 1, until: this.time + 2.5, offender, card, warn,
         spot: new Vector3(clamp(victim.pos.x, -HALF_LENGTH + 1, HALF_LENGTH - 1), BALL_RADIUS, clamp(victim.pos.z, -HALF_WIDTH + 1, HALF_WIDTH - 1)),
@@ -1369,14 +1383,40 @@ export class Match {
       this.emit({ type: 'advantage', team: victim.team, playerId: victim.id, x: victim.pos.x, z: victim.pos.z });
       return;
     }
+    const truth: FoulCall = { card, warn, penalty: inBox };
+    const j = this.judgeFoul(offender, victim, truth, severity);
+    if (j.kind === 'missed') {
+      // el árbitro no ve la falta: el juego sigue (el VAR puede llamarlo cuando la jugada termine)
+      this.missed = { offender, victim, truth, time: this.time, half: this.half, at: { x: victim.pos.x, z: victim.pos.z }, severity };
+      return;
+    }
+    this.countFoul(offender, victim);
     this.emit({ type: 'whistle', kind: 'short' });
     this.addedSeconds += 20;
+    if (j.incident) {
+      this.beginVar(j.incident, { foul: { offender, victim, severity } });
+      return;
+    }
+    this.applyFoulDecision(offender, victim, j.call, severity);
+  }
+
+  private countFoul(offender: Player, victim: Player) {
+    this.teams[offender.team].stats.fouls++;
+    offender.ps.fouls++;
+    this.debug.fouls++;
+    this.emit({ type: 'foul', team: offender.team, playerId: offender.id, x: victim.pos.x, z: victim.pos.z });
+  }
+
+  /** Aplica la sanción (tarjeta, aviso o señal) y prepara la reanudación: tiro libre o penal. */
+  private applyFoulDecision(offender: Player, victim: Player, call: FoulCall, severity: number) {
+    const vTeam = this.teams[victim.team];
     const refAt = offender.pos.clone();
+    const card = call.card;
     if (card) {
       this.referee.signal('card', this.time, refAt, victim.pos, 3.4, card === 'yellow' && offender.yellowCards >= 1 ? 'red' : card);
       this.restartHoldUntil = this.time + 3.6;
       this.giveCard(offender, card);
-    } else if (warn) {
+    } else if (call.warn) {
       offender.warnings++;
       this.emit({ type: 'warning', team: offender.team, playerId: offender.id, text: offender.data.name });
       this.referee.signal('warn', this.time, refAt, victim.pos, 2.4);
@@ -1388,15 +1428,222 @@ export class Match {
     }
     // partido caliente: la falta puede acabar en pelea (el juego ya está detenido)
     this.heatDir?.afterFoul(offender, victim, severity, card);
-    void severity;
-    severity = 0;
-    if (inBox) {
+    if (call.penalty) {
       this.addedSeconds += 30;
       this.stopPlay('penalty', victim.team as 0 | 1, new Vector3(vTeam.attackGoal.x - vTeam.attackDir * 11, BALL_RADIUS, 0));
     } else {
       const spot = new Vector3(clamp(victim.pos.x, -HALF_LENGTH + 1, HALF_LENGTH - 1), BALL_RADIUS, clamp(victim.pos.z, -HALF_WIDTH + 1, HALF_WIDTH - 1));
       this.stopPlay('freekick', victim.team as 0 | 1, spot);
     }
+  }
+
+  // ------------------------------------------------------------------
+  // Árbitro falible y VAR
+  // ------------------------------------------------------------------
+
+  get varActive() {
+    return this.config.var !== false && !this.config.training && !this.config.versus && this.half <= 4;
+  }
+
+  /** Probabilidad actual de error arbitral (para el HUD de pruebas y el modelo). */
+  get refErrorChance() {
+    const [a, b] = this.teams;
+    return refereeErrorChance(this.minute, this.heat, Math.abs(a.stats.goals - b.stats.goals), a.stats.yellow + b.stats.yellow + 2 * (a.stats.red + b.stats.red));
+  }
+
+  /** Distancia con signo al borde del área del equipo que defiende ese lado (negativa = dentro). */
+  private areaEdge(pos: Vector3, sideSign: number): number {
+    const x = pos.x * sideSign;
+    const dx = Math.max(0, HALF_LENGTH - PENALTY_AREA_DEPTH - x);
+    const dz = Math.max(0, Math.abs(pos.z) - PENALTY_AREA_HALF_WIDTH);
+    if (dx > 0 || dz > 0) return Math.hypot(dx, dz);
+    return -Math.min(x - (HALF_LENGTH - PENALTY_AREA_DEPTH), PENALTY_AREA_HALF_WIDTH - Math.abs(pos.z));
+  }
+
+  /**
+   * El árbitro juzga la falta: puede acertar, no verla, o sancionar de más o de menos. Devuelve la decisión que toma y, si
+   * hay revisión del VAR (error corregible o chequeo de rutina), el incidente.
+   */
+  private judgeFoul(offender: Player, victim: Player, truth: FoulCall, severity: number): { kind: 'call' | 'missed'; call: FoulCall; incident: VarIncident | null } {
+    const ok = { kind: 'call' as const, call: truth, incident: null };
+    if (!this.varActive) return ok;
+    const r = this.varRng;
+    const err = r.next() < this.refErrorChance;
+    const at = { x: victim.pos.x, z: victim.pos.z };
+    const oTeam = this.teams[offender.team];
+    const edge = this.areaEdge(victim.pos, -oTeam.attackDir);
+    const mk = (kind: VarKind, called: FoulCall | null, overturn: boolean, label: string, detail: string, verdict: string): VarIncident => ({
+      kind, origin: 'foul', time: this.time, offender, victim, at, called, truth, overturn, label, detail, verdict,
+    });
+    const names = `${offender.data.name} sobre ${victim.data.name}`;
+    // el VAR solo interviene con margen (no revisa dos jugadas seguidas)
+    const canVar = this.time - this.lastVarAt > 50;
+    if (err) {
+      if (truth.penalty) {
+        if (r.next() < 0.5) return { kind: 'missed', call: truth, incident: null };
+        // pita falta pero no penal
+        const called: FoulCall = { ...truth, penalty: false };
+        if (canVar) return { kind: 'call', call: called, incident: mk('penalty', called, true, 'REVISIÓN DE PENAL', `Contacto de ${names} dentro del área`, 'PENAL: la falta fue dentro del área') };
+        return { kind: 'call', call: called, incident: null };
+      }
+      if (truth.card === 'red') {
+        if (r.next() < 0.3) return { kind: 'missed', call: truth, incident: null };
+        const called: FoulCall = { card: 'yellow', warn: false, penalty: false };
+        if (canVar) return { kind: 'call', call: called, incident: mk('red', called, true, 'REVISIÓN DE ROJA DIRECTA', `Entrada de ${names}`, 'TARJETA ROJA directa') };
+        return { kind: 'call', call: called, incident: null };
+      }
+      if (edge > 0 && edge < 3.2 && !truth.card) {
+        const called: FoulCall = { ...truth, penalty: true };
+        if (canVar) return { kind: 'call', call: called, incident: mk('penalty', called, true, 'REVISIÓN DE PENAL', `Contacto de ${names} en el borde del área`, 'SE ANULA EL PENAL: la falta fue fuera del área') };
+        return { kind: 'call', call: called, incident: null };
+      }
+      if (truth.card === 'yellow' && severity < 0.95) {
+        const called: FoulCall = { card: 'red', warn: false, penalty: truth.penalty };
+        if (canVar) return { kind: 'call', call: called, incident: mk('red', called, true, 'REVISIÓN DE ROJA DIRECTA', `Entrada de ${names}`, 'SE RETIRA LA ROJA: es solo amarilla') };
+        return { kind: 'call', call: called, incident: null };
+      }
+      return { kind: 'missed', call: truth, incident: null };
+    }
+    // sin error: el VAR a veces revisa igual las jugadas importantes y confirma
+    if (canVar && (truth.penalty || truth.card === 'red') && r.next() < 0.4) {
+      return { kind: 'call', call: truth, incident: mk(truth.penalty ? 'penalty' : 'red', truth, false, truth.penalty ? 'REVISIÓN DE PENAL' : 'REVISIÓN DE ROJA DIRECTA', `Contacto de ${names}`, 'SE MANTIENE LA DECISIÓN DEL CAMPO') };
+    }
+    return ok;
+  }
+
+  private missedValid(): boolean {
+    const m = this.missed;
+    return !!m && m.half === this.half && this.time - m.time <= 16;
+  }
+
+  /** Revisión posterior a una falta que el árbitro dejó pasar (balón fuera o gol del infractor). */
+  private missedIncident(goalTeam?: 0 | 1): VarIncident | null {
+    const m = this.missed;
+    if (!m || !this.missedValid() || !this.varActive || this.time - this.lastVarAt <= 30) return null;
+    const names = `${m.offender.data.name} sobre ${m.victim.data.name}`;
+    const t = m.truth;
+    if (goalTeam !== undefined) {
+      if (m.offender.team !== goalTeam) return null;
+      return { kind: 'goal', origin: 'goal', time: m.time, offender: m.offender, victim: m.victim, at: m.at, called: null, truth: t, overturn: true, goalTeam, label: 'REVISIÓN DE GOL', detail: `Posible falta de ${names} en la jugada`, verdict: 'GOL ANULADO: falta previa' };
+    }
+    if (!t.penalty && t.card !== 'red') return null; // las faltas menores no se revisan
+    return { kind: t.penalty ? 'penalty' : 'red', origin: 'missed', time: m.time, offender: m.offender, victim: m.victim, at: m.at, called: null, truth: t, overturn: true, label: t.penalty ? 'POSIBLE PENAL' : 'POSIBLE ROJA DIRECTA', detail: `Contacto de ${names}`, verdict: t.penalty ? 'PENAL: el árbitro no lo había visto' : 'TARJETA ROJA: el árbitro no lo había visto' };
+  }
+
+  /** Empieza la revisión: el árbitro recibe el aviso, hace la señal de la tele, va al monitor y mira el vídeo. */
+  private beginVar(incident: VarIncident, ctx: { foul?: { offender: Player; victim: Player; severity: number }; restart?: { type: RestartType; team: 0 | 1; spot: Vector3; immediate: boolean } }) {
+    this.varCtx = ctx;
+    this.lastVarAt = this.time;
+    this.missed = null;
+    this.advantage = null;
+    this.owner = null;
+    this.gkHolding = null;
+    this.ball.held = false;
+    this.addedSeconds += 40;
+    const monX = clamp(incident.at.x, -22, 22);
+    const monitor = new Vector3(monX, 0, -(HALF_WIDTH + 3.1));
+    const refSpot = new Vector3(monX, 0, -(HALF_WIDTH + 1.5));
+    const from = this.time - 3.4;
+    const to = this.time + 1.4;
+    let clip = this.replay.filter((f) => f.tm >= from && f.tm <= (incident.origin === 'foul' ? this.time : to));
+    if (clip.length < 2) clip = this.replay.slice(-100);
+    const len = clip.length > 1 ? clip[clip.length - 1].tm - clip[0].tm : 3;
+    this.varReview = { incident, stage: 'call', t: 0, monitor, refSpot, clip, footageLen: len / REPLAY_SPEED + 0.8, skipRequested: false };
+    this.varCount++;
+    this.enterPhase('var');
+    this.referee.gesture = null;
+    this.referee.cardColor = null;
+    this.emit({ type: 'var', kind: 'start', text: incident.label, team: incident.offender.team });
+  }
+
+  /** El espectador pide saltarse el vídeo del VAR. */
+  skipVar() {
+    const v = this.varReview;
+    if (v && v.stage === 'footage') v.skipRequested = true;
+  }
+
+  private stepVar(dt: number) {
+    const v = this.varReview;
+    if (!v) { this.enterPhase('stoppage'); return; }
+    // jugadores quietos y balón asentándose
+    for (const p of this.active) { p.desiredVel.multiplyScalar(0.85); p.sprinting = false; }
+    this.movePlayers(dt);
+    if (!this.ball.held) this.ball.step(dt);
+    v.t += dt;
+    const r = this.referee;
+    const go = (stage: VarStage) => { v.stage = stage; v.t = 0; };
+    switch (v.stage) {
+      case 'call':
+        r.varAnim = 'ref_ear';
+        r.varGoto = null;
+        r.varLook = this.ball.pos;
+        if (v.t >= VAR_TIMES.call) go('tv');
+        break;
+      case 'tv':
+        r.varAnim = 'ref_tv';
+        if (v.t >= VAR_TIMES.tv) { r.varAnim = null; r.varGoto = v.refSpot; r.varLook = v.monitor; go('walk'); }
+        break;
+      case 'walk': {
+        r.varAnim = null;
+        r.varGoto = v.refSpot;
+        r.varLook = v.monitor;
+        const d = Math.hypot(r.pos.x - v.refSpot.x, r.pos.z - v.refSpot.z);
+        if (d < 0.7 || v.t > VAR_TIMES.walkMax) { r.pos.set(v.refSpot.x, 0, v.refSpot.z); r.vel.set(0, 0, 0); go('review'); }
+        break;
+      }
+      case 'review':
+        r.varAnim = 'ref_look';
+        if (v.t >= VAR_TIMES.review) go('footage');
+        break;
+      case 'footage':
+        r.varAnim = 'ref_look';
+        if (v.t >= Math.min(9, v.footageLen) || v.skipRequested) go('back');
+        break;
+      case 'back':
+        r.varAnim = 'ref_look';
+        if (v.t >= VAR_TIMES.back) {
+          go('verdict');
+          this.emit({ type: 'var', kind: 'verdict', text: v.incident.verdict, team: v.incident.offender.team });
+        }
+        break;
+      case 'verdict': {
+        const inc = v.incident;
+        // el árbitro comunica la decisión final desde el monitor
+        r.varAnim = !inc.overturn ? 'ref_point' : inc.kind === 'goal' ? 'ref_cancel' : inc.kind === 'penalty' && !inc.truth.penalty ? 'ref_cancel'
+          : inc.kind === 'red' && inc.truth.card === 'red' ? 'ref_card' : inc.kind === 'red' ? 'ref_card' : 'ref_point';
+        r.cardColor = r.varAnim === 'ref_card' ? (inc.truth.card === 'red' ? 'red' : 'yellow') : null;
+        r.varLook = this.ball.pos;
+        if (v.t >= VAR_TIMES.verdict) this.finishVar();
+        break;
+      }
+    }
+  }
+
+  /** Termina la revisión y aplica la decisión final. */
+  private finishVar() {
+    const v = this.varReview!;
+    const inc = v.incident;
+    const ctx = this.varCtx;
+    this.varReview = null;
+    this.varCtx = null;
+    this.referee.varAnim = null;
+    this.referee.varGoto = null;
+    this.referee.varLook = null;
+    this.referee.cardColor = null;
+    this.emit({ type: 'whistle', kind: 'short' });
+    const final = inc.overturn ? inc.truth : inc.called ?? inc.truth;
+    if (inc.origin === 'foul' && ctx?.foul) {
+      this.applyFoulDecision(ctx.foul.offender, ctx.foul.victim, final, ctx.foul.severity);
+      return;
+    }
+    if (inc.origin === 'goal') {
+      // gol anulado: tiro libre para el equipo que recibió la falta
+      this.applyFoulDecision(inc.offender, inc.victim, { ...inc.truth, penalty: false }, 0.3);
+      return;
+    }
+    // falta no sancionada: se concede ahora (en vez de la reanudación prevista)
+    this.countFoul(inc.offender, inc.victim);
+    this.applyFoulDecision(inc.offender, inc.victim, final, 0.5);
   }
 
   /** ¿Conviene dejar seguir? El balón queda para un compañero de la víctima, libre y en campo prometedor. */
@@ -1630,10 +1877,15 @@ export class Match {
   }
 
   private goalScored(team: 0 | 1) {
+    if (!this.varReview && this.missed) {
+      const inc = this.missedIncident(team);
+      if (inc) { this.beginVar(inc, {}); return; }
+    }
     const t = this.teams[team];
     const lt = this.lastTouch;
     const ownGoal = !!lt && lt.team !== team;
     const scorer = lt ? lt.player : null;
+    this.missed = null;
     t.stats.goals++;
     if (scorer && !ownGoal) {
       scorer.goals++;
@@ -1710,6 +1962,12 @@ export class Match {
   }
 
   setupRestart(type: RestartType, team: 0 | 1, spot: Vector3, immediate: boolean) {
+    // el juego se detuvo (balón fuera, otra falta…): si el árbitro dejó pasar una falta grave, el VAR lo llama ahora
+    if (type !== 'kickoff' && this.missed && !this.varReview) {
+      const inc = this.missedIncident();
+      if (inc) { this.beginVar(inc, { restart: { type, team, spot: spot.clone(), immediate } }); return; }
+      if (!this.missedValid()) this.missed = null;
+    }
     this.owner = null;
     this.gkHolding = null;
     this.ball.held = false;
@@ -2076,7 +2334,7 @@ export class Match {
     const r = this.referee;
     frame.players.push({ id: 'referee', x: r.pos.x, z: r.pos.z, f: r.facing, s: r.anim.state, t: r.anim.time, sp: r.anim.speed, d: r.anim.duration, v: 0, ft: 1 });
     this.replay.push(frame);
-    if (this.replay.length > 30 * 8) this.replay.shift();
+    if (this.replay.length > 30 * 14) this.replay.shift();
   }
 
   /**

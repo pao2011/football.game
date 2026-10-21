@@ -630,6 +630,7 @@ export const pt: Dict = {
     'Radar': 'Radar',
     'Indicadores y ayudas visuales': 'Indicadores e auxílios visuais',
     'Repeticiones de goles': 'Replays de gols',
+    'Árbitro falible y VAR': 'Árbitro falível e VAR',
     'Avisos en pantalla (atajada, falta, controles…)': 'Avisos na tela (defesa, falta, controles…)',
     'Controles táctiles': 'Controles de toque',
     'Automático': 'Automático',

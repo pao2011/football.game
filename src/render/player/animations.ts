@@ -1162,6 +1162,37 @@ function referee(c: Ctx, p: Pose) {
     const e = sstep(0, 0.15, n) * (1 - sstep(0.8, 1, n));
     p.rot(BONE.uarmR, -40 * e, 25 * e, -30 * e);
     p.rot(BONE.farmR, -125 * e);
+  } else if (c.state === 'ref_ear' || c.state === 'ref_look') {
+    // VAR: mano derecha al auricular; al mirar el monitor además baja la cabeza y se inclina hacia la pantalla
+    const e = sstep(0, 0.25, Math.min(1, c.t / 0.5));
+    p.rot(BONE.uarmR, -18 * e, 8 * e, -72 * e);
+    p.rot(BONE.farmR, -122 * e);
+    p.rot(BONE.uarmL, 0, 0, 10 * e);
+    p.rot(BONE.farmL, -25 * e);
+    if (c.state === 'ref_look') {
+      p.addRot(BONE.chest, 7 * e, 0, 0);
+      p.addRot(BONE.head, 24 * e + Math.sin(c.t * 1.6) * 2, Math.sin(c.t * 0.9) * 5, 0);
+    } else {
+      p.addRot(BONE.head, 4 * e, 0, -5 * e);
+    }
+  } else if (c.state === 'ref_tv') {
+    // las dos manos dibujan una pantalla en el aire (señal de revisión)
+    const e = sstep(0, 0.12, Math.min(1, c.t / 0.4));
+    const s = 0.5 + 0.5 * Math.sin(c.t * 4.2);
+    p.rot(BONE.uarmR, -62 * e, (-8 - 30 * s) * e, -14 * e);
+    p.rot(BONE.uarmL, -62 * e, (8 + 30 * s) * e, 14 * e);
+    p.rot(BONE.farmR, -78 * e);
+    p.rot(BONE.farmL, -78 * e);
+    p.addRot(BONE.chest, 3 * e, 0, 0);
+  } else if (c.state === 'ref_cancel') {
+    // cruza los brazos y los abre de golpe: decisión anulada
+    const e = sstep(0, 0.1, Math.min(1, c.t / 0.3));
+    const sw = sstep(0.25, 0.5, n);
+    p.rot(BONE.uarmR, -58 * e, 42 * e * (1 - sw), (-14 - 62 * sw) * e);
+    p.rot(BONE.uarmL, -58 * e, -42 * e * (1 - sw), (14 + 62 * sw) * e);
+    p.rot(BONE.farmR, -22 * e);
+    p.rot(BONE.farmL, -22 * e);
+    p.addRot(BONE.chest, -3 * sw * e, 0, 0);
   }
 }
 
@@ -1296,6 +1327,10 @@ function evalState(c: Ctx, p: Pose) {
     case 'ref_warn':
     case 'ref_point':
     case 'ref_whistle':
+    case 'ref_ear':
+    case 'ref_tv':
+    case 'ref_look':
+    case 'ref_cancel':
       return referee(c, p);
     default:
       return idle(c, p);

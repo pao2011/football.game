@@ -439,3 +439,7 @@ Tipografías (todas SIL Open Font License 1.1, incluidas en `src/assets/fonts` c
 ## Soffti Club
 
 Modo coleccionable con cartas, sobres, mercado local simulado, plantillas con química y competiciones contra la IA. Ver `docs/CLUB.md`.
+
+## Árbitro falible y VAR
+
+El árbitro puede equivocarse al sancionar faltas (no verlas, no dar un penal, pitar un penal fuera del área, mostrar una tarjeta de más o de menos). La probabilidad sube con la tensión del partido (calor de los clásicos, resultado apretado, tarjetas) y con el tiempo jugado (`refereeErrorChance` en `src/sim/Var.ts`). El VAR revisa penales, rojas directas y goles tras falta: cuando el juego se detiene o el balón sale, el árbitro recibe el aviso, hace la señal de la pantalla, va al monitor junto a la banda, se ve el vídeo en directo a cámara lenta (se puede saltar) y comunica la decisión final. Se desactiva en Configuración → "Árbitro falible y VAR" (y no se usa en online ni en entrenamiento).

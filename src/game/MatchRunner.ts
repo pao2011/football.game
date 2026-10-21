@@ -154,7 +154,7 @@ export class MatchRunner {
     private readonly uiRoot: HTMLElement,
     online: OnlineLink | null = null,
   ) {
-    this.match = new Match(config);
+    this.match = new Match({ ...config, var: config.var ?? settings.varEnabled });
     this.online = online;
     this.localTeam = config.humanTeam;
     if (config.humanTeam >= 0) this.match.autoSubs[config.humanTeam as 0 | 1] = settings.autoSubs;
@@ -332,6 +332,7 @@ export class MatchRunner {
         // tras marcar el jugador del usuario: el stick derecho (o I/J/K/L, R) elige la celebración
         if (m.phase === 'goal') this.chooseCelebration();
         if (m.phase === 'replay' && (this.input.pressed('pass') || this.input.pressed('shoot') || !this.settings.replays)) m.skipReplay();
+        if (m.phase === 'var' && (this.input.pressed('pass') || this.input.pressed('shoot'))) m.skipVar();
         m.step(SIM_DT);
         for (const e of m.events) this.handleEvent(e);
         if (this.hostSync) {
@@ -396,7 +397,7 @@ export class MatchRunner {
       const pt = m.possessionTeam;
       // con el balón suelto se mantiene el modo anterior (evita parpadeos de botones)
       if (pt !== -1 || m.phase !== 'play') this.touch.setContext(pt === team.index || m.gkHolding?.team === team.index || (m.phase !== 'play' && m.restart?.team === team.index));
-      this.touch.setVisible(!this.paused && !this.inIntro && m.phase !== 'replay' && !m.finished);
+      this.touch.setVisible(!this.paused && !this.inIntro && m.phase !== 'replay' && m.phase !== 'var' && !m.finished);
     }
     if (this.autoQuality && !this.paused) {
       const step = this.autoQuality.sample(this.realDt);

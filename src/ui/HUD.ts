@@ -33,6 +33,8 @@ export class HUD {
   private shootout: HTMLElement;
   private fps: HTMLElement;
   private netEl: HTMLElement;
+  private varScreen: HTMLElement;
+  private varBar: HTMLElement;
   /** Online: texto con la latencia y el tipo de conexión (se pone desde el MatchRunner). */
   netInfo: (() => { text: string; level: 0 | 1 | 2 }) | null = null;
   private netAcc = 0;
@@ -80,7 +82,9 @@ export class HUD {
       <div class="replay-tag hidden">REPETICIÓN</div>
       <div class="shootout hidden"></div>
       <div class="fps hidden"></div>
-      <div class="net-info hidden"></div>`;
+      <div class="net-info hidden"></div>
+      <div class="var-screen hidden"></div>
+      <div class="var-bar hidden"></div>`;
     parent.appendChild(r);
     this.root = r;
     this.advBadge = r.querySelector('.adv-badge') as HTMLElement;
@@ -103,8 +107,43 @@ export class HUD {
     this.shootout = q('.shootout');
     this.fps = q('.fps');
     this.netEl = q('.net-info');
+    this.varScreen = q('.var-screen');
+    this.varBar = q('.var-bar');
+    this.varScreen.addEventListener('pointerdown', () => this.match.skipVar());
     void this.sbHome;
     void this.sbAway;
+  }
+
+  /** Gráficos del VAR: aviso, pantalla del vídeo en directo y decisión final. */
+  private updateVar() {
+    const v = this.match.varReview;
+    const on = this.match.phase === 'var' && !!v;
+    this.show(this.varBar, on && v!.stage !== 'footage');
+    this.show(this.varScreen, on && v!.stage === 'footage');
+    if (!on || !v) return;
+    const inc = v.incident;
+    if (v.stage === 'footage') {
+      const secs = Math.max(0, Math.ceil(Math.min(9, v.footageLen) - v.t));
+      this.setText(this.varScreen, `
+        <div class="vs-frame"></div><div class="vs-scan"></div>
+        <div class="vs-top"><span class="vs-logo">VAR</span><span class="vs-live"><i></i>EN VIVO</span><span class="vs-slow">CÁMARA LENTA</span></div>
+        <div class="vs-bottom"><b>${esc(inc.label)}</b><span>${esc(inc.detail)}</span></div>
+        <div class="vs-skip">${secs}s · pulsa pase o toca para saltar</div>`, true);
+      return;
+    }
+    const msg: Record<string, [string, string]> = {
+      call: [inc.label, 'El VAR llama al árbitro'],
+      tv: [inc.label, 'Revisión en curso'],
+      walk: ['REVISIÓN EN CURSO', 'El árbitro se dirige al monitor'],
+      review: ['REVISIÓN EN CURSO', 'El árbitro prepara el vídeo'],
+      back: ['REVISIÓN EN CURSO', 'El árbitro termina de revisar la jugada'],
+    };
+    if (v.stage === 'verdict') {
+      this.setText(this.varBar, `<div class="vb-final ${inc.overturn ? 'chg' : 'ok'}"><span class="vb-logo">VAR</span><div><small>DECISIÓN FINAL</small><b>${esc(inc.verdict)}</b></div></div>`, true);
+    } else {
+      const [t, s] = msg[v.stage] ?? ['VAR', ''];
+      this.setText(this.varBar, `<div class="vb-wait"><span class="vb-logo">VAR</span><div><b>${esc(t)}</b><small>${esc(s)}</small></div></div>`, true);
+    }
   }
 
   private setText(el: HTMLElement, text: string, html = false) {
@@ -200,6 +239,9 @@ export class HUD {
         break;
       case 'whistle':
         this.advUntil = -1;
+        break;
+      case 'var':
+        if (e.kind === 'start') this.showToast(`📺 VAR: ${e.text ?? ''}`, '#74acdf', 2.4);
         break;
       case 'injury':
         this.showToast(`🚑 Lesionado: ${e.text ?? ''}`, '#ff6b76');
@@ -332,6 +374,7 @@ export class HUD {
       this.fpsAcc = 0;
     }
     this.show(this.fps, this.showFps);
+    this.updateVar();
     if (this.netInfo) {
       this.netAcc += dt;
       if (this.netAcc > 1 || !this.netEl.textContent) {
