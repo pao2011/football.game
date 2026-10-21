@@ -39,6 +39,7 @@ import { isTouchDevice } from '../input/TouchControls';
 import { gamepadBlocked } from '../input/pads';
 import { NetClient, cachedProfile, serverCandidates, type FinalMsg, type MatchStart, type OnlineProfile, type ServerMsg } from '../net/NetClient';
 import { DIVISIONS } from '../../server/divisions.mjs';
+import { login, logout, register, session, setAccountServer, startSync, syncNow } from '../net/Account';
 import type { OnlineLink } from '../game/MatchRunner';
 
 /** Descarga directa de la APK de Android (la publica GitHub Actions en cada actualización de main). */
@@ -300,6 +301,10 @@ export class App {
   // ==================================================================
 
   start() {
+    setAccountServer(this.settings.onlineServer);
+    startSync();
+    // al abrir: trae el progreso más reciente de la cuenta; si cambió algo, recarga una vez para usarlo
+    if (session()) syncNow(true).then((changed) => { if (changed) location.reload(); }).catch(() => undefined);
     this.setMenuMode(true);
     const s = this.show(`
       <div class="logo"><div class="l1">SOFFTI'S FOOTBALL</div><div class="l2">GAME</div></div>
@@ -470,12 +475,62 @@ export class App {
       { act: 'editor', icon: '✏️', title: 'Editor de equipos', sub: 'Crea tu equipo · exportar e importar', go: () => this.teamEditorList() },
       { act: 'replays', icon: '🎬', title: 'Repeticiones', sub: 'Tus jugadas guardadas', go: () => this.replaysScreen() },
       { act: 'achievements', icon: '🏅', title: 'Logros', sub: `${Object.keys(unlockedSet()).length}/${ACHIEVEMENTS.length} desbloqueados`, go: () => this.achievementsScreen() },
+      { act: 'account', icon: '☁️', title: 'Cuenta', sub: session() ? `${esc(session()!.name)} · progreso en la nube` : 'Guarda tu progreso y juega en otro dispositivo', go: () => this.accountScreen() },
       { act: 'controls', icon: '🎮', title: 'Controles', sub: 'Teclado y mando · reasignar teclas', go: () => this.controlsScreen(() => this.moreMenu()) },
       { act: 'settings', icon: '⚙️', title: 'Configuración', sub: 'Gráficos, sonido y jugabilidad', go: () => this.settingsScreen(() => this.moreMenu()) },
     ];
     if (!isElectron && !isNativeApp()) cards.push({ act: 'apk', icon: '📲', title: 'Descargar APK', sub: 'Instala el juego en tu Android', go: () => { window.open(APK_URL, '_blank', 'noopener'); } });
     if (isElectron) cards.push({ act: 'quit', icon: '⏻', title: 'Salir', sub: 'Cerrar el juego', go: () => window.close() });
     this.cardsMenu('SOFFTI\'S FOOTBALL GAME', 'Más', cards);
+  }
+
+
+  // ==================================================================
+  // Cuenta (progreso en la nube)
+  // ==================================================================
+
+  private accountScreen(msg = '', error = '', tab: 'login' | 'register' = 'login', keep: { name?: string; mail?: string; who?: string } = {}) {
+    this.setMenuMode(true);
+    const s = session();
+    const form = s
+      ? `<h3 style="margin-top:0">${esc(s.name)}</h3><div class="muted">${esc(s.email)}</div>
+         <p class="muted">Tu club, carrera, copas y logros se guardan en la nube y se sincronizan al abrir el juego y poco después de cada cambio.</p>
+         <div class="row"><button class="btn primary" data-act="sync">Sincronizar ahora</button><button class="btn" data-act="logout">Cerrar sesión</button></div>`
+      : `<div class="acc-tabs"><button class="btn ${tab === 'login' ? 'primary' : ''}" data-act="tabLogin">Entrar</button><button class="btn ${tab === 'register' ? 'primary' : ''}" data-act="tabRegister">Crear cuenta</button></div>
+         ${tab === 'register' ? `<div class="row"><label for="ac-name">Nombre</label><input class="text-in" id="ac-name" maxlength="20" autocomplete="username" value="${esc(keep.name ?? '')}"></div>
+           <div class="row"><label for="ac-mail">Gmail</label><input class="text-in" id="ac-mail" type="email" autocomplete="email" value="${esc(keep.mail ?? '')}"></div>`
+           : `<div class="row"><label for="ac-who">Gmail o nombre</label><input class="text-in" id="ac-who" autocomplete="username" value="${esc(keep.who ?? '')}"></div>`}
+         <div class="row"><label for="ac-pw">Contraseña</label><input class="text-in" id="ac-pw" type="password" minlength="8" autocomplete="${tab === 'register' ? 'new-password' : 'current-password'}" data-enter="submit"></div>
+         <div class="muted" style="font-size:12px;margin:8px 0">Mínimo 8 caracteres. Aún no hay recuperación de contraseña: guárdala bien.</div>`;
+    const sc = this.show(`
+      <div class="screen-header"><div><div class="crumb">MÁS</div><h2>Cuenta</h2></div></div>
+      <div class="screen-body"><div class="panel" style="max-width:520px;margin:0 auto">
+        ${form}
+        ${msg ? `<div class="net-status">${esc(msg)}</div>` : ''}${error ? `<div class="sub-msg" role="alert">${esc(error)}</div>` : ''}
+      </div></div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button>${s ? '' : `<button class="btn primary" data-act="submit">${tab === 'register' ? 'Crear cuenta' : 'Entrar'}</button>`}</div>`, {
+      back: () => this.moreMenu(),
+      tabLogin: () => this.accountScreen('', '', 'login'),
+      tabRegister: () => this.accountScreen('', '', 'register'),
+      logout: async () => { await logout(); this.accountScreen('Sesión cerrada. Tu progreso sigue en este dispositivo.'); },
+      sync: async () => {
+        this.accountScreen('Sincronizando…');
+        try { if (await syncNow(true)) location.reload(); else this.accountScreen('Todo está al día ✔'); } catch (e) { this.accountScreen('', (e as Error).message); }
+      },
+      submit: async () => {
+        const v = (id: string) => ((sc.root.querySelector(id) as HTMLInputElement)?.value ?? '').trim();
+        const pw = (sc.root.querySelector('#ac-pw') as HTMLInputElement)?.value ?? '';
+        const [name, mail, who] = [v('#ac-name'), v('#ac-mail'), v('#ac-who')];
+        this.accountScreen(tab === 'register' ? 'Creando cuenta…' : 'Entrando…', '', tab, { name, mail, who });
+        try {
+          if (tab === 'register') await register(name, mail, pw);
+          else await login(who, pw);
+          // primera vez en este dispositivo: sube lo local y trae lo de la nube
+          if (await syncNow(true)) { location.reload(); return; }
+          this.accountScreen('¡Listo! Tu progreso ya está en la nube ☁️');
+        } catch (e) { this.accountScreen('', (e as Error).message, tab, { name, mail, who }); }
+      },
+    }, () => this.moreMenu(), 'mm-sub');
   }
 
   // ==================================================================

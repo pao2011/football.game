@@ -3,6 +3,23 @@ import type { Dict } from './index';
 // Traducción al inglés. Las claves son el texto en español tal como aparece en pantalla.
 export const en: Dict = {
   exact: {
+    'Cuenta': 'Account',
+    'Guarda tu progreso y juega en otro dispositivo': 'Save your progress and play on another device',
+    'Entrar': 'Sign in',
+    'Crear cuenta': 'Create account',
+    'Gmail': 'Gmail',
+    'Gmail o nombre': 'Gmail or name',
+    'Contraseña': 'Password',
+    'Mínimo 8 caracteres. Aún no hay recuperación de contraseña: guárdala bien.': 'At least 8 characters. There is no password recovery yet: keep it safe.',
+    'Sincronizar ahora': 'Sync now',
+    'Cerrar sesión': 'Sign out',
+    'Tu club, carrera, copas y logros se guardan en la nube y se sincronizan al abrir el juego y poco después de cada cambio.': 'Your club, career, cups and achievements are saved in the cloud and synced when you open the game and shortly after each change.',
+    'Sincronizando…': 'Syncing…',
+    'Todo está al día ✔': 'Everything is up to date ✔',
+    'Creando cuenta…': 'Creating account…',
+    'Entrando…': 'Signing in…',
+    '¡Listo! Tu progreso ya está en la nube ☁️': 'Done! Your progress is now in the cloud ☁️',
+    'Sesión cerrada. Tu progreso sigue en este dispositivo.': 'Signed out. Your progress stays on this device.',
     '¡LO LOGRASTE!': 'YOU DID IT!',
     'NUEVO CAMPEÓN': 'NEW CHAMPION',
     'toca para continuar': 'tap to continue',

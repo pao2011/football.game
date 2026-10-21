@@ -3,6 +3,23 @@ import type { Dict } from './index';
 // Traducción al portugués (Brasil). Las claves son el texto en español tal como aparece en pantalla.
 export const pt: Dict = {
   exact: {
+    'Cuenta': 'Conta',
+    'Guarda tu progreso y juega en otro dispositivo': 'Salve seu progresso e jogue em outro dispositivo',
+    'Entrar': 'Entrar',
+    'Crear cuenta': 'Criar conta',
+    'Gmail': 'Gmail',
+    'Gmail o nombre': 'Gmail ou nome',
+    'Contraseña': 'Senha',
+    'Mínimo 8 caracteres. Aún no hay recuperación de contraseña: guárdala bien.': 'Mínimo 8 caracteres. Ainda não há recuperação de senha: guarde-a bem.',
+    'Sincronizar ahora': 'Sincronizar agora',
+    'Cerrar sesión': 'Sair',
+    'Tu club, carrera, copas y logros se guardan en la nube y se sincronizan al abrir el juego y poco después de cada cambio.': 'Seu clube, carreira, copas e conquistas ficam salvos na nuvem e são sincronizados ao abrir o jogo e logo após cada mudança.',
+    'Sincronizando…': 'Sincronizando…',
+    'Todo está al día ✔': 'Tudo está em dia ✔',
+    'Creando cuenta…': 'Criando conta…',
+    'Entrando…': 'Entrando…',
+    '¡Listo! Tu progreso ya está en la nube ☁️': 'Pronto! Seu progresso já está na nuvem ☁️',
+    'Sesión cerrada. Tu progreso sigue en este dispositivo.': 'Sessão encerrada. Seu progresso continua neste dispositivo.',
     '¡LO LOGRASTE!': 'VOCÊ CONSEGUIU!',
     'NUEVO CAMPEÓN': 'NOVO CAMPEÃO',
     'toca para continuar': 'toque para continuar',
