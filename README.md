@@ -8,6 +8,8 @@
   <img alt="Icono" src="docs/art/icon-1024.png" width="96">
 </p>
 
+**🌐 Jugar en el navegador (sin instalar): https://pao2011.github.io/football.game/** · sitio web: https://pao2011.github.io/football.game/sitio/
+
 **📲 [Descargar el APK para Android](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.apk)** — se publica automáticamente en *Releases* cada vez que se actualiza `main`. También desde el servidor online: **https://football-elite-3d-19vc.onrender.com/apk**, o con el botón *Descargar APK* del menú de la versión web.
 
 **💻 [Descargar para Windows](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D-Windows.zip)** (extrae el ZIP y abre `FootballElite3D.exe`) · **[Juego en un solo archivo HTML](https://github.com/pao2011/football.game/releases/latest/download/FootballElite3D.html)** (cualquier PC: doble clic). Se publican en *Releases* con cada actualización de `main`.
