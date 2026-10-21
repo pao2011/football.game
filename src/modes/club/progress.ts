@@ -1,4 +1,5 @@
 import { addTx } from './economy';
+import { packById } from './packs';
 import type { ClubState, ObjectiveProgress, Records } from './types';
 import { dayId, hash32, seeded, weekId } from './util';
 
@@ -11,7 +12,7 @@ export function rewardText(r: Reward): string {
   const t: string[] = [];
   if (r.coins) t.push(`${r.coins.toLocaleString('es-ES')} monedas`);
   if (r.xp) t.push(`${r.xp} XP`);
-  for (const [k, n] of Object.entries(r.packs ?? {})) t.push(`${n} sobre${n > 1 ? 's' : ''} ${k === 'promo' ? 'promocional' : k === 'basic' ? 'básico' : k === 'premium' ? 'premium' : k}${n > 1 ? 'es' : ''}`.replace('promocionales', 'promocionales'));
+  for (const [k, n] of Object.entries(r.packs ?? {})) t.push(`${n > 1 ? `${n} × ` : ''}${packById(k)?.name ?? `Sobre ${k}`}`);
   return t.join(' + ');
 }
 
@@ -73,17 +74,78 @@ export function currentSeason(now: number): SeasonDef {
   return { id: `s${SEASONS.length + 1 + n}`, name: `Temporada ${SEASONS.length + 1 + n}`, start, end: start + SEASON_LEN };
 }
 
-export interface SeasonMilestone { id: string; points: number; reward: Reward }
-export const SEASON_MILESTONES: SeasonMilestone[] = [
-  { id: 'sm1', points: 100, reward: { coins: 1000 } },
-  { id: 'sm2', points: 300, reward: { packs: { promo: 1 } } },
-  { id: 'sm3', points: 600, reward: { coins: 3000, xp: 300 } },
-  { id: 'sm4', points: 1000, reward: { packs: { premium: 1 } } },
-  { id: 'sm5', points: 1600, reward: { coins: 8000, packs: { special: 1 } } },
-];
+// ---------- Pase de temporada ----------
+// 30 niveles por temporada con una pista gratis y otra premium. La premium se desbloquea con monedas del juego
+// (nunca con dinero real). La XP del pase son los puntos de temporada: partidos, objetivos, sobres, desafíos y misiones.
+export const PASS_LEVELS = 30;
+export const PASS_LEVEL_POINTS = 150;
+export const PASS_PREMIUM_COST = 30000;
+export type PassTrack = 'free' | 'premium';
+
+export function passLevel(points: number): number { return Math.min(PASS_LEVELS, Math.floor(points / PASS_LEVEL_POINTS)); }
+
+/** Recompensa de un nivel del pase (1..30). */
+export function passReward(track: PassTrack, level: number): Reward {
+  if (track === 'free') {
+    if (level === PASS_LEVELS) return { packs: { pick82: 1 } };
+    if (level % 10 === 0) return { packs: { gold: 1 } };
+    if (level % 5 === 0) return { packs: { premium: 1 } };
+    if (level % 3 === 0) return { packs: { promo: 1 } };
+    return level % 2 ? { coins: 300 + level * 25 } : { xp: 120 + level * 6 };
+  }
+  if (level === PASS_LEVELS) return { packs: { legend: 1 }, coins: 10000 };
+  if (level === 20) return { packs: { pick82: 1 } };
+  if (level % 10 === 0) return { packs: { special: 1 } };
+  if (level % 5 === 0) return { packs: { mega: 1 } };
+  if (level % 4 === 0) return { packs: { gold: 1 } };
+  return { coins: 800 + level * 60, xp: level % 2 ? 0 : 150 };
+}
+
+const passKey = (track: PassTrack, level: number) => `${track === 'free' ? 'f' : 'p'}${level}`;
+export function passClaimed(s: ClubState, track: PassTrack, level: number) { return s.progress.season.claimed.includes(passKey(track, level)); }
+
+/** Recompensas del pase listas para reclamar. */
+export function passPending(s: ClubState): number {
+  const lv = passLevel(s.progress.season.points);
+  let n = 0;
+  for (let l = 1; l <= lv; l++) {
+    if (!passClaimed(s, 'free', l)) n++;
+    if (s.progress.season.premium && !passClaimed(s, 'premium', l)) n++;
+  }
+  return n;
+}
+
+export function claimPass(s: ClubState, track: PassTrack, level: number, now: number): { ok: boolean; error?: string; reward?: Reward } {
+  ensurePeriods(s, now);
+  if (!Number.isInteger(level) || level < 1 || level > PASS_LEVELS) return { ok: false, error: 'Nivel del pase no válido.' };
+  if (passLevel(s.progress.season.points) < level) return { ok: false, error: 'Todavía no alcanzaste ese nivel del pase.' };
+  if (track === 'premium' && !s.progress.season.premium) return { ok: false, error: 'Desbloquea el pase premium para reclamar esta recompensa.' };
+  if (passClaimed(s, track, level)) return { ok: false, error: 'Ya reclamaste esta recompensa.' };
+  s.progress.season.claimed.push(passKey(track, level));
+  const r = passReward(track, level);
+  grant(s, r, `Pase ${track === 'free' ? 'gratis' : 'premium'} · nivel ${level}`, now);
+  return { ok: true, reward: r };
+}
+
+/** Reclama todo lo disponible del pase. */
+export function claimAllPass(s: ClubState, now: number): number {
+  let n = 0;
+  for (let l = 1; l <= PASS_LEVELS; l++) for (const t of ['free', 'premium'] as const) if (claimPass(s, t, l, now).ok) n++;
+  return n;
+}
+
+export function unlockPremiumPass(s: ClubState, now: number): { ok: boolean; error?: string } {
+  ensurePeriods(s, now);
+  if (s.progress.season.premium) return { ok: false, error: 'Ya tienes el pase premium de esta temporada.' };
+  const tx = addTx(s, 'pass', -PASS_PREMIUM_COST, 'Pase premium de temporada', now);
+  if (!tx.ok) return { ok: false, error: tx.error };
+  s.progress.season.premium = true;
+  return { ok: true };
+}
 
 // ---------- Objetivos ----------
-export type Metric = 'matches' | 'wins' | 'goals' | 'cleanSheets' | 'passes' | 'shots' | 'tackles' | 'packs' | 'market' | 'sbc' | 'squadBattles' | 'rivals';
+export type Metric = 'matches' | 'wins' | 'goals' | 'cleanSheets' | 'passes' | 'shots' | 'tackles' | 'packs' | 'market' | 'sbc' | 'squadBattles' | 'rivals'
+  | 'evoStart' | 'evoLevel' | 'chemMatch' | 'onlineMatch' | 'onlineWin';
 export interface ObjectiveDef { id: string; text: string; metric: Metric; target: number; reward: Reward }
 
 export const DAILY_POOL: ObjectiveDef[] = [
@@ -127,7 +189,7 @@ export function ensurePeriods(s: ClubState, now: number) {
   if (p.daily.dayId !== day) p.daily = { dayId: day, objectives: pick(DAILY_POOL, `d|${s.id}|${day}`, 4), claimed: [] };
   if (p.weekly.weekId !== week) p.weekly = { weekId: week, objectives: pick(WEEKLY_POOL, `w|${s.id}|${week}`, 3), claimed: [] };
   const season = currentSeason(now);
-  if (p.season.id !== season.id) p.season = { id: season.id, points: 0, claimed: [] };
+  if (p.season.id !== season.id) p.season = { id: season.id, points: 0, claimed: [], premium: false };
   if (p.matchesToday.dayId !== day) p.matchesToday = { dayId: day, n: 0 };
 }
 
@@ -141,6 +203,8 @@ export function track(s: ClubState, metric: Metric, n: number, now: number) {
       if (d && d.metric === metric) o.progress = Math.min(d.target, o.progress + n);
     }
   }
+  const m = s.progress.missions;
+  for (const g of MISSIONS) for (const t of g.tasks) if (t.metric === metric) m.progress[t.id] = Math.min(t.target, (m.progress[t.id] ?? 0) + n);
 }
 
 export function addSeasonPoints(s: ClubState, n: number, now: number) {
@@ -210,13 +274,60 @@ export function claimMilestone(s: ClubState, id: string, now: number): { ok: boo
   grant(s, m.reward, m.text, now);
   return { ok: true, reward: m.reward };
 }
-export function claimSeasonMilestone(s: ClubState, id: string, now: number): { ok: boolean; error?: string; reward?: Reward } {
-  ensurePeriods(s, now);
-  const m = SEASON_MILESTONES.find((x) => x.id === id);
-  if (!m) return { ok: false, error: 'Hito de temporada no encontrado.' };
-  if (s.progress.season.claimed.includes(id)) return { ok: false, error: 'Ya reclamaste este hito.' };
-  if (s.progress.season.points < m.points) return { ok: false, error: 'Todavía no tienes los puntos necesarios.' };
-  s.progress.season.claimed.push(id);
-  grant(s, m.reward, `Hito de temporada (${m.points} pts)`, now);
-  return { ok: true, reward: m.reward };
+// ---------- Misiones ----------
+// Grupos de tareas que se completan a la vez (no caducan). Cada tarea da su premio y el grupo entero, uno mayor.
+export interface MissionTask { id: string; text: string; metric: Metric; target: number; reward: Reward }
+export interface MissionGroup { id: string; name: string; blurb: string; tasks: MissionTask[]; reward: Reward }
+const mt = (id: string, text: string, metric: Metric, target: number, coins: number, xp = Math.round(coins / 8)): MissionTask => ({ id, text, metric, target, reward: { coins, xp } });
+export const MISSIONS: MissionGroup[] = [
+  { id: 'g_start', name: 'Primeros pasos', blurb: 'Aprende lo básico del modo.', reward: { packs: { premium: 1 } }, tasks: [
+    mt('ms_pack1', 'Abre un sobre', 'packs', 1, 300), mt('ms_play1', 'Juega un partido', 'matches', 1, 300), mt('ms_win1', 'Gana un partido', 'wins', 1, 500),
+    mt('ms_mkt1', 'Haz una operación en el mercado', 'market', 1, 300), mt('ms_evo1', 'Empieza una evolución', 'evoStart', 1, 500)] },
+  { id: 'g_goal', name: 'Goleador', blurb: 'Llena la red partido a partido.', reward: { packs: { gold: 1 } }, tasks: [
+    mt('ms_g10', 'Marca 10 goles', 'goals', 10, 800), mt('ms_g30', 'Marca 30 goles', 'goals', 30, 1500), mt('ms_g75', 'Marca 75 goles', 'goals', 75, 3000)] },
+  { id: 'g_wall', name: 'La muralla', blurb: 'Defender también gana partidos.', reward: { packs: { mega: 1 } }, tasks: [
+    mt('ms_cs2', 'Dos porterías a cero', 'cleanSheets', 2, 800), mt('ms_cs6', 'Seis porterías a cero', 'cleanSheets', 6, 2000), mt('ms_tk100', 'Gana 100 entradas', 'tackles', 100, 1500)] },
+  { id: 'g_chem', name: 'Química perfecta', blurb: 'Juega con un once bien conectado (25 o más de química).', reward: { packs: { special: 1 } }, tasks: [
+    mt('ms_ch1', 'Un partido con química 25+', 'chemMatch', 1, 800), mt('ms_ch5', 'Cinco partidos con química 25+', 'chemMatch', 5, 2500)] },
+  { id: 'g_evo', name: 'Laboratorio de evoluciones', blurb: 'Haz crecer a tus jugadores.', reward: { packs: { pick82: 1 } }, tasks: [
+    mt('ms_ev2', 'Empieza dos evoluciones', 'evoStart', 2, 1000), mt('ms_evl3', 'Completa 3 niveles de evolución', 'evoLevel', 3, 1500), mt('ms_evl8', 'Completa 8 niveles de evolución', 'evoLevel', 8, 4000)] },
+  { id: 'g_online', name: 'Leyenda online', blurb: 'Enfréntate a otros clubes reales.', reward: { packs: { special: 1 }, coins: 5000 }, tasks: [
+    mt('ms_on1', 'Juega un partido online', 'onlineMatch', 1, 1000), mt('ms_onw1', 'Gana un partido online', 'onlineWin', 1, 1500), mt('ms_onw5', 'Gana 5 partidos online', 'onlineWin', 5, 5000)] },
+  { id: 'g_collect', name: 'Coleccionista', blurb: 'Sobres y desafíos.', reward: { packs: { legend: 1 } }, tasks: [
+    mt('ms_pk10', 'Abre 10 sobres', 'packs', 10, 1500), mt('ms_sbc3', 'Completa 3 desafíos de plantilla', 'sbc', 3, 3000), mt('ms_pk40', 'Abre 40 sobres', 'packs', 40, 6000)] },
+];
+export const missionTask = (id: string) => MISSIONS.flatMap((g) => g.tasks).find((t) => t.id === id);
+
+export function missionsPending(s: ClubState): number {
+  const m = s.progress.missions;
+  let n = 0;
+  for (const g of MISSIONS) {
+    for (const t of g.tasks) if ((m.progress[t.id] ?? 0) >= t.target && !m.claimed.includes(t.id)) n++;
+    if (!m.groups.includes(g.id) && g.tasks.every((t) => m.claimed.includes(t.id))) n++;
+  }
+  return n;
+}
+
+export function claimMissionTask(s: ClubState, id: string, now: number): { ok: boolean; error?: string; reward?: Reward } {
+  const t = missionTask(id);
+  const m = s.progress.missions;
+  if (!t) return { ok: false, error: 'Misión no encontrada.' };
+  if (m.claimed.includes(id)) return { ok: false, error: 'Ya reclamaste esta misión.' };
+  if ((m.progress[id] ?? 0) < t.target) return { ok: false, error: 'Todavía no completaste la misión.' };
+  m.claimed.push(id);
+  grant(s, t.reward, `Misión: ${t.text}`, now);
+  addSeasonPoints(s, 30, now);
+  return { ok: true, reward: t.reward };
+}
+
+export function claimMissionGroup(s: ClubState, id: string, now: number): { ok: boolean; error?: string; reward?: Reward } {
+  const g = MISSIONS.find((x) => x.id === id);
+  const m = s.progress.missions;
+  if (!g) return { ok: false, error: 'Grupo de misiones no encontrado.' };
+  if (m.groups.includes(id)) return { ok: false, error: 'Ya reclamaste este grupo.' };
+  if (!g.tasks.every((t) => m.claimed.includes(t.id))) return { ok: false, error: 'Reclama antes todas sus misiones.' };
+  m.groups.push(id);
+  grant(s, g.reward, `Misiones: ${g.name}`, now);
+  addSeasonPoints(s, 100, now);
+  return { ok: true, reward: g.reward };
 }

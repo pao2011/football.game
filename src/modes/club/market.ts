@@ -193,6 +193,7 @@ export function listCard(s: ClubState, uid: string, price: number, hours: 1 | 3 
   const d = getCardDef(card.defId);
   if (!d) return fail('Carta desconocida.');
   if (usedInSquads(s, uid)) return fail('La carta está en una de tus plantillas: quítala antes de venderla.');
+  if (d.evo || s.evos?.some((e) => e.uid === uid)) return fail('Las cartas evolucionadas (o en evolución) no se pueden vender en el mercado.');
   const band = listPriceBand(d);
   if (!Number.isInteger(price) || price < band.min || price > band.max) return fail(`El precio debe estar entre ${band.min.toLocaleString('es-ES')} y ${band.max.toLocaleString('es-ES')}.`);
   if (s.market.mine.length >= 20) return fail('Ya tienes 20 cartas en venta.');

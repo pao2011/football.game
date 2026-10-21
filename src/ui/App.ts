@@ -30,6 +30,7 @@ import type { Fixture, StandingRow } from '../modes/Competition';
 import { crestSVG, kitSVG } from './Crest';
 import { ClubUI } from './club/ClubUI';
 import type { ClubMatchMeta } from '../modes/club/Club';
+import { sanitizeOnlineTeam } from '../modes/club/squads';
 import { ceremonySeen, markCeremonySeen, playCeremony } from './Ceremony';
 import { TEAM_SORTS, leagueLabel, searchTeams, teamLeagueId, type TeamSort } from './teamSearch';
 import { Screen, el, esc, type Handlers } from './dom';
@@ -123,6 +124,8 @@ export class App {
   private onlineTeam = 0;
   /** Resultado online pendiente de los puntos de Rivals. */
   private onlineFinal: FinalMsg | null = null;
+  /** Partido online de Soffti Club en curso: se contabiliza en el club al llegar el resultado del servidor. */
+  private clubOnline: { meta: ClubMatchMeta; stats?: { passes: number; passesOk: number; shots: number; tackles: number }; half: number; role: 'host' | 'guest' } | null = null;
   private onlineWatch = 0;
 
   constructor(private canvas: HTMLCanvasElement, ui: HTMLElement) {
@@ -439,7 +442,57 @@ export class App {
       const ctx: MatchContext = { mode: 'club', meta };
       this.playMatch(cfg, this.stadiumForCtx(ctx), ctx);
     },
+    clubOnline: () => {
+      if (this.net?.connected) { this.clubOnlineQueue(); return; }
+      if (!this.settings.onlineName) this.settings.onlineName = this.clubUI.club.s.identity.name.slice(0, 16);
+      this.connectOnline(() => this.clubOnlineQueue());
+    },
   });
+
+  /** Busca otro club online con la plantilla activa de Soffti Club. */
+  private clubOnlineQueue() {
+    const net = this.net;
+    const club = this.clubUI.club;
+    const r = club.onlineTeam(Date.now());
+    if (!net?.connected) { this.onlineMenu(); return; }
+    if (!r.ok) { this.clubUI.toast(r.error, 'err'); this.clubUI.hub(); return; }
+    this.clubOnline = { meta: r.value.meta, half: 4, role: 'host' };
+    net.send({ t: 'queue', mode: 'club', team: r.value.team.id, squad: r.value.team });
+    const t0 = performance.now();
+    const ev = club.evalSquad();
+    const html = () => {
+      const sec = Math.floor((performance.now() - t0) / 1000);
+      return `<div class="panel modal" style="margin:auto;text-align:center">
+        <div class="crumb">SOFFTI CLUB · ONLINE</div><h2>Buscando club rival</h2>
+        <div style="display:flex;justify-content:center;margin:8px 0">${crestSVG(r.value.team, 72)}</div>
+        <div><b>${esc(club.s.identity.name)}</b> · valoración <b class="num">${ev.ovr}</b> · química <b class="num">${ev.chem}</b></div>
+        <div class="net-status" style="justify-content:center"><span class="spinner"></span>${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</div>
+        <div class="muted" style="margin:10px 0">Tu plantilla contra la de otro jugador real. Gana monedas, XP, puntos online y progreso de misiones y evoluciones. Abandonar cuenta como derrota.</div>
+        <button class="btn" data-act="cancel">Cancelar</button></div>`;
+    };
+    const cancel = () => { window.clearInterval(timer); net.send({ t: 'cancel' }); this.clubOnline = null; this.clubUI.hub(); };
+    const sc = this.show(html(), { cancel }, cancel);
+    const timer = window.setInterval(() => {
+      if (this.screen !== sc) { window.clearInterval(timer); return; }
+      const st = sc.root.querySelector('.net-status');
+      const sec = Math.floor((performance.now() - t0) / 1000);
+      if (st) st.innerHTML = `<span class="spinner"></span>${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    }, 500);
+  }
+
+  /** Contabiliza en el club el resultado online que confirmó el servidor. */
+  private creditClubOnline(f: FinalMsg): string {
+    const co = this.clubOnline;
+    if (!co || f.mode !== 'club') return '';
+    this.clubOnline = null;
+    if (!f.outcome) return '<div class="muted">Los dos jugadores informaron resultados distintos: el partido no cuenta para tu club.</div>';
+    const me = co.role === 'host' ? 0 : 1;
+    const o = f.outcome;
+    const gf = me === 0 ? o.home : o.away;
+    const ga = me === 0 ? o.away : o.home;
+    const out = this.clubUI.club.finishMatch(co.meta, { gf, ga, pensWin: gf === ga && o.pens >= 0 ? o.pens === me : undefined, ...(co.stats ?? { passes: 0, passesOk: 0, shots: 0, tackles: 0 }), halfMinutes: co.half, forfeit: o.forfeit === me }, Date.now());
+    return out ? this.clubUI.resultHTML(out) : '';
+  }
 
   /** Ceremonia de campeón (una sola vez por copa): se lanza al abrir el menú de la competición ya terminada. */
   private celebrate(key: string, champion: TeamData | null, cup: string, detail: string, user: boolean, logo?: string) {
@@ -1181,7 +1234,7 @@ export class App {
     if (ctx?.mode === 'online') {
       window.clearInterval(this.onlineWatch);
       if (wasRunning) this.net?.send({ t: 'leave' });
-      this.onlineHub();
+      if (ctx.start.mode === 'club') this.clubUI.hub(); else this.onlineHub();
       return;
     }
     if (ctx?.mode === 'tournament') this.tournamentHub();
@@ -1265,6 +1318,10 @@ export class App {
     if (ctx.mode === 'online') {
       window.clearInterval(this.onlineWatch);
       this.net?.send({ t: 'result', home: r.home, away: r.away, pens: r.penalties ? r.winner : -1 });
+      if (ctx.start.mode === 'club' && this.clubOnline && m.config.humanTeam >= 0) {
+        const st = m.teams[m.config.humanTeam as 0 | 1].stats;
+        this.clubOnline.stats = { passes: st.passes, passesOk: st.passesCompleted, shots: st.shots, tackles: st.tackles };
+      }
       if (ctx.start.mode === 'rivals' && r.winner === m.config.humanTeam) addAch('rivals');
     }
     this.runner?.dispose();
@@ -1272,7 +1329,7 @@ export class App {
     this.setMenuMode(true);
     const scorers = (t: typeof h) => t.scorers.map((s) => `⚽ ${esc(s.name)} ${s.minute}'`).join('<br>') || '<span class="muted">—</span>';
     const pens = r.penalties ? `<div class="muted" style="text-align:center">Penales: ${r.penalties[0]} - ${r.penalties[1]}</div>` : '';
-    const cont = ctx.mode === 'online' ? 'Menú online' : ctx.mode === 'tournament' ? 'Volver al torneo' : ctx.mode === 'career' ? 'Volver a la carrera' : ctx.mode === 'continental' ? 'Volver a la copa' : ctx.mode === 'club' ? 'Volver al club' : ctx.mode === 'training' ? 'Entrenamiento' : 'Menú principal';
+    const cont = ctx.mode === 'online' ? (ctx.start.mode === 'club' ? 'Volver al club' : 'Menú online') : ctx.mode === 'tournament' ? 'Volver al torneo' : ctx.mode === 'career' ? 'Volver a la carrera' : ctx.mode === 'continental' ? 'Volver a la copa' : ctx.mode === 'club' ? 'Volver al club' : ctx.mode === 'training' ? 'Entrenamiento' : 'Menú principal';
     this.show(`
       <div class="screen-header"><div><div class="crumb">RESULTADO FINAL</div><h2>${r.winner === -1 ? 'Empate' : `Gana ${esc(m.teams[r.winner].data.name)}`}</h2></div></div>
       <div class="screen-body"><div class="grid2">
@@ -1285,7 +1342,7 @@ export class App {
           ${clubBlock}
           ${availabilityMsgs.length ? `<div class="avail-msgs"><div class="crumb">PARTE MÉDICO Y SANCIONES</div>${availabilityMsgs.map((x) => `<div>${esc(x)}</div>`).join('')}</div>` : ''}
         </div>
-        <div class="panel">${ctx.mode === 'online' && ctx.start.mode === 'rivals' ? '<div class="rivals-change"><div class="net-status"><span class="spinner"></span>Calculando puntos de Division Rivals…</div></div>' : ''}${this.statsHTML(m)}</div>
+        <div class="panel">${ctx.mode === 'online' && ctx.start.mode !== 'friendly' ? `<div class="rivals-change"><div class="net-status"><span class="spinner"></span>${ctx.start.mode === 'club' ? 'Esperando la confirmación del resultado…' : 'Calculando puntos de Division Rivals…'}</div></div>` : ''}${this.statsHTML(m)}</div>
       </div></div>
       <div class="screen-footer">
         ${ctx.mode === 'quick' ? '<button class="btn" data-act="rematch">Revancha</button>' : ''}
@@ -1352,7 +1409,7 @@ export class App {
     }, () => this.mainMenu());
   }
 
-  private async connectOnline() {
+  private async connectOnline(after?: () => void) {
     const net = this.net ?? new NetClient();
     this.net = net;
     this.onlineMenu('Conectando…');
@@ -1378,7 +1435,7 @@ export class App {
         this.onlineMenu('', 'Se perdió la conexión con el servidor.');
       }
     };
-    this.onlineHub();
+    if (after) after(); else this.onlineHub();
   }
 
   private onlineTeamStepper() {
@@ -1511,7 +1568,7 @@ export class App {
     this.setMenuMode(true);
     this.show(`<div class="panel modal" style="margin:auto;text-align:center"><h2>${esc(title)}</h2><p>${esc(text)}</p>
       ${rivalsBox ? '<div class="rivals-change"></div>' : ''}
-      <button class="btn primary" data-act="ok">Continuar</button></div>`, { ok: () => this.onlineHub() }, () => this.onlineHub());
+      <button class="btn primary" data-act="ok">Continuar</button></div>`, { ok: () => this.onlineBack() }, () => this.onlineBack());
     if (rivalsBox) this.showOnlineFinal();
   }
 
@@ -1568,10 +1625,13 @@ export class App {
           this.onlineNotice('Fin de la transmisión', (m as unknown as { forfeit: boolean }).forfeit ? 'Uno de los jugadores abandonó el partido.' : 'El partido terminó.');
         }
         break;
-      case 'final':
-        this.onlineFinal = m as unknown as FinalMsg;
+      case 'final': {
+        const f = m as unknown as FinalMsg;
+        this.onlineFinal = f;
+        if (f.mode === 'club') this.clubFinalHTML = this.creditClubOnline(f);
         this.showOnlineFinal();
         break;
+      }
     }
   }
 
@@ -1580,6 +1640,10 @@ export class App {
     const f = this.onlineFinal;
     const box = this.screen?.root.querySelector('.rivals-change') as HTMLElement | null;
     if (!f || !box) return;
+    if (f.mode === 'club') {
+      box.innerHTML = this.clubFinalHTML;
+      return;
+    }
     if (f.mode !== 'rivals') {
       box.innerHTML = '';
       return;
@@ -1592,13 +1656,22 @@ export class App {
     box.innerHTML = `<div class="rv-delta ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : ''}${d} puntos de Rivals</div>${this.divisionBadge(f.profile)}`;
   }
 
+  private clubFinalHTML = '';
+  /** Tras un aviso online: al club si era un partido de Soffti Club, si no al menú online. */
+  private onlineBack() {
+    const ctx = this.lastMatch?.ctx;
+    if (ctx?.mode === 'online' && ctx.start.mode === 'club') this.clubUI.hub(); else this.onlineHub();
+  }
+
   private startOnlineMatch(st: MatchStart) {
     const net = this.net;
     if (!net) return;
     this.overlay?.dispose();
     this.overlay = null;
     this.onlineFinal = null;
-    const teamOf = (p: OnlineProfile) => TEAMS.find((t) => t.id === p.team) ?? TEAMS[0];
+    this.clubFinalHTML = '';
+    if (st.mode === 'club' && this.clubOnline && st.role !== 'spectator') { this.clubOnline.role = st.role; this.clubOnline.half = st.half; }
+    const teamOf = (p: OnlineProfile) => (st.mode === 'club' ? sanitizeOnlineTeam(p.squad, p === st.home ? 'h-' : 'a-') : null) ?? TEAMS.find((t) => t.id === p.team) ?? TEAMS[0];
     const home = teamOf(st.home);
     const away = teamOf(st.away);
     const cfg: MatchConfig = {

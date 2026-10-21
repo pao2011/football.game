@@ -224,3 +224,41 @@ export function buildClubTeam(s: ClubState, q: Squad): BuiltClub {
 
 export const styleOf = (q: Squad): StyleId => q.style;
 export const coachName = (q: Squad) => coachById(q.coach).name;
+
+/**
+ * Valida la plantilla de club que llega de otro jugador (online): forma, tamaños, colores y atributos 1..99.
+ * shortcut: el anfitrión confía en los atributos que manda el rival (dentro de 1..99); un servidor con cuentas
+ * tendría que reconstruir el equipo desde las cartas del club para evitar trampas.
+ */
+export function sanitizeOnlineTeam(raw: unknown, prefix = ''): TeamData | null {
+  const t = raw as TeamData;
+  if (!t || typeof t !== 'object' || !Array.isArray(t.players) || t.players.length < 11 || t.players.length > 18) return null;
+  const hex = (v: unknown, d: string) => (typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : d);
+  const str = (v: unknown, n: number, d: string) => (typeof v === 'string' && v.trim() ? v.replace(/[<>&"'`]/g, '').slice(0, n) : d);
+  const num = (v: unknown, a: number, b: number, d: number) => (Number.isFinite(Number(v)) ? clamp(Number(v), a, b) : d);
+  const kit = (k: Partial<KitData> | undefined): KitData => ({ shirt: hex(k?.shirt, '#3355aa'), shirt2: hex(k?.shirt2, '#ffffff'), pattern: (['solid', 'stripes', 'hoops', 'sash', 'band', 'halves', 'vee', 'gradient'] as const).find((p) => p === k?.pattern) ?? 'solid', shorts: hex(k?.shorts, '#ffffff'), socks: hex(k?.socks, '#3355aa'), number: hex(k?.number, '#ffffff') });
+  if (!FORMATIONS[t.formation]) return null;
+  const positions = ['GK', 'DEF', 'MID', 'FWD'] as const;
+  const ids = new Set<string>();
+  const players: PlayerData[] = [];
+  for (const p of t.players) {
+    const id = str(p?.id, 40, '') && `${prefix}${str(p?.id, 40, '')}`;
+    const position = positions.find((x) => x === p?.position);
+    if (!id || ids.has(id) || !position) return null;
+    ids.add(id);
+    const a = p.attrs ?? ({} as PlayerData['attrs']);
+    const at = (k: keyof PlayerData['attrs']) => Math.round(num(a[k], 1, 99, 50));
+    players.push({ id, name: str(p.name, 30, 'Jugador'), number: Math.round(num(p.number, 1, 99, 1)), position,
+      attrs: { speed: at('speed'), acceleration: at('acceleration'), passing: at('passing'), shooting: at('shooting'), control: at('control'), defending: at('defending'), stamina: at('stamina'), goalkeeping: at('goalkeeping') },
+      skinTone: num(p.skinTone, 0, 1, 0.5), hairColor: hex(p.hairColor, '#2a1b12'), hairStyle: Math.round(num(p.hairStyle, 0, 5, 0)), height: num(p.height, 1.6, 2.05, 1.8) });
+  }
+  if (players[0].position !== 'GK') return null;
+  const c = t.crest ?? ({} as TeamData['crest']);
+  const setPiece = (v: unknown) => (typeof v === 'string' && ids.has(prefix + v) ? prefix + v : undefined);
+  return {
+    id: `online-${prefix}${str(t.id, 40, 'club')}`, name: str(t.name, 24, 'Club rival'), short: str(t.short, 3, 'RIV').toUpperCase(), city: 'Online',
+    crest: { shape: (['shield', 'circle', 'diamond'] as const).find((x) => x === c.shape) ?? 'shield', primary: hex(c.primary, '#3355aa'), secondary: hex(c.secondary, '#ffffff'), symbol: (['star', 'ball', 'lion', 'wave', 'bolt', 'crown', 'tower', 'eagle', 'none'] as const).find((x) => x === c.symbol) ?? 'star', stripes: !!c.stripes },
+    home: kit(t.home), away: kit(t.away), gkKit: kit(t.gkKit), formation: t.formation, rating: Math.round(num(t.rating, 1, 99, 60)), players,
+    setPieces: { penalty: setPiece(t.setPieces?.penalty), freeKick: setPiece(t.setPieces?.freeKick), captain: setPiece(t.setPieces?.captain) },
+  };
+}

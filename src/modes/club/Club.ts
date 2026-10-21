@@ -8,16 +8,19 @@ import { addTx, ECONOMY, matchReward, nextId, reconcile } from './economy';
 import * as market from './market';
 import { MAX_INVENTORY } from './market';
 import { PACKS, packById, rollPack } from './packs';
-import { addSeasonPoints, addXp, claimLogin, claimMilestone, claimObjective, claimSeasonMilestone, currentSeason, ensurePeriods, grant, levelOf, track, type Reward } from './progress';
+import { cancelEvo, cleanEvos, progressEvos, startEvo } from './evos';
+import { addSeasonPoints, addXp, claimAllPass, claimLogin, claimMilestone, claimMissionGroup, claimMissionTask, claimObjective, claimPass, currentSeason, ensurePeriods, grant, levelOf, track, unlockPremiumPass, type PassTrack, type Reward } from './progress';
 import * as sq from './squads';
 import type { CardDef, CardInstance, ClubIdentity, ClubState, PackOpening, Result, Role, Squad } from './types';
 import { fail, ok } from './types';
 import { clamp, dayId, hash32, seeded, systemRand, weekId, type Rand } from './util';
 
 const KEY = 'club';
+/** Puntos del ranking online propio del club. */
+export const ONLINE_POINTS = { W: 25, D: 8, L: -12 };
 const TEST_FLAG = 'football-elite-3d-club-test';
 
-export type ClubMatchKind = 'rivals' | 'champions' | 'battle' | 'tournament' | 'friendly';
+export type ClubMatchKind = 'rivals' | 'champions' | 'battle' | 'tournament' | 'friendly' | 'online';
 export interface ClubMatchMeta { id: string; kind: ClubMatchKind; opp: string; battleId?: string; factor: number }
 export interface MatchSummary {
   gf: number; ga: number;
@@ -37,12 +40,12 @@ function blankState(identity: ClubIdentity, formation: FormationId, now: number,
     ledger: [], ledgerBase: 0,
     packs: { openings: [], pity: {}, promo: { promo: 2 }, nextId: 1 },
     market: { epoch: -1, listings: [], watch: [], mine: [], results: [], actionsDay: '', actions: 0 },
-    progress: { loginDay: '', loginStreak: 0, loginClaimedDay: '', daily: { dayId: '', objectives: [], claimed: [] }, weekly: { weekId: '', objectives: [], claimed: [] }, season: { id: '', points: 0, claimed: [] }, milestones: [], matchesToday: { dayId: '', n: 0 } },
+    progress: { loginDay: '', loginStreak: 0, loginClaimedDay: '', daily: { dayId: '', objectives: [], claimed: [] }, weekly: { weekId: '', objectives: [], claimed: [] }, season: { id: '', points: 0, claimed: [], premium: false }, missions: { progress: {}, claimed: [], groups: [] }, milestones: [], matchesToday: { dayId: '', n: 0 } },
     records: { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, cleanSheets: 0, bestStreak: 0, streak: 0, biggestWin: 0, mostGoals: 0, packsOpened: 0, sbcDone: 0, coinsEarned: 0, coinsSpent: 0, marketBuys: 0, marketSells: 0 },
     rivals: { weekId: '', points: 0, played: 0, won: 0, claimed: false },
     champions: { weekId: '', entered: false, played: 0, wins: 0, results: [], claimed: false },
     battles: { dayId: '', done: {} },
-    tournament: null, sbcDone: {}, processed: [], inbox: [], counter: 0,
+    tournament: null, evos: [], online: { played: 0, won: 0, drawn: 0, lost: 0, points: 0 }, sbcDone: {}, processed: [], inbox: [], counter: 0,
   };
   return s;
 }
@@ -94,6 +97,9 @@ export class Club {
     s.packs = { ...base.packs, ...(s.packs ?? {}), pity: s.packs?.pity ?? {}, promo: s.packs?.promo ?? {}, openings: s.packs?.openings ?? [] };
     s.market = { ...base.market, ...(s.market ?? {}) };
     s.progress = { ...base.progress, ...(s.progress ?? {}) };
+    s.progress.missions = { ...base.progress.missions, ...(s.progress.missions ?? {}) };
+    s.online = { ...base.online, ...(s.online ?? {}) };
+    s.evos = Array.isArray(s.evos) ? s.evos : [];
     s.rivals = { ...base.rivals, ...(s.rivals ?? {}) };
     s.champions = { ...base.champions, ...(s.champions ?? {}) };
     s.battles = { ...base.battles, ...(s.battles ?? {}) };
@@ -108,6 +114,7 @@ export class Club {
     s.coins = Math.max(0, Math.floor(Number(s.coins) || 0));
     s.xp = Math.max(0, Math.floor(Number(s.xp) || 0));
     reconcile(s);
+    cleanEvos(s);
     if (!Array.isArray(s.squads) || !s.squads.length) s.squads = [sq.newSquad('sq1', 'Plantilla 1', '4-3-3')];
     for (const q of s.squads) sq.validateSquad(s, q);
     s.activeSquad = clamp(s.activeSquad | 0, 0, s.squads.length - 1);
@@ -152,6 +159,7 @@ export class Club {
     this.rolloverCompetitions(now);
     market.refreshMarket(s, now, currentSeason(now).id);
     reconcile(s);
+    cleanEvos(s);
     this.save();
   }
 
@@ -479,6 +487,11 @@ export class Club {
     track(s, 'shots', r.shots, now);
     track(s, 'tackles', r.tackles, now);
     addSeasonPoints(s, result === 'W' ? 10 : 4, now);
+    if (!r.forfeit) {
+      const q = this.squad;
+      if (this.evalSquad(q).chem >= 25) track(s, 'chemMatch', 1, now);
+      lines.push(...progressEvos(s, q.slots, { matches: 1, wins: result === 'W' ? 1 : 0, goals: r.gf, cleanSheets: cleanSheet ? 1 : 0 }, now));
+    }
     // progreso del modo
     switch (meta.kind) {
       case 'rivals': {
@@ -505,6 +518,17 @@ export class Club {
         const b = BATTLES.find((x) => x.id === meta.battleId);
         if (b && result === 'W') { grant(s, b.reward, `Squad Battle: ${b.name}`, now); lines.push(`Squad Battle superada: +${(b.reward.coins ?? 0).toLocaleString('es-ES')} monedas.`); bonus = b.reward.coins ?? 0; }
         else lines.push('Squad Battle: sin victoria no hay recompensa. Mañana puedes volver a intentarlo.');
+        break;
+      }
+      case 'online': {
+        const o = s.online;
+        o.played++;
+        if (result === 'W') o.won++; else if (result === 'D') o.drawn++; else o.lost++;
+        const pts = ONLINE_POINTS[result];
+        o.points = Math.max(0, o.points + pts);
+        track(s, 'onlineMatch', 1, now);
+        if (result === 'W') track(s, 'onlineWin', 1, now);
+        lines.push(`Online: ${pts >= 0 ? '+' : ''}${pts} puntos de club (${o.points} en total).`);
         break;
       }
       case 'tournament': {
@@ -557,11 +581,31 @@ export class Club {
     return ok(def.reward);
   }
 
+  // ---------- Evoluciones ----------
+  startEvo(evoId: string, uid: string, now: number) { const r = startEvo(this.s, evoId, uid, now); this.save(); return r; }
+  cancelEvo(uid: string) { const r = cancelEvo(this.s, uid); this.save(); return r; }
+  evoOf(uid: string) { return this.s.evos.find((e) => e.uid === uid); }
+
+  // ---------- Pase y misiones ----------
+  claimPass(track: PassTrack, level: number, now: number) { const r = claimPass(this.s, track, level, now); this.save(); return r; }
+  claimAllPass(now: number) { const n = claimAllPass(this.s, now); this.save(); return n; }
+  unlockPremiumPass(now: number) { const r = unlockPremiumPass(this.s, now); this.save(); return r; }
+  claimMission(id: string, now: number) { const r = claimMissionTask(this.s, id, now); this.save(); return r; }
+  claimMissionGroup(id: string, now: number) { const r = claimMissionGroup(this.s, id, now); this.save(); return r; }
+
+  /** Equipo jugable del club para un partido online (plantilla activa con química). */
+  onlineTeam(now: number): Result<{ team: TeamData; meta: ClubMatchMeta }> {
+    this.tick(now);
+    const q = this.requireSquad();
+    if (!q.ok) return q as Result<never>;
+    const built = sq.buildClubTeam(this.s, this.squad);
+    return ok({ team: built.team, meta: { id: nextId(this.s, 'm'), kind: 'online', opp: '', factor: 1.25 } });
+  }
+
   // ---------- Recompensas ----------
   claimLogin(now: number) { this.tick(now); const r = claimLogin(this.s, now); this.save(); return r; }
   claimObjective(scope: 'daily' | 'weekly', id: string, now: number) { const r = claimObjective(this.s, scope, id, now); this.save(); return r; }
   claimMilestone(id: string, now: number) { const r = claimMilestone(this.s, id, now); this.save(); return r; }
-  claimSeason(id: string, now: number) { const r = claimSeasonMilestone(this.s, id, now); this.save(); return r; }
 
   get level() { return levelOf(this.s.xp); }
   get packsInReserve() { return PACKS.reduce((t, p) => t + (this.s.packs.promo[p.id] ?? 0), 0); }

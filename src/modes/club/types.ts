@@ -49,6 +49,8 @@ export interface CardDef {
   face: { skin: number; hair: string; style: number; height: number };
   /** true si el nombre es de un personaje ficticio (leyendas) o inventado por el juego. */
   fictional: boolean;
+  /** Carta evolucionada (no se puede vender en el mercado). */
+  evo?: { id: string; level: number; name: string };
 }
 
 /** Carta que posee el club: una instancia única con su propio id. */
@@ -86,7 +88,7 @@ export interface ClubIdentity {
 }
 
 export type TxKind =
-  | 'start' | 'match' | 'pack' | 'quicksell' | 'market-buy' | 'market-sell' | 'market-fee' | 'reward' | 'entry' | 'sbc' | 'refund';
+  | 'start' | 'match' | 'pack' | 'quicksell' | 'market-buy' | 'market-sell' | 'market-fee' | 'reward' | 'entry' | 'sbc' | 'refund' | 'evo' | 'pass';
 
 /** Movimiento de monedas (libro contable). */
 export interface Tx {
@@ -158,6 +160,9 @@ export interface TournamentState {
   claimed: boolean;
 }
 
+/** Evolución en curso de una carta del club. */
+export interface ActiveEvo { uid: string; evoId: string; /** Niveles ya completados. */ level: number; /** Progreso de cada tarea del nivel actual. */ progress: number[]; startedAt: number }
+
 export interface ClubState {
   version: 1;
   id: string;
@@ -177,7 +182,10 @@ export interface ClubState {
     loginDay: string; loginStreak: number; loginClaimedDay: string;
     daily: { dayId: string; objectives: ObjectiveProgress[]; claimed: string[] };
     weekly: { weekId: string; objectives: ObjectiveProgress[]; claimed: string[] };
-    season: { id: string; points: number; claimed: string[] };
+    /** Pase de temporada: puntos (XP del pase), recompensas reclamadas ('f12' gratis, 'p12' premium) y pista premium. */
+    season: { id: string; points: number; claimed: string[]; premium?: boolean };
+    /** Misiones: progreso por tarea, tareas y grupos reclamados. */
+    missions: { progress: Record<string, number>; claimed: string[]; groups: string[] };
     milestones: string[];
     matchesToday: { dayId: string; n: number };
   };
@@ -186,6 +194,9 @@ export interface ClubState {
   champions: ChampionsState;
   battles: BattlesState;
   tournament: TournamentState | null;
+  evos: ActiveEvo[];
+  /** Partidos online del club (puntos propios, independientes de Division Rivals). */
+  online: { played: number; won: number; drawn: number; lost: number; points: number };
   sbcDone: Record<string, number>;
   /** Partidos ya contabilizados (evita cobrar dos veces el mismo). */
   processed: string[];

@@ -238,6 +238,12 @@ export function squadScreen(host: ClubHost): void {
       </div></div></div>`;
   };
 
+  /** Valoración media por línea (defensa, medio, ataque) en sus puestos, con química. */
+  const lines = (ev: ReturnType<typeof club.evalSquad>) => (['DEF', 'MID', 'FWD'] as const).map((g) => {
+    const xs = ev.slots.filter((x) => x.def && FORMATIONS[q().formation][x.slot].position === g);
+    const v = xs.length ? Math.round(xs.reduce((t, x) => t + x.effOvr, 0) / xs.length) : 0;
+    return `<div class="cs-stat cs-line"><small>${{ DEF: 'Defensa', MID: 'Medio', FWD: 'Ataque' }[g]}</small><b class="num">${v || '—'}</b></div>`;
+  }).join('');
   const html = () => {
     const s = q();
     const ev = club.evalSquad();
@@ -248,6 +254,7 @@ export function squadScreen(host: ClubHost): void {
         <button class="btn cs-btn" data-act="back">‹ Volver</button>
         <h2>Plantilla</h2>
         <input class="cs-name" value="${esc(s.name)}" maxlength="20" data-act="focusEl" data-enter="blurEl" data-sel="name" aria-label="Nombre de la plantilla">
+        ${lines(ev)}
         <div class="cs-stat"><small>Valoración</small><b class="num">${ev.ovr}</b></div>
         <div class="cs-stat cs-chem"><small>Química</small><b class="num">${ev.chem}<em>/33</em></b><div class="cs-bar"><i class="${chemPct >= 66 ? 'hi' : chemPct >= 33 ? 'md' : 'lo'}" style="width:${chemPct}%"></i></div></div>
       </div>

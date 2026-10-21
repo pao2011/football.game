@@ -11,6 +11,20 @@ export const ONLINE_HALF_MIN = 4;
 /** Tiempo máximo que se espera el informe de resultado del segundo jugador. */
 const RESULT_WAIT_MS = 15000;
 
+/** Plantilla de Soffti Club que manda el cliente: se limita el tamaño y la forma (el anfitrión la vuelve a validar). */
+export function cleanSquad(sq) {
+  if (!sq || typeof sq !== 'object' || !Array.isArray(sq.players)) return null;
+  if (sq.players.length < 11 || sq.players.length > 18) return null;
+  let json;
+  try {
+    json = JSON.stringify(sq);
+  } catch {
+    return null;
+  }
+  if (json.length > 24000) return null;
+  return JSON.parse(json);
+}
+
 function clean(name) {
   const s = String(name ?? '').replace(/[<>&"'`\u0000-\u001f]/g, '').trim().slice(0, 16);
   return s || 'Jugador';
@@ -31,7 +45,7 @@ export class Lobby {
     /** @type {Set<any>} */
     this.clients = new Set();
     /** colas de emparejamiento */
-    this.queues = { friendly: [], rivals: [] };
+    this.queues = { friendly: [], rivals: [], club: [] };
     /** salas privadas por código */
     this.rooms = new Map();
     /** Partidos de sala privada que se pueden mirar como espectador (código de la sala → partido). */
@@ -43,7 +57,7 @@ export class Lobby {
 
   /** Nueva conexión (ws: objeto con send(str), close() y on('message'|'close')). */
   connect(ws) {
-    const c = { ws, id: null, name: 'Jugador', team: null, state: 'idle', queuedAt: 0, mode: null, match: null, room: null, watching: null, alive: true };
+    const c = { ws, id: null, name: 'Jugador', team: null, squad: null, state: 'idle', queuedAt: 0, mode: null, match: null, room: null, watching: null, alive: true };
     this.clients.add(c);
     ws.on('message', (raw) => {
       let msg;
@@ -100,7 +114,12 @@ export class Lobby {
       case 'queue':
         this.leaveAll(c);
         c.team = typeof msg.team === 'string' ? msg.team.slice(0, 24) : null;
-        c.mode = msg.mode === 'rivals' ? 'rivals' : 'friendly';
+        c.mode = msg.mode === 'rivals' ? 'rivals' : msg.mode === 'club' ? 'club' : 'friendly';
+        c.squad = c.mode === 'club' ? cleanSquad(msg.squad) : null;
+        if (c.mode === 'club' && !c.squad) {
+          this.send(c, { t: 'error', text: 'Plantilla de club no válida' });
+          return;
+        }
         c.state = 'queue';
         c.queuedAt = this.now();
         this.queues[c.mode].push(c);
@@ -194,6 +213,12 @@ export class Lobby {
       const b = fq.shift();
       this.startMatch(a, b, 'friendly', ONLINE_HALF_MIN);
     }
+    const cq = this.queues.club;
+    while (cq.length >= 2) {
+      const a = cq.shift();
+      const b = cq.shift();
+      this.startMatch(a, b, 'club', ONLINE_HALF_MIN);
+    }
     const rq = this.queues.rivals;
     for (let i = 0; i < rq.length; i++) {
       const a = rq[i];
@@ -232,7 +257,8 @@ export class Lobby {
       c.state = 'match';
       c.match = m;
     }
-    const base = { t: 'match', id, mode, seed, half, home: this.profile(host), away: this.profile(guest) };
+    const withSquad = (c) => (mode === 'club' ? { ...this.profile(c), squad: c.squad } : this.profile(c));
+    const base = { t: 'match', id, mode, seed, half, home: withSquad(host), away: withSquad(guest) };
     m.start = base;
     this.send(host, { ...base, role: 'host' });
     this.send(guest, { ...base, role: 'guest' });

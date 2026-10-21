@@ -2,6 +2,7 @@ import { FORMATIONS } from '../../data/formations';
 import { leagueOfTeam } from '../../data/leagues';
 import { TEAMS, playerOverall } from '../../data/teams';
 import type { PlayerAttributes, PlayerData, Position } from '../../data/types';
+import { evoBoost, evoById } from './evoDefs';
 import { ROLE_ALT, ROLE_GROUP } from './roles';
 import type { CardDef, CardStats, Rarity, Role } from './types';
 import { clamp, hash32 } from './util';
@@ -71,6 +72,8 @@ const boostAttrs = (a: PlayerAttributes, b: number): PlayerAttributes => ({
   control: clamp(a.control + b, 1, 99), defending: clamp(a.defending + b, 1, 99), stamina: clamp(a.stamina + b, 1, 99), goalkeeping: clamp(a.goalkeeping + b, 1, 99),
 });
 
+const tierOf = (ovr: number): Rarity => (ovr < 65 ? 'bronze' : ovr < 75 ? 'silver' : 'gold');
+
 const BENCH_ROLES: Role[] = ['POR', 'DFC', 'DFC', 'MC', 'MC', 'DC', 'DC'];
 
 function skillOf(dri: number, h: number): number {
@@ -97,7 +100,7 @@ function make(base: { p: PlayerData; role: Role; teamId: string; teamName: strin
   const attrs = boost ? boostAttrs(p.attrs, boost) : p.attrs;
   const pd: PlayerData = { ...p, attrs };
   const ovr = clamp(playerOverall(pd), 30, 99);
-  const rarity: Rarity = kind === 'base' ? (ovr < 65 ? 'bronze' : ovr < 75 ? 'silver' : 'gold') : kind;
+  const rarity: Rarity = kind === 'base' ? tierOf(ovr) : kind;
   const stats = statsOf(attrs, p.height, p.position === 'GK');
   const suffix = kind === 'base' ? '' : kind === 'rising' ? '~rs' : kind === 'special' ? '~sp' : `~ev~${season}`;
   const parts = p.name.trim().split(/\s+/);
@@ -217,10 +220,43 @@ export function eventDefs(season: string): CardDef[] {
 export function getCardDef(id: string): CardDef | undefined {
   const hit = catalog().get(id);
   if (hit) return hit;
+  const e = /^(.+)~evo~([a-z]+)~(\d+)$/.exec(id);
+  if (e) return evolvedDef(e[1], e[2], Number(e[3]));
   const m = /^(.+)~ev~(.+)$/.exec(id);
   if (m) return eventDefs(m[2]).find((d) => d.id === id);
   return undefined;
 }
+
+export const evolvedId = (baseId: string, evoId: string, level: number) => `${baseId}~evo~${evoId}~${level}`;
+
+const evoCache = new Map<string, CardDef>();
+/** Carta tras `level` niveles de una evolución: atributos sumados, valoración y estadísticas recalculadas. */
+export function evolvedDef(baseId: string, evoId: string, level: number): CardDef | undefined {
+  const id = evolvedId(baseId, evoId, level);
+  const hit = evoCache.get(id);
+  if (hit) return hit;
+  const base = getCardDef(baseId);
+  const evo = evoById(evoId);
+  if (!base || base.evo || !evo || level < 1 || level > evo.levels.length) return undefined;
+  const b = evoBoost(evo, level);
+  const a = base.attrs;
+  const attrs: PlayerAttributes = {
+    speed: clamp(a.speed + b.speed, 1, 99), acceleration: clamp(a.acceleration + b.acceleration, 1, 99), passing: clamp(a.passing + b.passing, 1, 99), shooting: clamp(a.shooting + b.shooting, 1, 99),
+    control: clamp(a.control + b.control, 1, 99), defending: clamp(a.defending + b.defending, 1, 99), stamina: clamp(a.stamina + b.stamina, 1, 99), goalkeeping: clamp(a.goalkeeping + b.goalkeeping, 1, 99),
+  };
+  const ovr = clamp(playerOverall({ attrs, position: base.group } as PlayerData), 30, 99);
+  const baseTier = base.rarity === 'bronze' || base.rarity === 'silver' || base.rarity === 'gold';
+  const skill = Math.min(5, base.skill + evo.levels.slice(0, level).reduce((t, l) => t + (l.skill ?? 0), 0));
+  const d: CardDef = {
+    ...base, id, ovr, attrs, stats: statsOf(attrs, base.face.height, base.group === 'GK'), skill,
+    rarity: baseTier ? tierOf(ovr) : base.rarity, evo: { id: evoId, level, name: evo.name },
+  };
+  evoCache.set(id, d);
+  return d;
+}
+
+/** Id de la carta original (sin evolución). */
+export const baseIdOf = (id: string) => id.replace(/~evo~[a-z]+~\d+$/, '');
 
 export function defsByRarity(r: Rarity): CardDef[] {
   const out: CardDef[] = [];

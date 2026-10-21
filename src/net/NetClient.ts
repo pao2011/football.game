@@ -16,12 +16,14 @@ export interface OnlineProfile {
   draws: number;
   losses: number;
   division: DivisionInfo;
+  /** Plantilla del club (solo en partidos de Soffti Club). */
+  squad?: unknown;
 }
 
 export interface MatchStart {
   t: 'match';
   id: string;
-  mode: 'friendly' | 'rivals';
+  mode: 'friendly' | 'rivals' | 'club';
   role: 'host' | 'guest' | 'spectator';
   seed: number;
   half: number;
@@ -31,7 +33,7 @@ export interface MatchStart {
 
 export interface FinalMsg {
   t: 'final';
-  mode: 'friendly' | 'rivals';
+  mode: 'friendly' | 'rivals' | 'club';
   outcome: { home: number; away: number; pens: number; forfeit: number } | null;
   change: { before: number; after: number; delta: number } | null;
   profile: OnlineProfile;

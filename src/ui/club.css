@@ -73,3 +73,39 @@
 .fm-chem { position: absolute; right: 0.4em; bottom: 2em; display: flex; gap: 0.15em; z-index: 3; } .fm-chem i { width: 0.5em; height: 0.5em; border-radius: 50%; background: rgba(0,0,0,0.4); } .fm-chem i.on { background: #4ade80; box-shadow: 0 0 0.4em #4ade80; }
 .fm-cap { position: absolute; left: -0.2em; bottom: 1.6em; width: 1.5em; height: 1.5em; border-radius: 50%; background: #111; color: #ffd35a; font-size: 0.9em; font-weight: 800; display: grid; place-items: center; z-index: 3; }
 .fm .fc-face { width: 112%; height: 112%; }
+
+/* ---------- Mejoras: bandera, placa del nombre, brillo holográfico y evoluciones ---------- */
+.fc-nat { display: flex; justify-content: center; } .fc-nat .fc-flag { width: 2.3em; height: auto; display: block; box-shadow: 0 0.1em 0.25em rgba(0,0,0,0.35); border-radius: 0.15em; }
+.fc-plate { position: absolute; left: 0.34em; right: 0.34em; top: 9.5em; height: 2.3em; z-index: 1; pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--plate, rgba(0,0,0,0.13)) 18%, var(--plate, rgba(0,0,0,0.13)) 82%, transparent);
+  border-top: 0.06em solid var(--line); border-bottom: 0.06em solid var(--line); }
+.fc-rising, .fc-special, .fc-event { --plate: rgba(0,0,0,0.32); }
+.fc-legend { --plate: rgba(184,137,42,0.18); }
+.fc-name { text-shadow: 0 0.06em 0 rgba(255,255,255,0.18); }
+.fc-rising .fc-name, .fc-special .fc-name, .fc-event .fc-name { text-shadow: 0 0.08em 0.3em rgba(0,0,0,0.55); }
+/* brillo holográfico: una franja de color que recorre la carta (oro y superiores) */
+.fc-foil { position: absolute; inset: 0.34em; clip-path: var(--shape); pointer-events: none; z-index: 4; mix-blend-mode: soft-light; opacity: 0.55;
+  background: linear-gradient(115deg, transparent 20%, rgba(255,80,200,0.55) 32%, rgba(80,220,255,0.6) 40%, rgba(255,245,120,0.6) 48%, transparent 60%) 0 0 / 300% 100% no-repeat;
+  animation: fcFoil 5.5s ease-in-out infinite; }
+.fc-gold .fc-foil { opacity: 0.3; animation-duration: 7s; }
+.fc-legend .fc-foil, .fc-event .fc-foil, .fc-special .fc-foil { opacity: 0.75; }
+.fc:hover .fc-foil { animation-duration: 1.6s; }
+@keyframes fcFoil { 0% { background-position: 120% 0; } 55%, 100% { background-position: -120% 0; } }
+/* evoluciones: borde violeta y etiqueta propia, encima de los colores de su rareza */
+.fc-evo .fc-bg { background: linear-gradient(160deg, #e3b8ff, #7b2cff 45%, #2a0b5e) !important; }
+.fc-evo { filter: drop-shadow(0 0 0.6em rgba(160,90,255,0.6)) drop-shadow(0 0.5em 0.9em rgba(0,0,0,0.5)); }
+.fc-evotag { color: #7b2cff; text-shadow: 0 0 0.4em rgba(255,255,255,0.7); letter-spacing: 0.16em; }
+.fc-rising .fc-evotag, .fc-special .fc-evotag, .fc-event .fc-evotag { color: #e3b8ff; }
+.fm-flag { position: absolute; left: 0.55em; top: 3.5em; z-index: 2; line-height: 0; } .fm-flag svg { width: 1.4em; height: auto; }
+.fm-evo { position: absolute; right: -0.3em; top: -0.3em; z-index: 3; font-size: 0.7em; font-weight: 800; padding: 0.1em 0.35em; border-radius: 0.5em; background: #7b2cff; color: #fff; box-shadow: 0 0 0.5em rgba(160,90,255,0.8); }
+.fm.fc-evo .fm-bg { background: linear-gradient(160deg, #e3b8ff, #7b2cff) !important; }
+@media (prefers-reduced-motion: reduce) { .fc-foil { animation: none; } }
+/* estadísticas más compactas y centradas: la tercera fila ya no la corta la punta de la carta */
+.fc-plate { top: 9.35em; height: 2.05em; }
+.fc-name { top: 5.95em; }
+.fc-stats { top: 11.35em; left: 2em; right: 2em; gap: 0 0.45em; padding-top: 0.35em; }
+.fc-stats > div { gap: 0.02em; }
+.fc-stats span { font-size: 1.04em; line-height: 1.12; gap: 0.3em; }
+.fc-stats b { min-width: 1.3em; }
+.fc-ids { display: flex; align-items: center; justify-content: center; gap: 0.25em; margin-top: 0.35em; padding-top: 0.35em; border-top: 0.09em solid var(--line); }
+.fc-ids .fc-nat, .fc-ids .fc-club { margin: 0; padding: 0; border: 0; } .fc-ids .fc-nat .fc-flag { width: 1.7em; } .fc-ids .fc-club svg { width: 1.6em; height: 1.6em; }

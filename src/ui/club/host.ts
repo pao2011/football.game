@@ -14,7 +14,7 @@ export interface ClubHost {
   /** Vuelve al panel principal del club. */
   hub(): void;
   /** Abre otra pantalla del modo. */
-  goto(screen: 'squad' | 'packs' | 'market' | 'collection' | 'competitions' | 'objectives' | 'sbc' | 'history'): void;
+  goto(screen: 'squad' | 'packs' | 'market' | 'collection' | 'competitions' | 'objectives' | 'sbc' | 'history' | 'evos' | 'pass' | 'missions' | 'online'): void;
 }
 
 export type ClubScreenFn = (host: ClubHost) => void;

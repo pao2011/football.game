@@ -2,13 +2,15 @@ import type { AudioEngine } from '../../audio/AudioEngine';
 import { FORMATIONS } from '../../data/formations';
 import { getTeam } from '../../data/teams';
 import type { FormationId, KitData, TeamData } from '../../data/types';
-import { eventDefs, getCardDef, statLabels, STAT_KEYS } from '../../modes/club/catalog';
+import { eventDefs, evolvedId, getCardDef, statLabels, STAT_KEYS } from '../../modes/club/catalog';
 import { COACHES } from '../../modes/club/chemistry';
-import { Club, type ClubMatchKind, type ClubMatchMeta } from '../../modes/club/Club';
+import { Club, ONLINE_POINTS, type ClubMatchKind, type ClubMatchMeta } from '../../modes/club/Club';
 import { BATTLES, CHAMPIONS, SBCS, TOURNAMENT_ENTRY, TOURNAMENT_ROUNDS, checkSbc, championsReward, rivalsDivision, rivalsWeeklyReward, tournamentRuleOf, RIVALS_WEEKLY_MIN_MATCHES, DIVISION_THRESHOLDS } from '../../modes/club/competitions';
 import { ECONOMY } from '../../modes/club/economy';
 import { MAX_INVENTORY, usedInSquads } from '../../modes/club/market';
-import { ALL_OBJECTIVES, DAILY_POOL, LOGIN_REWARDS, MILESTONES, SEASON_MILESTONES, currentSeason, levelProgress, loginStatus, milestoneStatus, objectiveDef, rewardText } from '../../modes/club/progress';
+import { EVOS, MAX_ACTIVE_EVOS, evoEligible } from '../../modes/club/evos';
+import { evoById } from '../../modes/club/evoDefs';
+import { ALL_OBJECTIVES, DAILY_POOL, LOGIN_REWARDS, MILESTONES, MISSIONS, PASS_LEVELS, PASS_LEVEL_POINTS, PASS_PREMIUM_COST, currentSeason, levelProgress, loginStatus, milestoneStatus, missionsPending, objectiveDef, passClaimed, passLevel, passPending, passReward, rewardText } from '../../modes/club/progress';
 import { PACKS } from '../../modes/club/packs';
 import { RARITY_NAMES, type CardInstance, type ClubIdentity, type Rarity } from '../../modes/club/types';
 import { dayId, weekId } from '../../modes/club/util';
@@ -29,6 +31,8 @@ export interface ClubApp {
   playClubMatch(home: TeamData, away: TeamData, meta: ClubMatchMeta, opts: { knockout: boolean }): void;
   /** Elegir un equipo del juego con el buscador. */
   pickTeam(title: string, onPick: (id: string) => void, back: () => void): void;
+  /** Partido online con la plantilla del club (conecta con el servidor si hace falta). */
+  clubOnline(): void;
 }
 
 const COLORS = ['#c8102e', '#e8590c', '#f6b40e', '#facc15', '#16a34a', '#0b7a3a', '#0ea5e9', '#1d4ed8', '#0b1d5b', '#7c3aed', '#be185d', '#ffffff', '#9ca3af', '#111111'];
@@ -44,6 +48,7 @@ export function identityTeam(id: ClubIdentity): TeamData {
   return { id: 'club-preview', name: id.name, short, city: '', crest: { shape: id.crest.shape, primary: id.primary, secondary: id.secondary, symbol: id.crest.symbol, stripes: id.crest.stripes }, home: kit, away: kit, gkKit: kit, formation: '4-3-3', rating: 60, players: [] };
 }
 
+const ATTR_NAMES: Record<string, string> = { speed: 'velocidad', acceleration: 'aceleración', passing: 'pase', shooting: 'tiro', control: 'regate', defending: 'defensa', stamina: 'resistencia', goalkeeping: 'portería' };
 const bar = (frac: number, cls = '') => `<div class="cb-bar ${cls}"><i style="width:${Math.round(Math.max(0, Math.min(1, frac)) * 100)}%"></i></div>`;
 const when = (t: number) => new Date(t).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
@@ -82,6 +87,10 @@ export class ClubUI implements ClubHost {
       case 'objectives': this.objectives('objetivos'); break;
       case 'history': this.objectives('estadisticas'); break;
       case 'sbc': this.sbc(); break;
+      case 'evos': this.evos(); break;
+      case 'pass': this.objectives('pase'); break;
+      case 'missions': this.objectives('misiones'); break;
+      case 'online': this.app.clubOnline(); break;
     }
   }
 
@@ -169,7 +178,7 @@ export class ClubUI implements ClubHost {
       for (const o of list) { const d = objectiveDef(o.id); if (d && o.progress >= d.target && !claimed.includes(o.id)) n++; }
     }
     n += milestoneStatus(c.s).filter((m) => m.done && !m.claimed).length;
-    n += SEASON_MILESTONES.filter((m) => c.s.progress.season.points >= m.points && !c.s.progress.season.claimed.includes(m.id)).length;
+    n += passPending(c.s) + missionsPending(c.s);
     return n;
   }
 
@@ -222,10 +231,13 @@ export class ClubUI implements ClubHost {
           <div class="cb-tiles">
             ${tile('packs', '🎴', 'Sobres', promos ? `${promos} gratis para abrir` : 'Abre y colecciona', pending ? `${pending}` : promos ? `${promos}` : '')}
             ${tile('market', '🔁', 'Mercado', 'Compra y vende (simulado)')}
-            ${tile('competitions', '🏆', 'Competiciones', `Rivals · Champions · Batallas · Torneo`)}
+            ${tile('competitions', '🏆', 'Competiciones', `Online · Rivals · Champions · Batallas · Torneo`)}
             ${tile('objectives', '🎯', 'Objetivos', 'Diarios, semanales y temporada', claims ? `${claims}` : '')}
             ${tile('sbc', '🧩', 'Desafíos', 'Crea plantillas por premios')}
             ${tile('collection', '🗂️', 'Colección', `${s.inventory.length}/${MAX_INVENTORY} cartas`)}
+            ${tile('evos', '🧬', 'Evoluciones', s.evos.length ? `${s.evos.length} en curso` : 'Mejora a tus jugadores')}
+            ${tile('pass', '🎟️', 'Pase', `Nivel ${passLevel(s.progress.season.points)}/${PASS_LEVELS}${s.progress.season.premium ? ' · premium' : ''}`, passPending(s) ? `${passPending(s)}` : '')}
+            ${tile('online', '🌐', 'Online', s.online.played ? `${s.online.points} pts · ${s.online.won}V ${s.online.drawn}E ${s.online.lost}D` : 'Tu club contra otros clubes')}
             ${tile('history', '📊', 'Récords', `${s.records.played} partidos · ${s.records.won} victorias`)}
           </div>
           <div class="panel cb-news">
@@ -241,6 +253,7 @@ export class ClubUI implements ClubHost {
       back: () => this.app.mainMenu(),
       squad: () => this.goto('squad'), packs: () => this.goto('packs'), market: () => this.goto('market'), competitions: () => this.goto('competitions'),
       objectives: () => this.goto('objectives'), sbc: () => this.goto('sbc'), collection: () => this.goto('collection'), history: () => this.goto('history'),
+      evos: () => this.goto('evos'), pass: () => this.goto('pass'), online: () => this.goto('online'),
       login: () => { const r = c.claimLogin(this.now()); if (r.ok) this.toast(`Recompensa diaria: ${rewardText(r.reward!)}`); else this.toast(r.error ?? 'No disponible', 'err'); this.hub(); },
       reset: () => this.confirm('¿Borrar tu club?', 'Se perderán para siempre tus cartas, monedas y progreso. Esta acción no se puede deshacer.', 'Borrar', () => { Club.clear(); this.app.mainMenu(); }, () => this.hub()),
     }, () => this.app.mainMenu(), 'club-screen club-hub');
@@ -299,6 +312,7 @@ export class ClubUI implements ClubHost {
     const d = ci ? getCardDef(ci.defId) : null;
     if (!ci || !d) { back(); return; }
     const used = usedInSquads(c.s, uid);
+    const evo = c.evoOf(uid);
     const labels = statLabels(d);
     const sell = Math.max(10, Math.round(d.price * ECONOMY.quickSell));
     this.show(`<div class="screen-header"><div><div class="crumb">CARTA · ${RARITY_NAMES[d.rarity].toUpperCase()}</div><h2>${esc(d.name)}</h2></div></div>
@@ -314,15 +328,19 @@ export class ClubUI implements ClubHost {
           ${d.fictional && d.rarity === 'legend' ? '<p class="muted" style="font-size:12px">Leyenda ficticia: personaje inventado por el juego.</p>' : ''}
           <div class="cb-detact">
             <button class="btn" data-act="sell" ${used ? 'disabled' : ''}>Venta rápida (+${fmt(sell)})</button>
-            <button class="btn" data-act="market" ${used ? 'disabled' : ''}>Poner en el mercado</button>
+            <button class="btn" data-act="market" ${used || d.evo || evo ? 'disabled' : ''}>Poner en el mercado</button>
+            ${!d.evo && !evo && EVOS.some((e) => evoEligible(e, d)) ? '<button class="btn" data-act="evolve">Evolucionar</button>' : ''}
             <button class="btn danger" data-act="discard" ${used ? 'disabled' : ''}>Descartar</button>
           </div>
           ${used ? '<p class="muted">Está en una plantilla: quítala de ahí para poder venderla o descartarla.</p>' : ''}
+          ${d.evo ? `<p class="muted">🧬 Evolución <b>${esc(d.evo.name)}</b> · nivel ${d.evo.level}. No se puede vender en el mercado.</p>` : ''}
+          ${evo ? `<p class="muted">🧬 En evolución: <b>${esc(evoById(evo.evoId)?.name ?? '')}</b> (nivel ${evo.level + 1}).</p>` : ''}
         </div></div></div>
       <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, {
       back,
       sell: () => { const r = c.quickSell(uid, this.now()); if (r.ok) { this.toast(`Vendida por ${fmt(r.value)} monedas`); back(); } else this.toast(r.error, 'err'); },
       market: () => this.goto('market'),
+      evolve: () => { const e = EVOS.find((x) => evoEligible(x, d)); if (e) this.evoPick(e.id, uid); },
       discard: () => this.confirm('¿Descartar la carta?', `${d.name} se elimina de tu club sin recibir monedas.`, 'Descartar', () => { const r = c.discard(uid); if (!r.ok) this.toast(r.error, 'err'); back(); }, () => this.cardDetail(uid, back)),
     }, back, 'club-screen club-detail');
   }
@@ -330,7 +348,7 @@ export class ClubUI implements ClubHost {
   // ==================================================================
   // Objetivos, hitos, temporada y estadísticas
   // ==================================================================
-  private objTab: 'objetivos' | 'temporada' | 'hitos' | 'estadisticas' = 'objetivos';
+  private objTab: 'objetivos' | 'misiones' | 'pase' | 'hitos' | 'estadisticas' = 'objetivos';
   private objectives(tab: typeof this.objTab) {
     this.objTab = tab;
     const c = this.club;
@@ -338,7 +356,7 @@ export class ClubUI implements ClubHost {
     c.tick(now);
     const s = c.s;
     const lv = levelProgress(s.xp);
-    const tabs: [typeof tab, string][] = [['objetivos', 'Objetivos'], ['temporada', 'Temporada'], ['hitos', 'Hitos'], ['estadisticas', 'Estadísticas y récords']];
+    const tabs: [typeof tab, string][] = [['objetivos', 'Objetivos'], ['misiones', `Misiones${missionsPending(s) ? ` (${missionsPending(s)})` : ''}`], ['pase', `Pase de temporada${passPending(s) ? ` (${passPending(s)})` : ''}`], ['hitos', 'Hitos'], ['estadisticas', 'Estadísticas y récords']];
     const handlers: Handlers = { back: () => this.hub() };
     const objRow = (scope: 'daily' | 'weekly', o: { id: string; progress: number }, claimed: string[]) => {
       const d = objectiveDef(o.id);
@@ -362,15 +380,47 @@ export class ClubUI implements ClubHost {
         <div class="panel"><h3>Objetivos semanales <small class="muted">(se renuevan cada lunes)</small></h3>${s.progress.weekly.objectives.map((o) => objRow('weekly', o, s.progress.weekly.claimed)).join('')}</div>
         <div class="panel" style="margin-top:14px"><h3>Experiencia del club</h3><p>Nivel <b class="num">${lv.level}</b> · ${lv.into}/${lv.need} XP</p>${bar(lv.frac)}<p class="muted" style="font-size:12px">Cada nivel da monedas y, cada 5, un sobre promocional. La experiencia sale de partidos, objetivos, desafíos y sobres: no depende solo de ganar.</p></div>
         </div></div>`;
-    } else if (tab === 'temporada') {
+    } else if (tab === 'pase') {
       const season = currentSeason(now);
-      const rows = SEASON_MILESTONES.map((m) => {
-        const got = s.progress.season.claimed.includes(m.id);
-        const can = s.progress.season.points >= m.points && !got;
-        handlers[`sm-${m.id}`] = () => { const r = c.claimSeason(m.id, this.now()); if (r.ok) this.toast(`Reclamado: ${rewardText(r.reward!)}`); else this.toast(r.error ?? 'Error', 'err'); this.objectives('temporada'); };
-        return `<div class="cb-obj ${got ? 'done' : ''}"><div class="cb-objt"><b>${m.points} puntos de temporada</b><small>${esc(rewardText(m.reward))}</small>${bar(s.progress.season.points / m.points)}</div><div class="cb-objn num">${Math.min(s.progress.season.points, m.points)}/${m.points}</div><button class="btn ${can ? 'primary' : ''}" data-act="sm-${m.id}" ${!can ? 'disabled' : ''}>${got ? 'Reclamado' : 'Reclamar'}</button></div>`;
-      }).join('');
-      body = `<div class="panel"><h3>${esc(season.name)}</h3><p class="muted">Del ${new Date(season.start).toLocaleDateString('es-ES')} al ${new Date(season.end).toLocaleDateString('es-ES')} · ${s.progress.season.points} puntos. Ganas puntos jugando, completando objetivos, abriendo sobres y resolviendo desafíos. Las fechas de las temporadas se configuran en <code>progress.ts</code>.</p>${rows}</div>`;
+      const pts = s.progress.season.points;
+      const lvl = passLevel(pts);
+      const prem = !!s.progress.season.premium;
+      const into = lvl >= PASS_LEVELS ? PASS_LEVEL_POINTS : pts - lvl * PASS_LEVEL_POINTS;
+      const daysLeft = Math.max(0, Math.ceil((season.end - now) / 86400000));
+      const cell = (track: 'free' | 'premium', l: number) => {
+        const got = passClaimed(s, track, l);
+        const open = l <= lvl && (track === 'free' || prem);
+        const r = passReward(track, l);
+        const big = !!r.packs;
+        if (open && !got) handlers[`ps-${track}-${l}`] = () => { const x = c.claimPass(track, l, this.now()); if (x.ok) this.toast(`Pase: ${rewardText(x.reward!)}`); else this.toast(x.error ?? 'Error', 'err'); this.objectives('pase'); };
+        return `<button class="cb-pcell ${track} ${got ? 'got' : open ? 'ready' : l <= lvl ? 'lock' : ''} ${big ? 'big' : ''}" ${open && !got ? `data-act="ps-${track}-${l}"` : 'disabled'} title="${esc(rewardText(r))}">
+          <span class="cb-pico">${got ? '✓' : r.packs ? '🎴' : r.coins ? 'ⓒ' : '★'}</span><small>${esc(rewardText(r))}</small></button>`;
+      };
+      const cols = Array.from({ length: PASS_LEVELS }, (_, k) => k + 1).map((l) => `<div class="cb-pcol ${l <= lvl ? 'reached' : ''} ${l === lvl + 1 ? 'next' : ''}"><div class="cb-plv num">${l}</div>${cell('free', l)}${cell('premium', l)}</div>`).join('');
+      handlers.passAll = () => { const n = c.claimAllPass(this.now()); this.toast(n ? `Reclamadas ${n} recompensas del pase` : 'Nada para reclamar', n ? 'ok' : 'err'); this.objectives('pase'); };
+      handlers.passPremium = () => this.confirm('¿Desbloquear el pase premium?', `Cuesta ${fmt(PASS_PREMIUM_COST)} monedas del juego y dura hasta el final de ${season.name}. Las recompensas de los niveles ya alcanzados quedan listas para reclamar.`, 'Desbloquear', () => { const x = c.unlockPremiumPass(this.now()); if (x.ok) this.toast('¡Pase premium desbloqueado!'); else this.toast(x.error ?? 'Error', 'err'); this.objectives('pase'); }, () => this.objectives('pase'));
+      body = `<div class="panel cb-pass"><div class="cb-passhead">
+          <div><h3>${esc(season.name)}</h3><p class="muted">Quedan ${daysLeft} días. Sube de nivel con puntos de temporada: partidos, objetivos, misiones, sobres, desafíos y evoluciones.</p></div>
+          <div class="cb-passlv"><span class="num">${lvl}</span><small>NIVEL DEL PASE</small>${bar(lvl >= PASS_LEVELS ? 1 : into / PASS_LEVEL_POINTS)}<small class="muted num">${lvl >= PASS_LEVELS ? 'Pase completado' : `${into}/${PASS_LEVEL_POINTS} pts al nivel ${lvl + 1}`}</small></div>
+          <div class="cb-btnrow"><button class="btn primary" data-act="passAll" ${passPending(s) ? '' : 'disabled'}>Reclamar todo</button>${prem ? '<span class="cb-premtag">PREMIUM ACTIVO</span>' : `<button class="btn cb-premb" data-act="passPremium">Pase premium · ${fmt(PASS_PREMIUM_COST)} ⓒ</button>`}</div></div>
+        <div class="cb-ptrack-labels"><span>GRATIS</span><span class="${prem ? '' : 'muted'}">PREMIUM ${prem ? '' : '🔒'}</span></div>
+        <div class="cb-ptrack">${cols}</div></div>`;
+    } else if (tab === 'misiones') {
+      const m = s.progress.missions;
+      body = `<div class="cb-missions">${MISSIONS.map((g) => {
+        const done = g.tasks.filter((t) => m.claimed.includes(t.id)).length;
+        const groupReady = done === g.tasks.length && !m.groups.includes(g.id);
+        handlers[`mg-${g.id}`] = () => { const r = c.claimMissionGroup(g.id, this.now()); if (r.ok) this.toast(`Grupo completado: ${rewardText(r.reward!)}`); else this.toast(r.error ?? 'Error', 'err'); this.objectives('misiones'); };
+        const rows = g.tasks.map((t) => {
+          const v = Math.min(t.target, m.progress[t.id] ?? 0);
+          const got = m.claimed.includes(t.id);
+          handlers[`mt-${t.id}`] = () => { const r = c.claimMission(t.id, this.now()); if (r.ok) this.toast(`Misión: ${rewardText(r.reward!)}`); else this.toast(r.error ?? 'Error', 'err'); this.objectives('misiones'); };
+          return `<div class="cb-obj ${got ? 'done' : ''}"><div class="cb-objt"><b>${esc(t.text)}</b><small>${esc(rewardText(t.reward))}</small>${bar(v / t.target)}</div><div class="cb-objn num">${v}/${t.target}</div>
+            <button class="btn ${v >= t.target && !got ? 'primary' : ''}" data-act="mt-${t.id}" ${v < t.target || got ? 'disabled' : ''}>${got ? 'Reclamado' : 'Reclamar'}</button></div>`;
+        }).join('');
+        return `<div class="panel cb-mgroup ${m.groups.includes(g.id) ? 'done' : ''}"><div class="cb-mhead"><div><h3>${esc(g.name)}</h3><small class="muted">${esc(g.blurb)}</small></div><div class="cb-mprog num">${done}/${g.tasks.length}</div></div>${rows}
+          <div class="cb-mreward"><span>Premio del grupo: <b>${esc(rewardText(g.reward))}</b></span><button class="btn ${groupReady ? 'primary' : ''}" data-act="mg-${g.id}" ${groupReady ? '' : 'disabled'}>${m.groups.includes(g.id) ? 'Conseguido' : 'Reclamar grupo'}</button></div></div>`;
+      }).join('')}</div>`;
     } else if (tab === 'hitos') {
       body = `<div class="panel"><h3>Hitos del club</h3>${milestoneStatus(s).map((m) => {
         handlers[`ms-${m.def.id}`] = () => { const r = c.claimMilestone(m.def.id, this.now()); if (r.ok) this.toast(`Reclamado: ${rewardText(r.reward!)}`); else this.toast(r.error ?? 'Error', 'err'); this.objectives('hitos'); };
@@ -434,11 +484,76 @@ export class ClubUI implements ClubHost {
       ${t && t.weekId === wk ? `<div class="cb-ladder">${ladder}</div>` : ''}
       <div class="cb-btnrow">${!t || t.weekId !== wk ? `<button class="btn primary" data-act="${call('tn-enter', () => { const r = c.enterTournament(this.now()); if (r.ok) this.toast('Inscripción completada'); else this.toast(r.error, 'err'); this.competitions(); })}" ${complete ? '' : 'disabled'}>Inscribirme (${fmt(TOURNAMENT_ENTRY)} ⓒ)</button>`
         : `<button class="btn primary" data-act="${call('tn-play', () => this.play('tournament'))}" ${t.finished || !t.alive ? 'disabled' : ''}>Jugar ${t.finished ? '' : TOURNAMENT_ROUNDS[t.round]}</button><button class="btn" data-act="${call('tn-claim', () => { const r = c.claimTournament(this.now()); if (r.ok) this.toast(`Reclamado: ${rewardText(r.value)}`); else this.toast(r.error, 'err'); this.competitions(); })}" ${t.claimed || !t.finished ? 'disabled' : ''}>${t.claimed ? 'Reclamado' : 'Reclamar premio'}</button>`}</div></div>`;
+    const on = s.online;
+    const online = `<div class="panel cb-comp cb-online"><h3>🌐 Online · club contra club</h3><p class="muted">Tu plantilla (con su química y sus evoluciones) contra la de otro jugador real. Partes de 4 minutos. Victoria +${ONLINE_POINTS.W}, empate +${ONLINE_POINTS.D}, derrota ${ONLINE_POINTS.L} puntos de club; premios en monedas un 25 % mayores. Abandonar cuenta como derrota.</p>
+      <p><b class="num">${on.points}</b> puntos · <b class="num">${on.won}</b>V <b class="num">${on.drawn}</b>E <b class="num">${on.lost}</b>D</p>
+      <div class="cb-btnrow"><button class="btn primary" data-act="${call('on-play', () => this.goto('online'))}" ${complete ? '' : 'disabled'}>Buscar rival online</button></div></div>`;
     const friendly = `<div class="panel cb-comp"><h3>Amistoso</h3><p class="muted">Juega contra cualquier equipo del juego. No afecta a tu clasificación, récords, objetivos ni economía.</p>
       <div class="cb-btnrow"><button class="btn primary" data-act="${call('fr-play', () => this.app.pickTeam('Elige tu rival amistoso', (id) => this.play('friendly', { oppId: id }), () => this.competitions()))}" ${complete ? '' : 'disabled'}>Elegir rival y jugar</button></div></div>`;
     this.show(`<div class="screen-header"><div><div class="crumb">SOFFTI CLUB · EQUIPO ${ev.ovr} · QUÍMICA ${ev.chem}</div><h2>Competiciones</h2></div></div>
-      <div class="screen-body">${warn}<div class="cb-compgrid">${rivals}${champions}${battles}${tournament}${friendly}</div></div>
+      <div class="screen-body">${warn}<div class="cb-compgrid">${online}${rivals}${champions}${battles}${tournament}${friendly}</div></div>
       <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, handlers, () => this.hub(), 'club-screen club-comp');
+  }
+
+  // ==================================================================
+  // Evoluciones
+  // ==================================================================
+  private evos() {
+    const c = this.club;
+    const now = this.now();
+    c.tick(now);
+    const s = c.s;
+    const handlers: Handlers = { back: () => this.hub() };
+    const boostText = (b: Record<string, number | undefined>) => Object.entries(b).filter(([, v]) => v).map(([k, v]) => `+${v} ${ATTR_NAMES[k] ?? k}`).join(' · ');
+    const active = s.evos.map((a) => {
+      const e = evoById(a.evoId)!;
+      const d = c.def(a.uid);
+      if (!d) return '';
+      const lvl = e.levels[a.level];
+      handlers[`evc-${a.uid}`] = () => this.confirm('¿Cancelar la evolución?', `${d.name} conserva los niveles ya conseguidos, pero pierde el progreso del nivel actual y no se devuelven monedas.`, 'Cancelar evolución', () => { c.cancelEvo(a.uid); this.evos(); }, () => this.evos());
+      const tasks = lvl.tasks.map((t, i) => `<div class="cb-evtask"><span>${esc(t.text)}</span><b class="num">${Math.min(t.target, a.progress[i] ?? 0)}/${t.target}</b>${bar((a.progress[i] ?? 0) / t.target)}</div>`).join('');
+      const inXI = c.squad.slots.includes(a.uid);
+      return `<div class="panel cb-evact"><div class="cb-evcard">${cardHTML(d, { size: 'sm' })}</div><div class="cb-evinfo">
+        <div class="crumb">${esc(e.name.toUpperCase())} · NIVEL ${a.level + 1}/${e.levels.length}</div><h3>${esc(d.name)}</h3>
+        <div class="cb-evpips">${e.levels.map((_, i) => `<i class="${i < a.level ? 'on' : i === a.level ? 'cur' : ''}"></i>`).join('')}</div>
+        ${tasks}<small class="muted">Al completarlo: ${esc(boostText(lvl.boost))}${lvl.skill ? ' · +1★ filigranas' : ''}</small>
+        ${inXI ? '' : '<div class="sub-msg">No es titular en tu plantilla activa: solo progresa jugando de titular.</div>'}
+        <div class="cb-btnrow"><button class="btn" data-act="evc-${a.uid}">Cancelar</button></div></div></div>`;
+    }).join('');
+    const list = EVOS.map((e) => {
+      const eligible = s.inventory.filter((ci) => { const d = getCardDef(ci.defId); return d && evoEligible(e, d) && !s.evos.some((x) => x.uid === ci.uid); }).length;
+      handlers[`evs-${e.id}`] = () => this.evoPick(e.id);
+      const lv = e.levels.map((l, i) => `<li><b>Nivel ${i + 1}:</b> ${esc(l.tasks.map((t) => t.text).join(' y '))} → <span class="cb-evboost">${esc(boostText(l.boost))}${l.skill ? ' · +1★' : ''}</span></li>`).join('');
+      return `<div class="panel cb-evo"><div class="cb-evohead"><h3>${esc(e.name)}</h3><span class="cb-evocost num">${e.cost ? `${fmt(e.cost)} ⓒ` : 'GRATIS'}</span></div>
+        <p class="muted">${esc(e.blurb)}</p><p><b>Requisito:</b> ${esc(e.req.text)}</p><ol class="cb-evlv">${lv}</ol>
+        <div class="cb-btnrow"><button class="btn primary" data-act="evs-${e.id}" ${eligible && s.evos.length < MAX_ACTIVE_EVOS ? '' : 'disabled'}>Elegir jugador (${eligible} posibles)</button></div></div>`;
+    }).join('');
+    this.show(`<div class="screen-header"><div><div class="crumb">SOFFTI CLUB · ${s.evos.length}/${MAX_ACTIVE_EVOS} EN CURSO</div><h2>Evoluciones</h2></div></div>
+      <div class="screen-body"><p class="muted">Mejora una carta de tu club jugando con ella de titular. Cada nivel completado le suma atributos para siempre; la carta evolucionada lleva el sello EVO y no se puede vender en el mercado.</p>
+      ${active ? `<h3 class="cb-sect">En curso</h3><div class="cb-evactgrid">${active}</div>` : ''}
+      <h3 class="cb-sect">Disponibles</h3><div class="cb-evogrid">${list}</div></div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, handlers, () => this.hub(), 'club-screen club-evos');
+  }
+
+  /** Elegir la carta para una evolución, con la vista previa del resultado final. */
+  private evoPick(evoId: string, sel = '') {
+    const c = this.club;
+    const e = evoById(evoId)!;
+    const cands = c.s.inventory.map((ci) => ({ ci, d: getCardDef(ci.defId)! })).filter((x) => x.d && evoEligible(e, x.d) && !c.s.evos.some((a) => a.uid === x.ci.uid)).sort((a, b) => b.d.ovr - a.d.ovr);
+    const chosen = cands.find((x) => x.ci.uid === sel) ?? cands[0];
+    const after = chosen ? getCardDef(evolvedId(chosen.d.id, e.id, e.levels.length)) : undefined;
+    const grid = cands.map(({ ci, d }) => `<div class="cb-colcard ${chosen?.ci.uid === ci.uid ? 'sel' : ''}" data-uid="${ci.uid}">${cardHTML(d, { size: 'xs' })}</div>`).join('');
+    const s = this.show(`<div class="screen-header"><div><div class="crumb">EVOLUCIÓN · ${esc(e.req.text.toUpperCase())}</div><h2>${esc(e.name)}</h2></div></div>
+      <div class="screen-body"><div class="cb-evpick">
+        <div class="panel cb-evprev">${chosen && after ? `<div class="cb-evba">${cardHTML(chosen.d, { size: 'md' })}<span class="cb-evarrow">➜</span>${cardHTML(after, { size: 'md' })}</div>
+          <p class="muted">Tras ${e.levels.length} niveles: <b class="num">${chosen.d.ovr} → ${after.ovr}</b>${e.cost ? ` · cuesta ${fmt(e.cost)} monedas` : ''}.</p>` : '<p class="muted">No tienes cartas que cumplan el requisito.</p>'}
+          <button class="btn primary" data-act="start" ${chosen ? '' : 'disabled'}>Empezar evolución</button></div>
+        <div class="cb-colgrid cb-sbcgrid">${grid}</div></div></div>
+      <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, {
+      back: () => this.evos(),
+      start: () => { if (!chosen) return; const r = c.startEvo(e.id, chosen.ci.uid, this.now()); if (r.ok) { this.toast(`Evolución en marcha: ${chosen.d.name}`); this.evos(); } else this.toast(r.error, 'err'); },
+    }, () => this.evos(), 'club-screen club-evos');
+    s.root.querySelector('.cb-sbcgrid')?.addEventListener('click', (ev) => { const u = ((ev.target as HTMLElement).closest('[data-uid]') as HTMLElement | null)?.dataset.uid; if (u) this.evoPick(evoId, u); });
   }
 
   // ==================================================================

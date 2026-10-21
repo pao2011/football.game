@@ -15,6 +15,40 @@ const NAT_CODE: Record<string, string> = {
 };
 export const natCode = (n: string) => NAT_CODE[n] ?? n.slice(0, 3).toUpperCase();
 
+// Banderas simplificadas (viewBox 30×20): franjas y el símbolo principal, legibles a tamaño de carta.
+const h3 = (a: string, b: string, c: string) => `<rect width="30" height="20" fill="${b}"/><rect width="30" height="6.67" fill="${a}"/><rect y="13.33" width="30" height="6.67" fill="${c}"/>`;
+const v3 = (a: string, b: string, c: string) => `<rect width="30" height="20" fill="${b}"/><rect width="10" height="20" fill="${a}"/><rect x="20" width="10" height="20" fill="${c}"/>`;
+const sun = (x: number, y: number, r: number, c: string) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${c}"/>`;
+const FLAGS: Record<string, string> = {
+  Argentina: h3('#74acdf', '#fff', '#74acdf') + sun(15, 10, 2.2, '#f6b40e'),
+  Brasil: `<rect width="30" height="20" fill="#009c3b"/><path d="M15 2.5L27 10L15 17.5L3 10Z" fill="#ffdf00"/>${sun(15, 10, 4, '#002776')}`,
+  Uruguay: `<rect width="30" height="20" fill="#fff"/>${[2.2, 6.6, 11, 15.4].map((y) => `<rect y="${y}" width="30" height="2.2" fill="#0038a8"/>`).join('')}<rect width="12" height="11" fill="#fff"/>${sun(6, 5.5, 2.6, '#fcd116')}`,
+  Colombia: `<rect width="30" height="20" fill="#ce1126"/><rect width="30" height="10" fill="#fcd116"/><rect y="10" width="30" height="5" fill="#003893"/>`,
+  Chile: `<rect width="30" height="20" fill="#d52b1e"/><rect width="30" height="10" fill="#fff"/><rect width="10" height="10" fill="#0039a6"/>${sun(5, 5, 1.8, '#fff')}`,
+  Paraguay: h3('#d52b1e', '#fff', '#0038a8') + sun(15, 10, 1.8, '#0038a8'),
+  Ecuador: `<rect width="30" height="20" fill="#ed1c24"/><rect width="30" height="10" fill="#ffdd00"/><rect y="10" width="30" height="5" fill="#034ea2"/>${sun(15, 10, 2.4, '#7a5c2e')}`,
+  Venezuela: h3('#ffcc00', '#00247d', '#cf142b') + `<path d="M10 11.5Q15 7 20 11.5" stroke="#fff" stroke-width="1.2" fill="none" stroke-dasharray="1 1"/>`,
+  'Perú': v3('#d91023', '#fff', '#d91023'),
+  Bolivia: h3('#d52b1e', '#f9e300', '#007934'),
+  'España': `<rect width="30" height="20" fill="#aa151b"/><rect y="5" width="30" height="10" fill="#f1bf00"/>`,
+  Francia: v3('#002395', '#fff', '#ed2939'),
+  Italia: v3('#009246', '#fff', '#ce2b37'),
+  Alemania: h3('#000', '#dd0000', '#ffce00'),
+  Inglaterra: `<rect width="30" height="20" fill="#fff"/><rect x="13" width="4" height="20" fill="#ce1124"/><rect y="8" width="30" height="4" fill="#ce1124"/>`,
+  Portugal: `<rect width="30" height="20" fill="#ff0000"/><rect width="12" height="20" fill="#006600"/>${sun(12, 10, 3.2, '#ffcc00')}`,
+  'Países Bajos': h3('#ae1c28', '#fff', '#21468b'),
+  'Bélgica': v3('#000', '#fdda24', '#ef3340'),
+  'Turquía': `<rect width="30" height="20" fill="#e30a17"/>${sun(12, 10, 5, '#fff')}${sun(13.4, 10, 4, '#e30a17')}<path d="M18 10l3-1-1.8 2.6V8.4L21 11z" fill="#fff"/>`,
+  Escocia: `<rect width="30" height="20" fill="#005eb8"/><path d="M0 0L30 20M30 0L0 20" stroke="#fff" stroke-width="3.4"/>`,
+  Nigeria: v3('#008751', '#fff', '#008751'),
+  Suecia: `<rect width="30" height="20" fill="#006aa7"/><rect x="9" width="4" height="20" fill="#fecc00"/><rect y="8" width="30" height="4" fill="#fecc00"/>`,
+};
+/** Bandera (SVG en línea) de una nacionalidad; si no hay dibujo, el código en una placa. */
+export function flagSVG(nat: string, w = 30): string {
+  const body = FLAGS[nat] ?? `<rect width="30" height="20" fill="#2a3550"/><text x="15" y="14" text-anchor="middle" font-size="9" font-weight="800" fill="#fff" font-family="sans-serif">${esc(natCode(nat))}</text>`;
+  return `<svg class="fc-flag" viewBox="0 0 30 20" width="${w}" height="${Math.round((w * 2) / 3)}" aria-label="${esc(nat)}"><clipPath id="fl${uid}"><rect width="30" height="20" rx="2"/></clipPath><g clip-path="url(#fl${uid++})">${body}</g><rect width="30" height="20" rx="2" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="1"/></svg>`;
+}
+
 let uid = 0;
 const hex = (c: string) => { const n = parseInt(c.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
 const mix = (c: string, k: number) => { const [r, g, b] = hex(c); const f = (v: number) => Math.max(0, Math.min(255, Math.round(k >= 0 ? v + (255 - v) * k : v * (1 + k)))); return `rgb(${f(r)},${f(g)},${f(b)})`; };
@@ -119,19 +153,20 @@ export function cardHTML(d: CardDef, o: CardOpts = {}): string {
   const delta = o.effOvr !== undefined && o.effOvr !== d.ovr ? (o.effOvr > d.ovr ? 'up' : 'down') : '';
   const chem = o.chem !== undefined ? `<div class="fc-chem c${o.chem}" title="Química ${o.chem}/3">${[0, 1, 2].map((i) => `<i class="${i < o.chem! ? 'on' : ''}"></i>`).join('')}</div>` : '';
   const stats = STAT_KEYS.map((k, i) => `<span><b>${d.stats[k]}</b>${labels[i]}</span>`);
-  const tag = d.rarity === 'event' ? `<div class="fc-tag">${esc(d.eventSeason ?? 'EVENTO').toUpperCase()}</div>` : d.rarity === 'rising' ? '<div class="fc-tag">PROMESA</div>' : d.rarity === 'special' ? '<div class="fc-tag">ESTRELLA</div>' : d.rarity === 'legend' ? '<div class="fc-tag">LEYENDA</div>' : '';
-  return `<div class="fc fc-${d.rarity} fc-${size} ${o.cls ?? ''}" ${o.attrs ?? ''} title="${esc(d.name)} · ${RARITY_NAMES[d.rarity]}">
-    <div class="fc-bg"></div><div class="fc-art"></div>
+  const evoTag = d.evo ? `<div class="fc-tag fc-evotag">EVO · ${esc(d.evo.name.toUpperCase())}</div>` : '';
+  const tag = d.evo ? evoTag : d.rarity === 'event' ? `<div class="fc-tag">${esc(d.eventSeason ?? 'EVENTO').toUpperCase()}</div>` : d.rarity === 'rising' ? '<div class="fc-tag">PROMESA</div>' : d.rarity === 'special' ? '<div class="fc-tag">ESTRELLA</div>' : d.rarity === 'legend' ? '<div class="fc-tag">LEYENDA</div>' : '';
+  const foil = d.rarity === 'bronze' || d.rarity === 'silver' ? '' : '<div class="fc-foil"></div>';
+  return `<div class="fc fc-${d.rarity} fc-${size} ${d.evo ? 'fc-evo' : ''} ${o.cls ?? ''}" ${o.attrs ?? ''} title="${esc(d.name)} · ${RARITY_NAMES[d.rarity]}${d.evo ? ` · Evolución ${esc(d.evo.name)} (nivel ${d.evo.level})` : ''}">
+    <div class="fc-bg"></div><div class="fc-art"></div>${foil}
     <div class="fc-top">
       <div class="fc-ovr num ${delta}">${ovr}</div>
       <div class="fc-pos">${o.pos ?? d.role}</div>
-      <div class="fc-nat">${natCode(d.nat)}</div>
-      <div class="fc-club">${crestOf(d, 28)}</div>
+      <div class="fc-ids"><span class="fc-nat">${flagSVG(d.nat)}</span><span class="fc-club">${crestOf(d, 28)}</span></div>
     </div>
     ${chem}
     <div class="fc-photo">${avatarSVG(d.face, shirtOf(d))}</div>
     ${tag}
-    <div class="fc-name">${esc(d.short)}</div>
+    <div class="fc-plate"></div><div class="fc-name">${esc(d.short)}</div>
     <div class="fc-stats num"><div>${stats.slice(0, 3).join('')}</div><i></i><div>${stats.slice(3).join('')}</div></div>
     <div class="fc-skill" title="Filigranas y pierna hábil">${d.skill}★ · ${d.foot}</div>
     ${o.captain ? '<div class="fc-cap">C</div>' : ''}
@@ -144,9 +179,9 @@ export function cardHTML(d: CardDef, o: CardOpts = {}): string {
 export function miniCardHTML(d: CardDef, o: CardOpts = {}): string {
   const ovr = o.effOvr ?? d.ovr;
   const chem = o.chem !== undefined ? `<div class="fm-chem c${o.chem}">${[0, 1, 2].map((i) => `<i class="${i < o.chem! ? 'on' : ''}"></i>`).join('')}</div>` : '';
-  return `<div class="fm fc-${d.rarity} ${o.cls ?? ''}" ${o.attrs ?? ''} title="${esc(d.name)}">
+  return `<div class="fm fc-${d.rarity} ${d.evo ? 'fc-evo' : ''} ${o.cls ?? ''}" ${o.attrs ?? ''} title="${esc(d.name)}">
     <div class="fm-bg"></div><div class="fm-ovr num">${ovr}</div><div class="fm-pos">${o.pos ?? d.role}</div>
-    <div class="fm-photo">${avatarSVG(d.face, shirtOf(d))}</div><div class="fm-name">${esc(d.short)}</div>${chem}${o.captain ? '<div class="fm-cap">C</div>' : ''}
+    <div class="fm-photo">${avatarSVG(d.face, shirtOf(d))}</div><div class="fm-name">${esc(d.short)}</div><div class="fm-flag">${flagSVG(d.nat, 14)}</div>${d.evo ? '<div class="fm-evo">EVO</div>' : ''}${chem}${o.captain ? '<div class="fm-cap">C</div>' : ''}
   </div>`;
 }
 

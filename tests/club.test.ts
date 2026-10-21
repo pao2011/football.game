@@ -11,7 +11,7 @@ import { addTx, ECONOMY, reconcile } from '../src/modes/club/economy';
 import { MAX_INVENTORY, generateListings, listPriceBand } from '../src/modes/club/market';
 import { PACKS, effectiveOdds, rollPack } from '../src/modes/club/packs';
 import { levelOf, xpForLevel } from '../src/modes/club/progress';
-import { buildClubTeam } from '../src/modes/club/squads';
+import { buildClubTeam, sanitizeOnlineTeam } from '../src/modes/club/squads';
 import { seeded } from '../src/modes/club/util';
 import type { ClubIdentity } from '../src/modes/club/types';
 
@@ -400,9 +400,10 @@ describe('Club · progreso y recompensas', () => {
     expect(c.claimMilestone('m_win1', T0).ok).toBe(true);
     expect(c.claimMilestone('m_win1', T0).ok).toBe(false);
     c.s.progress.season.points = 150;
-    expect(c.claimSeason('sm1', T0).ok).toBe(true);
-    expect(c.claimSeason('sm1', T0).ok).toBe(false);
-    expect(c.claimSeason('sm3', T0).ok).toBe(false);
+    expect(c.claimPass('free', 1, T0).ok).toBe(true);
+    expect(c.claimPass('free', 1, T0).ok).toBe(false);
+    expect(c.claimPass('free', 2, T0).ok).toBe(false);
+    expect(c.claimPass('premium', 1, T0).ok).toBe(false);
   });
 });
 
@@ -576,5 +577,92 @@ describe('Club · guardado', () => {
     expect(Club.create({ ...ID, name: 'ab' }, '4-3-3').ok).toBe(false);
     expect(Club.create({ ...ID, primary: 'rojo' }, '4-3-3').ok).toBe(false);
     expect(Club.create(ID, '4-3-3').ok).toBe(true);
+  });
+});
+
+describe('Club · evoluciones, pase, misiones y sobres nuevos', () => {
+  const finish = (c: Club, gf: number, ga: number, t: number) => {
+    const p = c.prepareMatch('rivals', t, {}, seeded(2));
+    if (!p.ok) throw new Error(p.error);
+    return c.finishMatch(p.value.meta, { gf, ga, passes: 50, passesOk: 40, shots: 5, tackles: 5, halfMinutes: 4 }, t)!;
+  };
+  it('una evolución sube de nivel a un titular y la carta evolucionada no se vende en el mercado', () => {
+    const c = mk();
+    const uid = c.squad.slots.find((u) => { const d = c.def(u)!; return d.group !== 'GK' && d.ovr <= 78; })!;
+    const before = c.def(uid)!;
+    expect(c.startEvo('rayo', uid, T0).ok).toBe(true);
+    expect(c.startEvo('rayo', uid, T0).ok).toBe(false); // ya evoluciona
+    finish(c, 1, 0, T0);
+    const out = finish(c, 1, 0, T0 + 1000);
+    expect(out.lines.some((l) => l.includes('nivel 1'))).toBe(true);
+    const lv1 = c.def(uid)!;
+    expect(lv1.evo?.level).toBe(1);
+    expect(lv1.attrs.speed).toBe(Math.min(99, before.attrs.speed + 4));
+    expect(c.squad.slots).toContain(uid); // sigue en la plantilla
+    finish(c, 2, 0, T0 + 2000);
+    finish(c, 2, 0, T0 + 3000);
+    expect(c.def(uid)!.evo?.level).toBe(2);
+    expect(c.evoOf(uid)).toBeUndefined();
+    expect(getCardDef(c.card(uid)!.defId)?.id).toBe(c.card(uid)!.defId);
+    c.removeAt({ kind: 'slot', i: c.squad.slots.indexOf(uid) });
+    for (const q of c.s.squads) { q.slots = q.slots.map((u) => (u === uid ? null : u)); q.bench = q.bench.map((u) => (u === uid ? null : u)); }
+    expect(c.list(uid, 1000, 1, T0).ok).toBe(false);
+  });
+  it('el pase: niveles por puntos, premium con monedas y reclamar todo una vez', () => {
+    const c = mk();
+    c.s.progress.season.points = 150 * 6;
+    expect(c.claimAllPass(T0)).toBe(6);
+    expect(c.claimAllPass(T0)).toBe(0);
+    addTx(c.s, 'reward', 40000, 'x', T0);
+    const coins = c.s.coins;
+    expect(c.unlockPremiumPass(T0).ok).toBe(true);
+    expect(c.s.coins).toBeLessThan(coins);
+    expect(c.unlockPremiumPass(T0).ok).toBe(false);
+    expect(c.claimAllPass(T0)).toBe(6);
+    expect(sumLedger(c)).toBe(c.s.coins);
+  });
+  it('misiones: progreso por métricas, premio por tarea y por grupo', () => {
+    const c = mk();
+    expect(c.claimMission('ms_play1', T0).ok).toBe(false);
+    finish(c, 1, 0, T0);
+    expect(c.claimMission('ms_play1', T0).ok).toBe(true);
+    expect(c.claimMission('ms_win1', T0).ok).toBe(true);
+    expect(c.claimMission('ms_win1', T0).ok).toBe(false);
+    expect(c.claimMissionGroup('g_start', T0).ok).toBe(false);
+  });
+  it('el sobre 82+ solo da cartas de 82 o más y el de leyenda, leyendas', () => {
+    const rand = seeded(8);
+    const p82 = PACKS.find((p) => p.id === 'pick82')!;
+    const lg = PACKS.find((p) => p.id === 'legend')!;
+    for (let i = 0; i < 200; i++) {
+      expect(rollPack({ pack: p82, season: 's1', rand, owned: new Map(), pity: 0 }).defs.every((d) => d.ovr >= 82)).toBe(true);
+      expect(rollPack({ pack: lg, season: 's1', rand, owned: new Map(), pity: 0 }).defs[0].rarity).toBe('legend');
+    }
+  });
+  it('partido online del club: cuenta para los puntos online y las misiones', () => {
+    const c = mk();
+    const r = c.onlineTeam(T0);
+    if (!r.ok) throw new Error(r.error);
+    const out = c.finishMatch(r.value.meta, { gf: 2, ga: 1, passes: 10, passesOk: 8, shots: 3, tackles: 3, halfMinutes: 4 }, T0)!;
+    expect(out.result).toBe('W');
+    expect(c.s.online.won).toBe(1);
+    expect(c.s.online.points).toBeGreaterThan(0);
+    expect(c.claimMission('ms_on1', T0).ok).toBe(true);
+  });
+  it('la plantilla online del rival se valida (atributos 1..99, ids con prefijo, nada raro)', () => {
+    const c = mk();
+    const r = c.onlineTeam(T0);
+    if (!r.ok) throw new Error(r.error);
+    const raw = JSON.parse(JSON.stringify(r.value.team));
+    raw.players[1].attrs.speed = 999;
+    raw.name = '<img src=x>Club';
+    const t = sanitizeOnlineTeam(raw, 'a-')!;
+    expect(t.players.length).toBe(r.value.team.players.length);
+    expect(t.players[1].attrs.speed).toBe(99);
+    expect(t.players.every((p) => p.id.startsWith('a-'))).toBe(true);
+    expect(t.name).not.toContain('<');
+    expect(t.setPieces?.captain === undefined || t.setPieces.captain.startsWith('a-')).toBe(true);
+    expect(sanitizeOnlineTeam({ ...raw, players: raw.players.slice(0, 5) })).toBeNull();
+    expect(sanitizeOnlineTeam(null)).toBeNull();
   });
 });

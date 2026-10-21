@@ -6,14 +6,14 @@ import { currentSeason } from '../../modes/club/progress';
 import { RARITIES, RARITY_NAMES, type CardDef, type PackOpening, type Rarity } from '../../modes/club/types';
 import { esc, type Handlers, type Screen } from '../dom';
 import type { ClubHost } from './host';
-import { cardHTML, fmt } from './cards';
+import { cardHTML, crestOf, flagSVG, fmt } from './cards';
 
 // Pantalla "Sobres" del modo Soffti Club: tienda con probabilidades públicas + apertura animada carta a carta.
 // Los sobres solo se compran con monedas del juego (nunca con dinero real).
 
-type Stage = 'pack' | 'cards' | 'done';
+type Stage = 'pack' | 'cards' | 'grid' | 'done';
 interface LogEntry { defId: string; action: 'club' | 'sell' | 'discard'; value: number }
-interface Scene { openingId: string; packId: string; stage: Stage; revealed: boolean; confirmDiscard: boolean; log: LogEntry[]; total: number; dealt?: boolean }
+interface Scene { openingId: string; packId: string; stage: Stage; revealed: boolean; confirmDiscard: boolean; log: LogEntry[]; total: number; dealt?: boolean; walked?: boolean }
 
 const reduced = () => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 const RARE_FX: Rarity[] = ['special', 'event', 'legend'];
@@ -256,7 +256,21 @@ export function packsScreen(host: ClubHost): void {
           </div>
         </div>
         <div class="cp-hint cp-hint-flip">Toca la carta o pulsa Enter para revelarla</div>
-        <button class="btn cp-btn cp-all" data-act="keepall">Enviar todas al club</button>
+        <div class="cp-actions cp-actions-row"><button class="btn cp-btn cp-all" data-act="showall">Revelar todas</button><button class="btn cp-btn cp-all" data-act="keepall">Enviar todas al club</button></div>
+      </div>`;
+    } else if (sc.stage === 'grid') {
+      if (!op) return '';
+      const owned = club.ownedCounts();
+      const left = op.cards.filter((c) => !c.decided);
+      if (!left.length) return '';
+      const items = left.map((c) => ({ c, d: getCardDef(c.defId)! })).sort((a, b) => b.d.ovr - a.d.ovr);
+      const dups = items.filter(({ d }) => (owned.get(d.id) ?? 0) > 1 || items.filter((x) => x.d.id === d.id).length > 1);
+      const dupValue = dups.reduce((t, { d }) => t + quickSellValue(d), 0);
+      body = `<div class="cp-stage cp-gridstage">
+        <div class="cp-prog"><span class="num">${left.length} carta${left.length === 1 ? '' : 's'} por decidir</span></div>
+        <div class="cp-grid">${items.map(({ c, d }, i) => `<div class="cp-gcard" style="--i:${i}">${cardHTML(d, { size: 'sm', badge: (owned.get(d.id) ?? 0) > 1 ? 'Duplicada' : '' })}
+          <div class="cp-gbtns"><button class="btn cp-btn" data-act="gkeep" data-uid="${c.uid}" title="Enviar al club">Club</button><button class="btn cp-btn" data-act="gsell" data-uid="${c.uid}" title="Venta rápida">+${fmt(quickSellValue(d))} ⓒ</button></div></div>`).join('')}</div>
+        <div class="cp-actions cp-actions-row"><button class="btn primary cp-btn" data-act="keepall">Enviar todas al club</button>${dups.length ? `<button class="btn cp-btn" data-act="selldups">Vender duplicadas (${dups.length} · +${fmt(dupValue)} ⓒ)</button>` : ''}</div>
       </div>`;
     } else {
       const kept = sc.log.filter((l) => l.action === 'club');
@@ -370,6 +384,24 @@ export function packsScreen(host: ClubHost): void {
       return;
     }
     if (fx) stageEl()?.classList.add('fx-' + d.rarity);
+    if (wow && !scene.walked) {
+      // revelación por pasos, como en una retransmisión: bandera → puesto → club → carta
+      scene.walked = true;
+      scene.revealed = false;
+      f?.querySelector('.cp-flipper')?.classList.remove('on');
+      root.querySelector('.cp-cardstage')?.classList.remove('revealed');
+      const w = document.createElement('div');
+      w.className = 'cp-walkout';
+      w.innerHTML = `<div class="cp-wo-step" style="--d:0s">${flagSVG(d.nat, 120)}<span>${esc(d.nat)}</span></div>
+        <div class="cp-wo-step" style="--d:1.1s"><b class="num">${d.role}</b><span>${esc(d.group === 'GK' ? 'Portero' : d.group === 'DEF' ? 'Defensa' : d.group === 'MID' ? 'Mediocampista' : 'Delantero')}</span></div>
+        <div class="cp-wo-step" style="--d:2.2s">${crestOf(d, 120)}<span>${esc(d.clubName || 'Leyendas')}</span></div>`;
+      stageEl()?.appendChild(w);
+      cheer(0.25);
+      later(() => { flash(''); sparks(fx || 'gold', 30); }, 1100);
+      later(() => { flash(''); sparks(fx || 'gold', 30); cheer(0.35); }, 2200);
+      later(() => { w.remove(); flip(); }, 3300);
+      return;
+    }
     later(() => {
       show();
       if (fx) { flash(wow ? 'big' : ''); confetti(fx, wow); sparks(fx, wow ? 90 : 36); }
@@ -384,10 +416,20 @@ export function packsScreen(host: ClubHost): void {
     }, 560);
   }
 
+  const decideUid = (uid: string, action: 'club' | 'sell') => {
+    if (!scene) return;
+    const c = openingOf()?.cards.find((x) => x.uid === uid && !x.decided);
+    if (!c) return;
+    const r = club.decideCard(scene.openingId, uid, action, host.now());
+    if (!r.ok) { err(r.error); return; }
+    scene.log.push({ defId: c.defId, action, value: r.value });
+    advance();
+  };
+
   const advance = () => {
     if (!scene) return;
-    scene.revealed = false; scene.confirmDiscard = false;
-    scene.stage = nextCard(openingOf()) ? 'cards' : 'done';
+    scene.revealed = false; scene.confirmDiscard = false; scene.walked = false;
+    scene.stage = scene.stage === 'grid' && nextCard(openingOf()) ? 'grid' : nextCard(openingOf()) ? 'cards' : 'done';
     paint();
   };
 
@@ -430,6 +472,27 @@ export function packsScreen(host: ClubHost): void {
         return;
       }
       decide('discard');
+    },
+    showall: () => { if (!scene) return; scene.stage = 'grid'; scene.revealed = false; paint(); if (!reduced()) sparks('gold', 30); },
+    gkeep: (t) => decideUid(t.dataset.uid!, 'club'),
+    gsell: (t) => decideUid(t.dataset.uid!, 'sell'),
+    selldups: () => {
+      if (!scene) return;
+      const op = openingOf();
+      if (!op) return;
+      const owned = club.ownedCounts();
+      const seen = new Set<string>();
+      let total = 0;
+      for (const c of op.cards.filter((x) => !x.decided)) {
+        // se queda con la primera copia si no la tenías ya en el club
+        const dup = (owned.get(c.defId) ?? 0) > 1 && (seen.has(c.defId) || club.s.inventory.some((i) => i.defId === c.defId));
+        seen.add(c.defId);
+        if (!dup) continue;
+        const r = club.decideCard(scene.openingId, c.uid, 'sell', host.now());
+        if (r.ok) { total += r.value; scene.log.push({ defId: c.defId, action: 'sell', value: r.value }); }
+      }
+      if (total) host.toast(`Duplicadas vendidas: +${fmt(total)} ⓒ`);
+      advance();
     },
     keepall: () => {
       if (!scene) return;
