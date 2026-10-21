@@ -4,6 +4,7 @@ import './ui/club.css';
 import './ui/club-hub.css';
 import './ui/club-extra.css';
 import './ui/menu.css';
+import './ui/polish.css';
 import { App } from './ui/App';
 
 function boot() {

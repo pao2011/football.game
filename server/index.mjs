@@ -38,6 +38,11 @@ async function serve(req, res) {
     res.end(JSON.stringify({ ok: true, juego: 'football-elite-3d', online: lobby.clients.size, partidos: lobby.matches.size }));
     return;
   }
+  if (url.pathname === '/sitio') {
+    res.writeHead(302, { location: '/sitio/' });
+    res.end();
+    return;
+  }
   if (url.pathname === '/apk' || url.pathname === '/apk/') {
     // atajo para compartir: lleva a la última APK publicada en GitHub
     res.writeHead(302, { location: APK_URL, 'cache-control': 'no-store' });
