@@ -666,6 +666,7 @@ export const en: Dict = {
     'Gráficos': 'Graphics',
     'Idioma / Language': 'Language',
     'Calidad': 'Quality',
+    'Fluido (sin hinchada)': 'Smooth (no crowd)',
     'Baja': 'Low',
     'Baja (próximo partido)': 'Low (next match)',
     'Media': 'Medium',

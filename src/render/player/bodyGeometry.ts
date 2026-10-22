@@ -50,6 +50,7 @@ interface Quality {
 const QUALITY: Record<ModelQualityLike, Quality> = {
   high: { segBody: 24, segLimb: 16, segSmall: 8, maxLen: 0.042, segHair: 32, hairRows: 12 },
   medium: { segBody: 20, segLimb: 12, segSmall: 8, maxLen: 0.055, segHair: 24, hairRows: 8 },
+  lite: { segBody: 8, segLimb: 6, segSmall: 4, maxLen: 0.22, segHair: 10, hairRows: 4 },
   low: { segBody: 12, segLimb: 8, segSmall: 4, maxLen: 0.14, segHair: 16, hairRows: 5 },
 };
 

@@ -9,7 +9,7 @@ export interface GameSettings {
   /** Idioma de la interfaz. */
   language: Lang;
   // Gráficos
-  quality: 'low' | 'medium' | 'high';
+  quality: 'lite' | 'low' | 'medium' | 'high';
   shadows: boolean;
   resolutionScale: number; // 0.5 .. 1
   antialias: boolean;
@@ -115,7 +115,11 @@ export const DEFAULT_SETTINGS: GameSettings = {
 /** Valores por defecto para móviles y tabletas: prioriza la fluidez. */
 function mobileDefaults(): Partial<GameSettings> {
   const coarse = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-  return coarse ? { quality: 'low', shadows: false, resolutionScale: 0.8, antialias: false, halfMinutes: 3, cameraZoom: 1.2 } : {};
+  if (!coarse) return {};
+  // móviles modestos (poca RAM o pocos núcleos): modo fluido de entrada
+  const nav = navigator as Navigator & { deviceMemory?: number };
+  const weak = (nav.deviceMemory ?? 8) <= 4 || (navigator.hardwareConcurrency ?? 8) <= 4;
+  return { quality: weak ? 'lite' : 'low', shadows: false, resolutionScale: weak ? 0.7 : 0.8, antialias: false, halfMinutes: 3, cameraZoom: 1.2 };
 }
 
 export function loadSettings(): GameSettings {
