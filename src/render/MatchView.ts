@@ -83,7 +83,7 @@ export class MatchView {
     this.scene.add(this.ball.mesh, this.ball.shadow);
     // Clima: partículas, capa de nieve, luz más apagada y balón naranja en la nieve
     if (match.weather !== 'clear') {
-      this.weatherFX = new WeatherFX(match.weather, match.ball.env.wind, opts.quality);
+      this.weatherFX = new WeatherFX(match.weather, match.ball.env.wind, opts.quality === 'lite' ? 'low' : opts.quality);
       this.scene.add(this.weatherFX.group);
       if (match.weather === 'rain' || match.weather === 'snow') {
         this.stadium.keyLight.intensity *= match.weather === 'rain' ? 0.6 : 0.8;

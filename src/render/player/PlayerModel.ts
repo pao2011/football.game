@@ -33,7 +33,7 @@ export interface PlayerVisualSpec {
   isGoalkeeper: boolean;
 }
 
-export type ModelQuality = 'low' | 'medium' | 'high';
+export type ModelQuality = 'lite' | 'low' | 'medium' | 'high';
 
 const SKIN_STOPS = ['#f6d8c4', '#eabd9a', '#d29a72', '#ae7651', '#8a5a3a', '#65412b', '#4a2f20'];
 
@@ -154,7 +154,7 @@ export class PlayerModel {
     this.spec.kit = kit;
     this.spec.number = number;
     this.spec.name = name;
-    const texSize = this.quality === 'low' ? 256 : 512;
+    const texSize = this.quality === 'low' || this.quality === 'lite' ? 256 : 512;
     const gk = this.spec.isGoalkeeper;
     const shirt = this.materials[MAT.shirt];
     shirt.map = shirtTexture(kit, number, name, texSize, gk);

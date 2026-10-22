@@ -11,7 +11,21 @@ import { makeLedTexture, makeScreenTexture, makeGlowTexture, hashString, LED_PAN
 import { makeStaticShadowUniforms, patchStaticShadow, type StaticShadowUniforms } from './shadowPatch';
 import { CORE_A, CORE_B, STAND_R, ROOF_IN_D, ROOF } from './layout';
 
-export type GfxQuality = 'low' | 'medium' | 'high';
+/** 'lite' = modo fluido: sin hinchada, sin techo ni gradas altas, sin efectos; para móviles de gama baja. */
+export type GfxQuality = 'lite' | 'low' | 'medium' | 'high';
+
+/** Sustituto de FanEffects cuando no hay hinchada (modo fluido): mismo uso, no hace nada. */
+class NoFans {
+  readonly group = new THREE.Group();
+  onBurst: ((distance: number) => void) | null = null;
+  readonly hazeLevel = 0;
+  welcome() {}
+  setSpectacle(_v: number) {}
+  spectacleBurst() {}
+  goal(_team: 0 | 1) {}
+  update(_dt: number, _camera: THREE.Camera, _viewH: number, _excitement: number) {}
+  dispose() {}
+}
 
 interface QualitySettings {
   shadowMap: number;
@@ -24,6 +38,7 @@ interface QualitySettings {
 }
 
 const QUALITY: Record<GfxQuality, QualitySettings> = {
+  lite: { shadowMap: 512, crowdMax: 0, animateCrowd: false, roof: false, ledAnim: false, staticShadow: false, crowdShadow: false },
   low: { shadowMap: 1024, crowdMax: 12000, animateCrowd: false, roof: false, ledAnim: false, staticShadow: false, crowdShadow: false },
   medium: { shadowMap: 2048, crowdMax: 30000, animateCrowd: true, roof: true, ledAnim: true, staticShadow: true, crowdShadow: false },
   high: { shadowMap: 4096, crowdMax: 42000, animateCrowd: true, roof: true, ledAnim: true, staticShadow: true, crowdShadow: true },
@@ -48,9 +63,9 @@ export class Stadium {
   private preset: LightPreset;
   private nets: GoalNets;
   private flags: CornerFlags;
-  private crowd: CrowdBuild;
+  private crowd: CrowdBuild | null = null;
   /** Hinchada: banderas, bengalas, fuegos artificiales y papelitos. */
-  readonly fans: FanEffects;
+  readonly fans: FanEffects | NoFans;
   private sky: THREE.Mesh;
   private lights: THREE.Object3D[] = [];
   private scene: THREE.Scene | null = null;
@@ -67,6 +82,9 @@ export class Stadium {
 
   constructor(data: StadiumData, quality: GfxQuality, homeColor: string, awayColor: string, names: [string, string] = ['LOCAL', 'VISITANTE']) {
     this.quality = quality;
+    const lite = quality === 'lite';
+    // el resto del código solo distingue low/medium/high
+    const gq = lite ? 'low' : quality;
     this.q = QUALITY[quality] ?? QUALITY.medium;
     this.preset = lightPreset(data.timeOfDay);
     const seed = hashString(data.id || data.name);
@@ -88,7 +106,7 @@ export class Stadium {
     this.su.uSDark.value = this.preset.shadowDark;
 
     // ---- pitch
-    const pitch = buildPitch(data.grassHue, quality, seed, this.su);
+    const pitch = buildPitch(data.grassHue, gq, seed, this.su);
     this.group.add(pitch.grass, pitch.lines);
     this.textures.push(...pitch.textures);
     this.materials.push(pitch.grass.material as THREE.Material, pitch.lines.material as THREE.Material);
@@ -109,7 +127,7 @@ export class Stadium {
 
     // ---- stands, roof, boards, dugouts
     const night = data.timeOfDay === 'night';
-    const sb = buildStands({ quality, standColor: data.standColor, roofColor: data.roofColor, homeColor, awayColor, roof: this.roofOn, night, upper: !data.small,
+    const sb = buildStands({ quality: gq, standColor: data.standColor, roofColor: data.roofColor, homeColor, awayColor, roof: this.roofOn, night, upper: !data.small && !lite,
       roofSides: look.roof === 'sides', upperSides: look.upper, seats: look.seats, track: look.track, palcos: look.palcos });
     const staticMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0.05 });
     staticMat.onBeforeCompile = (sh) => patchStaticShadow(sh, this.su);
@@ -145,7 +163,9 @@ export class Stadium {
     const ledStaticMat = new THREE.MeshBasicMaterial({ map: ledTex, color: new THREE.Color(ledIntensity, ledIntensity, ledIntensity) });
     this.materials.push(ledStaticMat);
     addMerged(sb.ledStatic, ledStaticMat, 'led-static', false);
-    if (sb.ledScroll.length) {
+    // modo fluido: los carteles rotativos quedan quietos (sin animación ni textura extra)
+    if (lite) addMerged(sb.ledScroll, ledStaticMat, 'led-scroll', false);
+    else if (sb.ledScroll.length) {
       const scrollTex = ledTex.clone();
       scrollTex.needsUpdate = true;
       this.ledScrollTex = scrollTex;
@@ -171,10 +191,10 @@ export class Stadium {
       depthWrite: false,
     });
     this.materials.push(glassMat);
-    const glass = addMerged(sb.glass, glassMat, 'dugout-glass', false);
+    const glass = lite ? null : addMerged(sb.glass, glassMat, 'dugout-glass', false);
     if (glass) glass.renderOrder = 3;
 
-    const lightsOn = this.preset.lightsOn;
+    const lightsOn = lite ? 0 : this.preset.lightsOn;
     if (lightsOn > 0 && sb.glow.length) {
       const glowMat = new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(1, 1, 1).multiplyScalar(0.45 + lightsOn * 0.75) });
       this.materials.push(glowMat);
@@ -205,16 +225,20 @@ export class Stadium {
     }
 
     // ---- crowd
-    const occupancy = Math.max(0.6, Math.min(0.96, data.capacity / 65000 + 0.25));
-    this.crowd = buildCrowd(
-      sb.rows,
-      { maxCount: this.q.crowdMax, occupancy, homeColor, awayColor, seed, receiveShadow: this.q.crowdShadow },
-      this.su,
-    );
-    this.textures.push(this.crowd.atlas);
-    this.materials.push(this.crowd.material);
-    this.group.add(...this.crowd.meshes);
-    this.fans = new FanEffects(this.crowd.spots, { homeColor, awayColor, seed, quality, homeName: names[0], awayName: names[1], show: data.show });
+    if (lite) {
+      this.fans = new NoFans();
+    } else {
+      const occupancy = Math.max(0.6, Math.min(0.96, data.capacity / 65000 + 0.25));
+      this.crowd = buildCrowd(
+        sb.rows,
+        { maxCount: this.q.crowdMax, occupancy, homeColor, awayColor, seed, receiveShadow: this.q.crowdShadow },
+        this.su,
+      );
+      this.textures.push(this.crowd.atlas);
+      this.materials.push(this.crowd.material);
+      this.group.add(...this.crowd.meshes);
+      this.fans = new FanEffects(this.crowd.spots, { homeColor, awayColor, seed, quality: gq, homeName: names[0], awayName: names[1], show: data.show });
+    }
     this.group.add(this.fans.group);
 
     // ---- sky
@@ -305,7 +329,7 @@ export class Stadium {
     // ease towards target excitement (fast rise, slower decay)
     const k = ex > this.excite ? 6 : 1.5;
     this.excite += (ex - this.excite) * Math.min(1, d * k);
-    if (this.q.animateCrowd) {
+    if (this.q.animateCrowd && this.crowd) {
       this.crowd.uniforms.uTime.value = this.time;
       this.crowd.uniforms.uExcite.value = this.excite;
     }
@@ -354,7 +378,7 @@ export class Stadium {
 
   /** Approximate number of crowd instances (for debug overlays). */
   get crowdCount(): number {
-    return this.crowd.count;
+    return this.crowd?.count ?? 0;
   }
 
   get gfxQuality(): GfxQuality {

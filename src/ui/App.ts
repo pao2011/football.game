@@ -2334,9 +2334,9 @@ export class App {
 
   settingsScreen(back: () => void, inMatch = false) {
     const st = this.settings;
-    const Q = ['low', 'medium', 'high'] as const;
+    const Q = ['lite', 'low', 'medium', 'high'] as const;
     const LANGS = ['es', 'en', 'pt'] as const;
-    const QL = { low: 'Baja', medium: 'Media', high: 'Alta' };
+    const QL = { lite: 'Fluido (sin hinchada)', low: 'Baja', medium: 'Media', high: 'Alta' };
     const CAMS = ['broadcast', 'tele', 'wide'] as const;
     const CL = { broadcast: 'Transmisión', tele: 'Tele', wide: 'Panorámica' };
     const pct = (v: number) => `${Math.round(v * 100)}%`;
@@ -2397,12 +2397,14 @@ export class App {
       this.onResize();
       s.refresh(render());
     };
+    // el modo fluido apaga también sombras y suavizado y baja la resolución
+    const liteDefaults = () => { if (st.quality === 'lite') { st.shadows = false; st.antialias = false; st.resolutionScale = Math.min(st.resolutionScale, 0.7); } };
     const h: Handlers = {
       tog: (t) => { const k = t.dataset.key as keyof GameSettings; (st as any)[k] = !st[k]; apply(); },
       langPrev: () => { st.language = cycleArr(LANGS, st.language, -1); setLang(st.language); apply(); },
       langNext: () => { st.language = cycleArr(LANGS, st.language, 1); setLang(st.language); apply(); },
-      qualPrev: () => { st.quality = cycleArr(Q, st.quality, -1); apply(); },
-      qualNext: () => { st.quality = cycleArr(Q, st.quality, 1); apply(); },
+      qualPrev: () => { st.quality = cycleArr(Q, st.quality, -1); liteDefaults(); apply(); },
+      qualNext: () => { st.quality = cycleArr(Q, st.quality, 1); liteDefaults(); apply(); },
       resPrev: () => step('resolutionScale', -1, 0.5, 1, 0.1), resNext: () => step('resolutionScale', 1, 0.5, 1, 0.1),
       touchPrev: () => { st.touchControls = cycleArr(['auto', 'on', 'off'] as const, st.touchControls, -1); apply(); },
       touchNext: () => { st.touchControls = cycleArr(['auto', 'on', 'off'] as const, st.touchControls, 1); apply(); },
