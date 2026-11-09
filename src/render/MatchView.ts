@@ -208,7 +208,7 @@ export class MatchView {
 
     // Ambiente: excitación según peligro de gol
     const danger = Math.max(0, (Math.abs(m.ball.pos.x) - (HALF_LENGTH - 30)) / 30);
-    const target = m.phase === 'goal' ? 1 : m.phase === 'play' ? danger * 0.8 : 0.15;
+    const target = m.phase === 'goal' ? 1 : this.ceremony ? 0.85 : m.phase === 'play' ? danger * 0.8 : 0.15; // en la salida de los equipos la tribuna salta
     this.excitement += (target - this.excitement) * Math.min(1, dt * (target > this.excitement ? 3 : 0.6));
     this.stadium.update(dt, this.excitement, this.camera, this.renderer.domElement.height);
     this.clock += dt;
