@@ -7,6 +7,7 @@ import type { StadiumData } from '../data/types';
 import { Input, P1_SPLIT, P2_SPLIT, versusDevices, type Bindings } from '../input/Input';
 import { Match, type MatchConfig } from '../sim/Match';
 import { MatchView } from '../render/MatchView';
+import { Ceremony } from './Ceremony';
 import type { MatchEvent } from '../sim/types';
 import { HUD } from '../ui/HUD';
 import { Commentary } from '../ui/Commentary';
@@ -40,8 +41,6 @@ export interface OnlineLink {
 export const ONLINE_PAUSES = 3;
 export const ONLINE_PAUSE_MAX_S = 60;
 
-/** Duración de la presentación del partido (s). */
-const INTRO_SECONDS = 5.4;
 
 export interface MatchResultInfo {
   match: Match;
@@ -104,8 +103,10 @@ export class MatchRunner {
   /** Presentación inicial en curso (la simulación espera mientras dura). */
   inIntro = false;
   private introFrames = 0;
-  private introEndAt = 0;
   private introStadium: StadiumData | null = null;
+  /** Ceremonia previa (salida del túnel, saludo y sorteo) y su tiempo transcurrido. */
+  private ceremony: Ceremony | null = null;
+  private introT = 0;
   private pendingTip: string | null = null;
   /** Velocidad de simulación (para pruebas automáticas). */
   timeScale = 1;
@@ -258,6 +259,8 @@ export class MatchRunner {
   skipIntro() {
     if (!this.inIntro) return;
     this.inIntro = false;
+    this.ceremony?.finish();
+    this.ceremony = null;
     this.hud.endIntro();
     this.view.director.endIntro();
     this.showTip();
@@ -282,17 +285,22 @@ export class MatchRunner {
     if (this.inIntro && !this.paused) {
       // presentación: la simulación espera; cualquier botón la salta
       if (this.introFrames < 3 && ++this.introFrames === 3) {
-        this.hud.playIntro(this.introStadium!, () => this.skipIntro());
+        this.ceremony = new Ceremony(m, this.view);
+        this.introT = 0;
+        this.hud.playIntro(this.introStadium!, () => this.skipIntro(), this.ceremony.duration);
         // recibimiento: fuegos artificiales, bengalas, papelitos y cántico con bombo
         this.view.stadium.fans.welcome();
         this.audioEngine.chant(1);
         this.narrator.welcome();
-        this.view.director.startIntro(INTRO_SECONDS);
-        this.introEndAt = performance.now() + (INTRO_SECONDS * 1000) / this.timeScale;
+      }
+      if (this.ceremony) {
+        this.introT += dt * this.timeScale;
+        this.ceremony.update(this.introT);
+        this.hud.setIntroCaption(this.ceremony.caption(this.introT));
       }
       this.input.poll(dt);
       const pausePressed = this.input.pressed('pause');
-      if ((this.introFrames >= 3 && performance.now() >= this.introEndAt) || pausePressed || (['pass', 'shoot', 'sprint', 'through', 'lob'] as const).some((a) => this.input.pressed(a))) this.skipIntro();
+      if ((this.introFrames >= 3 && this.introT >= (this.ceremony?.duration ?? 0)) || pausePressed || (['pass', 'shoot', 'sprint', 'through', 'lob'] as const).some((a) => this.input.pressed(a))) this.skipIntro();
       this.input.poll(0);
       // Esc / pausa siempre abre el menú de pausa, también durante la presentación
       if (pausePressed) this.pause();

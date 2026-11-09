@@ -47,6 +47,8 @@ export interface MatchConfig {
   classic?: string;
   /** Sede neutral (final): no suenan los cánticos ni el espectáculo de ningún club. */
   neutral?: boolean;
+  /** Final: nombre de la copa en juego (sale en la ceremonia previa, junto a los equipos). */
+  final?: string;
   /** Modo entrenamiento. */
   training?: 'free' | 'penalties' | 'freekicks';
   /** Clima (por defecto despejado). */

@@ -28,6 +28,8 @@ export class CameraDirector {
   cardFocus: { a: THREE.Vector3; b: THREE.Vector3 } | null = null;
   /** Tiro libre directo del jugador: balón y punto de mira (cámara detrás del lanzador). */
   freeKickAim: { target: THREE.Vector3 } | null = null;
+  /** Plano de la ceremonia previa (salida de los equipos, saludo y sorteo): lo manda el guion. */
+  ceremonyShot: { pos: THREE.Vector3; look: THREE.Vector3; fov: number; cut: boolean } | null = null;
   private readonly probe = new THREE.PerspectiveCamera();
   private readonly tmp = new THREE.Vector3();
 
@@ -85,6 +87,19 @@ export class CameraDirector {
       return; // la vista de repetición controla la cámara con updateReplay
     }
     this.replayT = 0;
+
+    const cs = this.ceremonyShot;
+    if (cs) {
+      // al cambiar de plano, corte seco; dentro del plano, seguimiento suave
+      const k = cs.cut ? 1 : 1 - Math.exp(-2.6 * dt);
+      this.pos.lerp(cs.pos, k);
+      this.look.lerp(cs.look, k);
+      this.camera.position.copy(this.pos);
+      this.camera.fov += (cs.fov - this.camera.fov) * k;
+      this.camera.updateProjectionMatrix();
+      this.camera.lookAt(this.look);
+      return;
+    }
 
     if (this.introT < this.introLen && m.phase === 'kickoff' && m.half === 1 && m.time < 6) {
       // Plano de presentación: barrido sobre el estadio

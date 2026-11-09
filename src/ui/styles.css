@@ -346,7 +346,10 @@ body.touch .scoreboard > div { font-size: 15px; padding: 0 8px; }
 .mi-away { animation: miInR 0.7s 0.45s cubic-bezier(.2,.9,.3,1.2) both, miOutR 0.45s 3.8s ease-in forwards; }
 .mi-vs { font-size: clamp(28px, 5vw, 64px); color: #ffcf3f; text-shadow: 0 0 24px rgba(255,207,63,0.7), 0 4px 10px #000; animation: miPop 0.5s 1s cubic-bezier(.3,1.6,.5,1) both, miFadeOut 0.3s 3.8s forwards; }
 .mi-go { position: absolute; top: 50%; left: 0; right: 0; transform: translateY(-50%); text-align: center; font-size: clamp(26px, 5.6vw, 72px); letter-spacing: 0.08em; color: #19e68c;
-  text-shadow: 0 0 30px rgba(25,230,140,0.6), 0 4px 14px #000; animation: miGo 1.3s 4.1s both; }
+  text-shadow: 0 0 30px rgba(25,230,140,0.6), 0 4px 14px #000; animation: miGo 1.3s var(--go-at, 4.1s) both; }
+.mi-cap { position: absolute; bottom: 12%; left: 0; right: 0; text-align: center; font-family: var(--body); font-weight: 700; font-size: clamp(13px, 1.8vw, 20px); letter-spacing: 0.12em; text-transform: uppercase; text-shadow: 0 2px 8px #000; animation: miDown 0.5s both; }
+.mi-cap:empty { display: none; }
+.mi-final { color: #ffcf3f; text-shadow: 0 0 22px rgba(255,207,63,0.75), 0 3px 10px #000; }
 .mi-skip { position: absolute; bottom: 5%; left: 0; right: 0; text-align: center; font-family: var(--body); font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; opacity: 0.55; animation: blink 1.6s infinite; }
 @keyframes miFade { from { opacity: 0; } }
 @keyframes miOut { to { opacity: 0; } }

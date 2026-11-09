@@ -37,7 +37,10 @@ export type AnimState =
   | 'ref_warn' // árbitro: aviso verbal (dedo índice)
   | 'ref_point' // árbitro: señala la dirección del tiro libre
   | 'ref_whistle' // árbitro: silba
-  | 'shove'; // empujón / roce con un rival (clásicos y peleas)
+  | 'shove' // empujón / roce con un rival (clásicos y peleas)
+  | 'handshake' // saludo protocolar: mano derecha extendida (caminando o quieto)
+  | 'applaud' // aplauso a la hinchada (formación inicial)
+  | 'coin_toss'; // árbitro: lanza la moneda del sorteo
 
 export interface AnimInfo {
   state: AnimState;

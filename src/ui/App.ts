@@ -1598,6 +1598,7 @@ export class App {
           home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: side,
           halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty,
           extraTime: next.knockout, penalties: next.knockout, weather: randomWeather(Math.random()),
+          final: next.stage === 'Final' ? 'Copa Élite' : undefined,
           homeLineup: side === 0 ? st.availability && this.tournament?.matchLineup() : undefined,
           awayLineup: side === 1 ? st.availability && this.tournament?.matchLineup() : undefined,
         }, this.stadiumForCtx({ mode: 'tournament', fixture: next }), { mode: 'tournament', fixture: next });
@@ -1712,6 +1713,7 @@ export class App {
           home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: side,
           halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty, extraTime: next.knockout, penalties: next.knockout,
           neutral: !!next.venue,
+          final: next.stage.startsWith('Final') ? `${c.league.name} · ${c.torneoName}` : undefined,
           homeFormation: side === 0 ? st.formation : undefined, awayFormation: side === 1 ? st.formation : undefined,
           homeLineup: side === 0 ? this.career?.matchLineup() ?? st.lineup : undefined, awayLineup: side === 1 ? this.career?.matchLineup() ?? st.lineup : undefined,
           weather: randomWeather(Math.random()),

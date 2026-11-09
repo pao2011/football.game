@@ -67,6 +67,8 @@ export class MatchView {
   private tmpAnim: AnimInfo = { state: 'idle', time: 0, duration: 0, speed: 0, variant: 0, foot: 1 };
   private aimLine: THREE.Line;
   excitement = 0;
+  /** Ceremonia previa en curso: sin indicadores de jugador ni de pase. */
+  ceremony = false;
   private focus = new THREE.Vector3();
   private weatherFX: WeatherFX | null = null;
   private clock = 0;
@@ -253,7 +255,7 @@ export class MatchView {
       const ind = this.indicators[t.index];
       if (!ind) continue;
       const c = t.controlled;
-      ind.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay';
+      ind.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay' && !this.ceremony;
       if (c) {
         ind.group.position.set(c.pos.x, 0, c.pos.z);
         ind.group.rotation.y = c.facing;
@@ -263,14 +265,14 @@ export class MatchView {
     if (this.indicator2) {
       const t = m.teams[m.config.humanTeam === 1 ? 1 : 0];
       const c = t.controlled2;
-      this.indicator2.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay';
+      this.indicator2.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay' && !this.ceremony;
       if (c) {
         this.indicator2.group.position.set(c.pos.x, 0, c.pos.z);
         this.indicator2.group.rotation.y = c.facing;
         this.indicator2.head.position.y = c.data.height + 0.55 + Math.sin(m.time * 5 + 1) * 0.05;
       }
     }
-    if (receiverPreview && this.opts.showIndicators) {
+    if (receiverPreview && this.opts.showIndicators && !this.ceremony) {
       this.receiverRing.visible = true;
       this.receiverRing.position.set(receiverPreview.pos.x, 0.03, receiverPreview.pos.z);
     } else {

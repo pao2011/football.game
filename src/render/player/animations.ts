@@ -1211,6 +1211,43 @@ function shove(c: Ctx, p: Pose) {
   }
 }
 
+// ------------------------------------------------------------------ ceremonia previa
+/** Saludo protocolar, aplauso a la hinchada y lanzamiento de la moneda (sobre la marcha o quieto). */
+function ceremony(c: Ctx, p: Pose) {
+  base(c, p);
+  const t = c.t;
+  if (c.state === 'handshake') {
+    // brazo derecho adelantado y algo cruzado, cabeza hacia la mano que se estrecha
+    const pump = Math.sin(t * 9) * 3;
+    p.rot(BONE.uarmR, -52 + pump, 0, -6);
+    p.rot(BONE.farmR, -22 - pump, 0, 0);
+    p.rot(BONE.handR, 0, 0, 25);
+    p.addRot(BONE.head, 4, -10, 0);
+  } else if (c.state === 'applaud') {
+    // aplauso por encima de la cintura: las manos se juntan y se separan
+    const clap = Math.max(0, Math.sin(t * 13)) * 14;
+    p.rot(BONE.uarmL, -48, 0, 10 + clap);
+    p.rot(BONE.uarmR, -48, 0, -10 - clap);
+    p.rot(BONE.farmL, -78, -30, 0);
+    p.rot(BONE.farmR, -78, 30, 0);
+    p.addRot(BONE.head, -6, 0, 0);
+  } else {
+    // moneda: la mano sube al pecho, la lanza con el pulgar y la recoge en la palma
+    const n = c.n;
+    const up = sstep(0, 0.12, n);
+    const flick = sstep(0.12, 0.2, n) * (1 - sstep(0.3, 0.55, n));
+    const look = sstep(0.12, 0.25, n) * (1 - sstep(0.75, 0.95, n));
+    p.rot(BONE.uarmR, -45 * up - 45 * flick, 0, -10);
+    p.rot(BONE.farmR, -95 * up + 40 * flick, 0, 0);
+    p.rot(BONE.handR, -20 * flick, 0, 0);
+    const catchL = sstep(0.6, 0.78, n);
+    p.rot(BONE.uarmL, -40 * catchL, 0, 12);
+    p.rot(BONE.farmL, -80 * catchL, -20 * catchL, 0);
+    p.addRot(BONE.neck, -20 * look, 0, 0);
+    p.addRot(BONE.head, -15 * look, 0, 0);
+  }
+}
+
 // ------------------------------------------------------------------ despacho
 const DEFAULT_DUR: Partial<Record<AnimState, number>> = {
   pass: 0.45, lob: 0.55, shoot: 0.55, header: 0.75, volley: 0.55, scissor: 0.85, bicycle: 1.05, diving: 0.95, scorpion: 1.0, backheel: 0.5, tackle: 0.6, slide: 1.0, getup: 1.2, throwin: 1.0, trap: 0.4, skill: 0.6, shove: 0.9,
@@ -1302,6 +1339,10 @@ function evalState(c: Ctx, p: Pose) {
       return dejected(c, p);
     case 'shove':
       return shove(c, p);
+    case 'handshake':
+    case 'applaud':
+    case 'coin_toss':
+      return ceremony(c, p);
     case 'ref_card':
     case 'ref_warn':
     case 'ref_point':
