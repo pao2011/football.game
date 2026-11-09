@@ -109,6 +109,7 @@ export interface Ctx {
   foot: number;
   variant: number;
   seed: number;
+  acc: number; // inclinación extra (grados) por acelerar (+) o frenar (-)
 }
 
 // ------------------------------------------------------------------ marcha
@@ -117,10 +118,10 @@ export const GAIT = {
   L: [1.0, 1.3, 2.1, 2.85, 3.45, 4.0],
   beta: [0.62, 0.6, 0.42, 0.35, 0.3, 0.26],
   hipsY: [0.955, 0.955, 0.95, 0.945, 0.94, 0.935],
-  lift: [0.03, 0.07, 0.17, 0.27, 0.34, 0.4],
-  kick: [0, 0, 0.06, 0.12, 0.16, 0.2],
-  lean: [0, 3, 8, 12, 16, 21],
-  arm: [3, 18, 32, 42, 52, 60],
+  lift: [0.03, 0.07, 0.17, 0.28, 0.36, 0.44],
+  kick: [0, 0, 0.06, 0.13, 0.18, 0.23],
+  lean: [0, 3, 7, 10, 13, 16],
+  arm: [3, 18, 34, 46, 57, 66],
   elbow: [10, 16, 70, 82, 88, 92],
   yaw: [0, 6, 8, 9, 10, 10],
   comp: [0, 0, 0.03, 0.04, 0.045, 0.05],
@@ -207,7 +208,7 @@ function locomotion(c: Ctx, p: Pose, dribble = false) {
   gaitFoot(pL, v, 0, dribble, 0, fsL);
   gaitFoot(pR, v, 1, dribble, touch, fsR);
   const fR = (fsR.fwd - fsL.fwd) * 0.5;
-  const lean = tbl(GS, GAIT.lean, v) + (dribble ? 8 : 0);
+  const lean = tbl(GS, GAIT.lean, v) + (dribble ? 8 : 0) + c.acc * sstep(0.3, 2.5, v);
   const yaw = tbl(GS, GAIT.yaw, v) * fR;
   const walk = 1 - sstep(1.6, 3.2, v);
   // cadera
@@ -367,8 +368,16 @@ function kick(c: Ctx, p: Pose, kind: KickKind) {
   p.rot(BONE.thighR, thighX, thighY, -4 - roll * 0.5);
   p.rot(BONE.shinR, shinX);
   p.rot(BONE.footR, footX);
+  // último paso: el pie de apoyo llega desde atrás y se clava al lado del balón; tras un tiro fuerte,
+  // el impulso lo levanta sobre la punta (pequeño salto de la continuación)
+  const plantZ = tr(n, [0, -0.16, 0.3, 0.1, 1, 0.1]);
+  const stepY = Math.sin(Math.PI * clamp(n / 0.3, 0, 1)) * 0.07;
+  const rise = kind === 'shoot' ? tr(n, [0, 0, 0.55, 0, 0.72, 22, 1, 0]) : 0;
+  p.hips.z = lerp(-0.08, 0.04, sstep(0, 0.45, n));
+  p.hips.y += rise * 0.0012;
   _pole.set(0.1, 0, 1);
-  solveLeg(p, 0, V(0.15, ANKLE_H, 0.06), _pole, footQ(0, 10));
+  solveLeg(p, 0, V(0.15, ankleForPitch(rise) + stepY, plantZ), _pole, footQ(rise, 10));
+  if (rise > 0) p.rot(BONE.toeL, -rise);
   p.rot(BONE.spine, spineX, -yaw * 0.5, -roll * 0.4);
   p.rot(BONE.chest, spineX * 0.6, -yaw * 0.5, -roll * 0.3);
   p.rot(BONE.neck, 8 * env, 0, 0);
@@ -731,7 +740,8 @@ function throwin(c: Ctx, p: Pose) {
 // ------------------------------------------------------------------ portero
 function gkDive(c: Ctx, p: Pose) {
   // versión hacia la DERECHA (-X); la izquierda es el espejo
-  const n = c.n;
+  // la estirada de la simulación ataja en sus primeras décimas: el gesto llega estirado a tiempo
+  const n = c.n < 0.3 ? c.n * 1.5 : 0.45 + (c.n - 0.3) * (0.55 / 0.7);
   const rz = tr(n, [0, 0, 0.12, -4, 0.3, 38, 0.45, 72, 0.6, 86, 1, 88]);
   const hy = tr(n, [0, 0.8, 0.12, 0.72, 0.28, 0.93, 0.4, 0.99, 0.55, 0.7, 0.68, 0.25, 0.8, 0.205, 1, 0.2]);
   const hx = tr(n, [0, 0, 0.12, 0.04, 0.4, -0.15, 0.7, -0.22, 1, -0.22]);
@@ -1348,7 +1358,7 @@ export class Animator {
 
   constructor(private readonly seed: number) {
     this.phase = frac(seed * 3.7);
-    this.ctx = { state: 'idle', t: 0, n: 0, v: 0, phase: 0, jphase: 0, foot: 1, variant: 0, seed };
+    this.ctx = { state: 'idle', t: 0, n: 0, v: 0, phase: 0, jphase: 0, foot: 1, variant: 0, seed, acc: 0 };
   }
 
   /** heightScale = altura del jugador / 1.80. Devuelve la pose final (referencia interna). */
@@ -1356,6 +1366,9 @@ export class Animator {
     dt = clamp(dt, 0, 0.1);
     const vModel = Math.max(0, anim.speed) / Math.max(0.5, heightScale);
     const k = 1 - Math.exp(-dt / 0.12);
+    // arranques y frenadas: el cuerpo se inclina hacia delante al acelerar y hacia atrás al frenar
+    const accT = clamp((vModel - this.vs) * 5, -7, 9);
+    this.ctx.acc += (accT - this.ctx.acc) * (1 - Math.exp(-dt / 0.15));
     this.vs += (vModel - this.vs) * k;
     const dribble = anim.state === 'dribble';
     this.phase += (this.vs * dt) / strideLength(this.vs, dribble);

@@ -25,6 +25,11 @@ export interface KickRequest {
   aimAt?: Vector3;
   /** Remate acrobático con el balón en el aire (volea, tijera o chilena). */
   aerial?: import('./Aerial').AerialKind;
+  /**
+   * Pase asistido: en el instante del contacto se reapunta desde la posición real del balón al punto por
+   * donde pasará el receptor (corrige el desfase del armado y el desmarque), conservando la potencia pedida.
+   */
+  homing?: boolean;
 }
 
 export type ActionKind = 'none' | 'kick' | 'tackle' | 'slide' | 'header' | 'dive' | 'fallen' | 'getup' | 'celebrate' | 'dejected' | 'hold' | 'throw' | 'trap' | 'skill' | 'scuffle';
@@ -134,7 +139,8 @@ export class Player {
     let s = this.sprinting ? top : jog;
     s *= 0.82 + 0.18 * this.stamina;
     if (this.injured) s *= 0.8; // lesionado: cojea hasta que lo cambian
-    if (withBall) s *= 0.86 + (a.control / 100) * 0.08;
+    // conducir a toda velocidad cuesta más (el pase es más rápido que la carrera con el balón)
+    if (withBall) s *= this.sprinting ? 0.8 + (a.control / 100) * 0.1 : 0.86 + (a.control / 100) * 0.08;
     // contener: más rápido si además se esprinta (LT + RT, "brega rápida")
     if (this.jockeying) s = Math.min(s, this.sprinting ? 5.2 : 3.2);
     // proteger el balón: casi parado; conducción de precisión: algo más lenta
@@ -240,6 +246,8 @@ export class Player {
     this.stamina = clamp(this.stamina - drain * dt * (1.6 - staminaAttr), 0.25, 1);
   }
 
+  private lastActTime = 0;
+
   /** Actualiza la información de animación expuesta al renderizador. */
   updateAnim(dt: number, hasBall: boolean, gkHolding: boolean) {
     const s = Math.hypot(this.vel.x, this.vel.z);
@@ -264,11 +272,26 @@ export class Player {
     } else {
       state = 'idle';
     }
-    if (state !== this.anim.state || (act.kind !== 'none' && act.time < this.anim.time)) {
+    // Golpeos: la animación se sincroniza con el contacto (el pie toca el balón justo en el impacto, a 0,45
+    // del gesto); durante la carrera previa de un balón parado se ve correr, no el gesto a cámara lenta.
+    let actT = act.time;
+    if (act.kind === 'kick' && !act.kick?.aerial && act.contactAt > 0 && (state === 'pass' || state === 'lob' || state === 'shoot')) {
+      const wind = Math.min(act.contactAt, 0.3);
+      const start = act.contactAt - wind;
+      if (act.time < start) {
+        state = s > 0.25 ? 'locomotion' : 'idle';
+      } else {
+        actT = act.time < act.contactAt ? (0.45 * (act.time - start)) / wind : 0.45 + (0.55 * (act.time - act.contactAt)) / Math.max(0.05, act.duration - act.contactAt);
+        duration = 1;
+      }
+    }
+    const restarted = act.kind !== 'none' && act.time < this.lastActTime;
+    this.lastActTime = act.kind !== 'none' ? act.time : 0;
+    if (state !== this.anim.state || restarted) {
       this.anim.state = state;
-      this.anim.time = act.kind !== 'none' ? act.time : 0;
+      this.anim.time = act.kind !== 'none' && duration > 0 ? actT : 0;
     } else {
-      this.anim.time = act.kind !== 'none' ? act.time : this.anim.time + dt;
+      this.anim.time = act.kind !== 'none' && duration > 0 ? actT : this.anim.time + dt;
     }
     this.anim.duration = duration;
     this.anim.speed = s;

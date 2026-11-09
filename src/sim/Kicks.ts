@@ -1,5 +1,5 @@
 import { Vector3 } from 'three';
-import { AIR_DRAG, Ball, groundPassSpeed, loftedSpeed, MAGNUS } from './Ball';
+import { AIR_DRAG, Ball, groundPassSpeed, groundPassTime, loftedSpeed, MAGNUS, ROLL_DECEL } from './Ball';
 import { BALL_RADIUS, GRAVITY } from '../config/constants';
 import { clamp } from '../util/math';
 
@@ -12,9 +12,72 @@ const _d = new Vector3();
 export function groundPassVelocity(from: Vector3, target: Vector3, powerBias = 0): Vector3 {
   _d.set(target.x - from.x, 0, target.z - from.z);
   const dist = Math.max(_d.length(), 0.5);
-  const arrive = clamp(5 + dist * 0.16 + powerBias * 4, 3.5, 13);
+  const arrive = clamp(5.8 + dist * 0.17 + powerBias * 4, 4, 14);
   const speed = clamp(groundPassSpeed(dist, arrive), 4, 30);
   return _d.normalize().multiplyScalar(speed);
+}
+
+/** Velocidad con la que llega a `dist` un balón raso lanzado a `v0` (inversa de groundPassSpeed). */
+export function groundArriveSpeed(v0: number, dist: number) {
+  const R = ROLL_DECEL;
+  const D = AIR_DRAG;
+  return Math.sqrt(Math.max(0, ((D * v0 * v0 + R) * Math.exp(-2 * D * dist) - R) / D));
+}
+
+/**
+ * Reapunta en el contacto un pase hacia el receptor: el balón sale desde `from` hacia donde estará el
+ * receptor (posición + velocidad durante el viaje). Raso: conserva la velocidad de llegada pedida.
+ * Elevado: conserva la elevación y escala la velocidad a la nueva distancia. Modifica `v`.
+ */
+export function homePassVelocity(from: Vector3, rx: number, rz: number, rvx: number, rvz: number, v: Vector3) {
+  const h = Math.hypot(v.x, v.z);
+  if (h < 1) return v;
+  const d0 = Math.max(1, Math.hypot(rx - from.x, rz - from.z));
+  const lofted = v.y > 2.5;
+  let tx = rx;
+  let tz = rz;
+  if (!lofted) {
+    const arrive = Math.max(4, groundArriveSpeed(h, d0));
+    let v0 = h;
+    for (let i = 0; i < 3; i++) {
+      const d = Math.max(1, Math.hypot(tx - from.x, tz - from.z));
+      v0 = clamp(groundPassSpeed(d, arrive), 4, 32);
+      const t = Math.min(1.6, groundPassTime(v0, d));
+      // el receptor frena al acercarse el balón: se adelanta algo menos de lo que correría
+      tx = rx + rvx * t * 0.8;
+      tz = rz + rvz * t * 0.8;
+    }
+    const d = Math.max(1, Math.hypot(tx - from.x, tz - from.z));
+    v.x = ((tx - from.x) / d) * v0;
+    v.z = ((tz - from.z) / d) * v0;
+    return v;
+  }
+  // elevado: tiempo de vuelo ~ 2·vy/g, la distancia escala con v²
+  const t = Math.min(2.2, (2 * v.y) / GRAVITY);
+  tx = rx + rvx * t * 0.8;
+  tz = rz + rvz * t * 0.8;
+  const d = Math.max(1, Math.hypot(tx - from.x, tz - from.z));
+  const k = clamp(Math.sqrt(d / loftRange(h, v.y, from.y)), 0.8, 1.25);
+  v.x = ((tx - from.x) / d) * h * k;
+  v.z = ((tz - from.z) / d) * h * k;
+  v.y *= k;
+  return v;
+}
+
+/** Distancia horizontal hasta el primer bote de un balón elevado (arrastre y gravedad). */
+function loftRange(h: number, vy: number, y0: number) {
+  let x = 0;
+  let y = Math.max(y0, BALL_RADIUS);
+  const dt = 1 / 60;
+  for (let t = 0; t < 5; t += dt) {
+    const s = Math.hypot(h, vy);
+    h -= AIR_DRAG * s * h * dt;
+    vy -= (GRAVITY + AIR_DRAG * s * vy) * dt;
+    x += h * dt;
+    y += vy * dt;
+    if (y < BALL_RADIUS && vy < 0) break;
+  }
+  return Math.max(1, x);
 }
 
 /** Balón elevado que cae aproximadamente en `target`. */
