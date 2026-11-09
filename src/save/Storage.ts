@@ -16,6 +16,21 @@ function store(): Storage | null {
   }
 }
 
+/** Se avisa tras cada guardado (la sincronización de cuenta lo usa para subir el progreso). */
+export let onSaved: ((key: string) => void) | null = null;
+export function setOnSaved(fn: (key: string) => void) { onSaved = fn; }
+
+/** Valor tal cual está guardado (texto JSON) y escritura sin avisar; los usa la sincronización. */
+export function getRaw(key: string): string | null {
+  const st = store();
+  return st ? st.getItem(PREFIX + key) : memory.get(key) ?? null;
+}
+export function setRaw(key: string, raw: string) {
+  const st = store();
+  if (st) st.setItem(PREFIX + key, raw);
+  else memory.set(key, raw);
+}
+
 export function saveJSON(key: string, value: unknown) {
   const s = JSON.stringify(value);
   const st = store();
@@ -26,6 +41,7 @@ export function saveJSON(key: string, value: unknown) {
     console.warn('No se pudo guardar', key, e);
     memory.set(key, s);
   }
+  onSaved?.(key);
 }
 
 export function loadJSON<T>(key: string, fallback: T): T {

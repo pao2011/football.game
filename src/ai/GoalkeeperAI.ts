@@ -6,7 +6,7 @@ import type { Match } from '../sim/Match';
 import type { Player } from '../sim/Player';
 import { clamp, dist2D } from '../util/math';
 import { buildClearance, buildGroundPass, buildLob } from './Actions';
-import { interceptFor } from './Predict';
+import { PRED_DT, getBallPrediction, interceptFor } from './Predict';
 
 /**
  * IA del arquero: posicionamiento en la bisectriz balón-arco, lectura de la trayectoria del tiro
@@ -33,10 +33,24 @@ function gkState(p: Player): GKState {
 
 const _v = new Vector3();
 
-/** Predicción del cruce del balón con el plano x = planeX (sin arrastre, suficiente a corto plazo). */
+/**
+ * Cruce del balón con el plano x = planeX. De cerca basta la recta con una corrección de arrastre (el arquero no es
+ * infalible ante remates y cabezazos a quemarropa); de lejos usa la trayectoria completa (arrastre, viento, botes).
+ */
 function crossing(m: Match, planeX: number): { t: number; z: number; y: number } | null {
   const b = m.ball;
   if (Math.abs(b.vel.x) < 0.5) return null;
+  if (Math.abs(b.pos.x - planeX) > 18) {
+    const pts = getBallPrediction(m);
+    const dir = Math.sign(b.vel.x);
+    for (let i = 1; i < pts.length; i++) {
+      const p0 = pts[i - 1], p1 = pts[i];
+      if ((p1.x - planeX) * dir < 0) continue;
+      const k = clamp((planeX - p0.x) / ((p1.x - p0.x) || 1), 0, 1);
+      return { t: (i - 1 + k) * PRED_DT, z: p0.z + (p1.z - p0.z) * k, y: Math.max(0.11, p0.y + (p1.y - p0.y) * k) };
+    }
+    return null;
+  }
   const t = (planeX - b.pos.x) / b.vel.x;
   if (t < 0 || t > 3) return null;
   const drag = 1 - 0.006 * b.speed * t; // corrección aproximada por arrastre
@@ -52,12 +66,15 @@ export function requestDive(m: Match, gk: Player, dz: number, y: number, t: numb
   const team = m.teams[gk.team];
   const dirZ = Math.sign(dz) || 1;
   const lift = clamp(y - 0.5, 0, 1.6);
-  const speed = clamp(Math.abs(dz) / Math.max(t, 0.25) + 1.0, 2.5, 4.6);
+  // v0 para recorrer dz en t con la frenada del Player (6.5 m/s²); los buenos arqueros llegan más lejos
+  const tt = clamp(t, 0.3, 0.9);
+  const speed = clamp(Math.max(Math.abs(dz) - 0.7, 0.3) / tt + 0.5 * 6.5 * tt, 2.5, 4.2 + gk.data.attrs.goalkeeping * 0.01);
   // izquierda del arquero (mirando hacia el campo): con attackDir +1 mira a +x → izquierda = -z
   const facingX = team.attackDir;
   const leftZ = -facingX; // z del lado izquierdo del arquero
   const anim = dirZ === leftZ ? 'gk_dive_left' : 'gk_dive_right';
-  gk.startAction('dive', anim, 1.4, 0, { variant: 0 });
+  // variante de animación: 1 rasa, 2 alta (estirada larga a media altura)
+  gk.startAction('dive', anim, 1.4, 0, { variant: y > 1.5 ? 2 : y < 0.6 ? 1 : 0 });
   gk.action.dir.set(0, lift, dirZ);
   gk.vel.set(0, 0, dirZ * speed);
   gk.facing = Math.atan2(facingX, 0);
@@ -127,7 +144,7 @@ export function updateGoalkeeperAI(m: Match, gk: Player, dt: number) {
         if (Math.abs(dz) < reachStand && cg.y < 2.3) {
           // de pie: colocarse en la trayectoria
           moveTo(gk, gk.pos.x, cg.z, 1);
-        } else if (cg.t < 0.95 && Math.abs(dz) < 4.2) {
+        } else if (cg.t < 0.8 && Math.abs(dz) < 4.8) {
           requestDive(m, gk, dz, cg.y, cg.t);
         } else {
           moveTo(gk, gk.pos.x, cg.z, 1);

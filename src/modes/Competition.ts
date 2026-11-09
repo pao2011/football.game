@@ -15,6 +15,9 @@ export interface Fixture {
   knockout: boolean;
   /** Estadio neutral (id) si el partido no se juega en la cancha del local. */
   venue?: string;
+  /** Eliminatoria a ida y vuelta: llave a la que pertenece y partido (1 = ida, 2 = vuelta). */
+  tie?: string;
+  leg?: 1 | 2;
 }
 
 export interface StandingRow {

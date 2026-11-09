@@ -1,0 +1,112 @@
+import type { LeagueData, ClassicDef } from '../seedUtil';
+import { kit, crest, stadium, GK_YELLOW, GK_ORANGE, GK_GREEN, GK_PURPLE, GK_BLACK } from '../seedUtil';
+import type { TeamSeed } from '../teams';
+import type { StadiumData } from '../types';
+
+// Eredivisie 2026/27 (18 equipos). Escudos en src/assets/crests/nl_*.webp. Plantillas de Transfermarkt (tmRosters.ts).
+
+const W = '#ffffff';
+const K = '#111111';
+const R = '#d71920';
+
+const teams: TeamSeed[] = [
+  { id: 'nl_psv', name: 'PSV Eindhoven', short: 'PSV', city: 'Eindhoven', crest: crest('nl_psv', R, W),
+    home: kit(R, W, 'stripes', W, R, W), away: kit('#16213e', '#2f4b9a', 'solid', '#16213e', '#16213e', W), gkKit: GK_YELLOW,
+    formation: '4-3-3', rating: 78, seed: 17001 },
+  { id: 'nl_feyenoord', name: 'Feyenoord', short: 'FEY', city: 'Rotterdam', crest: crest('nl_feyenoord', R, K),
+    home: kit(R, W, 'halves', K, K, W), away: kit(K, '#c9a227', 'solid', K, K, '#c9a227'), gkKit: GK_YELLOW,
+    formation: '4-3-3', rating: 76, seed: 17002 },
+  { id: 'nl_ajax', name: 'Ajax', short: 'AJA', city: 'Ámsterdam', crest: crest('nl_ajax', W, R),
+    home: kit(W, R, 'band', W, W, R), away: kit('#1f2a5a', '#6b3fa0', 'solid', '#1f2a5a', '#1f2a5a', W), gkKit: GK_GREEN,
+    formation: '4-3-3', rating: 76, seed: 17003 },
+  { id: 'nl_az', name: 'AZ Alkmaar', short: 'AZ', city: 'Alkmaar', crest: crest('nl_az', R, W),
+    home: kit(R, W, 'solid', W, R, W), away: kit(W, '#1b2a5a', 'solid', W, W, R), gkKit: GK_YELLOW,
+    formation: '4-2-3-1', rating: 72, seed: 17004 },
+  { id: 'nl_twente', name: 'FC Twente', short: 'TWE', city: 'Enschede', crest: crest('nl_twente', R, W),
+    home: kit(R, '#a8141a', 'solid', W, R, W), away: kit(W, R, 'solid', W, W, R), gkKit: GK_YELLOW,
+    formation: '4-3-3', rating: 71, seed: 17005 },
+  { id: 'nl_utrecht', name: 'FC Utrecht', short: 'UTR', city: 'Utrecht', crest: crest('nl_utrecht', R, '#1b4fa0'),
+    home: kit(R, '#1b4fa0', 'solid', W, R, W), away: kit(W, '#1b4fa0', 'band', W, W, R), gkKit: GK_YELLOW,
+    formation: '4-2-3-1', rating: 70, seed: 17006 },
+  { id: 'nl_nec', name: 'NEC Nijmegen', short: 'NEC', city: 'Nimega', crest: crest('nl_nec', R, '#0a7a3a'),
+    home: kit(R, K, 'stripes', K, K, W), away: kit(W, '#0a7a3a', 'band', W, W, '#0a7a3a'), gkKit: GK_YELLOW,
+    formation: '4-2-3-1', rating: 69, seed: 17007 },
+  { id: 'nl_heerenveen', name: 'SC Heerenveen', short: 'HEE', city: 'Heerenveen', crest: crest('nl_heerenveen', '#1b4fa0', W),
+    home: kit('#1b4fa0', W, 'stripes', W, '#1b4fa0', W), away: kit('#f28c1a', K, 'solid', K, '#f28c1a', K), gkKit: GK_GREEN,
+    formation: '4-3-3', rating: 69, seed: 17008 },
+  { id: 'nl_groningen', name: 'FC Groningen', short: 'GRO', city: 'Groninga', crest: crest('nl_groningen', '#0a7a3a', W),
+    home: kit('#0a7a3a', W, 'solid', W, '#0a7a3a', W), away: kit(W, '#0a7a3a', 'solid', W, W, '#0a7a3a'), gkKit: GK_ORANGE,
+    formation: '4-3-3', rating: 68, seed: 17009 },
+  { id: 'nl_sparta', name: 'Sparta Rotterdam', short: 'SPA', city: 'Rotterdam', crest: crest('nl_sparta', R, W),
+    home: kit(R, W, 'band', K, R, W), away: kit(K, '#c9a227', 'solid', K, K, '#c9a227'), gkKit: GK_YELLOW,
+    formation: '4-2-3-1', rating: 67, seed: 17010 },
+  { id: 'nl_zwolle', name: 'PEC Zwolle', short: 'ZWO', city: 'Zwolle', crest: crest('nl_zwolle', '#1b4fa0', W),
+    home: kit('#1b4fa0', W, 'solid', W, '#1b4fa0', W), away: kit(W, '#1b4fa0', 'solid', W, W, '#1b4fa0'), gkKit: GK_YELLOW,
+    formation: '4-4-2', rating: 65, seed: 17011 },
+  { id: 'nl_goahead', name: 'Go Ahead Eagles', short: 'GAE', city: 'Deventer', crest: crest('nl_goahead', R, '#f7d417'),
+    home: kit(R, '#f7d417', 'stripes', R, R, '#f7d417'), away: kit(K, '#f7d417', 'solid', K, K, '#f7d417'), gkKit: GK_GREEN,
+    formation: '4-3-3', rating: 66, seed: 17012 },
+  { id: 'nl_willem2', name: 'Willem II', short: 'WII', city: 'Tilburg', crest: crest('nl_willem2', R, '#1b4fa0'),
+    home: kit(R, '#1b4fa0', 'solid', '#1b4fa0', R, W), away: kit(W, '#1b4fa0', 'solid', W, W, '#1b4fa0'), gkKit: GK_YELLOW,
+    formation: '4-2-3-1', rating: 64, seed: 17013 },
+  { id: 'nl_excelsior', name: 'Excelsior', short: 'EXC', city: 'Rotterdam', crest: crest('nl_excelsior', R, K),
+    home: kit(R, K, 'halves', K, K, W), away: kit(W, R, 'solid', W, W, R), gkKit: GK_YELLOW,
+    formation: '4-4-2', rating: 62, seed: 17014 },
+  { id: 'nl_ado', name: 'ADO Den Haag', short: 'ADO', city: 'La Haya', crest: crest('nl_ado', '#0a7a3a', '#f7d417'),
+    home: kit('#f7d417', '#0a7a3a', 'stripes', '#0a7a3a', '#0a7a3a', '#0a7a3a'), away: kit(W, '#0a7a3a', 'solid', W, W, '#0a7a3a'), gkKit: GK_PURPLE,
+    formation: '4-4-2', rating: 62, seed: 17015 },
+  { id: 'nl_fortuna', name: 'Fortuna Sittard', short: 'FOR', city: 'Sittard', crest: crest('nl_fortuna', '#f7d417', '#0a7a3a'),
+    home: kit('#f7d417', '#0a7a3a', 'solid', '#0a7a3a', '#f7d417', '#0a7a3a'), away: kit(K, '#f7d417', 'solid', K, K, '#f7d417'), gkKit: GK_ORANGE,
+    formation: '4-3-3', rating: 62, seed: 17016 },
+  { id: 'nl_cambuur', name: 'SC Cambuur', short: 'CAM', city: 'Leeuwarden', crest: crest('nl_cambuur', '#f7d417', '#1b4fa0'),
+    home: kit('#f7d417', '#1b4fa0', 'solid', '#1b4fa0', '#f7d417', '#1b4fa0'), away: kit('#1b4fa0', '#f7d417', 'solid', '#1b4fa0', '#1b4fa0', '#f7d417'), gkKit: GK_BLACK,
+    formation: '4-2-3-1', rating: 61, seed: 17017 },
+  { id: 'nl_telstar', name: 'Telstar', short: 'TEL', city: 'Velsen', crest: crest('nl_telstar', W, K),
+    home: kit(W, K, 'stripes', K, W, K), away: kit(K, W, 'solid', K, K, W), gkKit: GK_ORANGE,
+    formation: '4-4-2', rating: 60, seed: 17018 },
+];
+
+const stadiums: StadiumData[] = [
+  stadium('nl_est_philips', 'Philips Stadion', 35000, 'nl_psv', { standColor: '#7a1a1a', look: { roof: 'ring', upper: 'both', seats: [R, W] } }),
+  stadium('nl_est_kuip', 'Stadion Feijenoord "De Kuip"', 47500, 'nl_feyenoord', { standColor: '#5a1a1a', look: { roof: 'ring', upper: 'both', seats: [R, W, K] } }),
+  stadium('nl_est_arena', 'Johan Cruijff ArenA', 55885, 'nl_ajax', { standColor: '#6a1a1a', look: { roof: 'ring', upper: 'both', seats: [W, R] } }),
+  stadium('nl_est_afas', 'AFAS Stadion', 19500, 'nl_az', { standColor: '#7a1a1a', look: { roof: 'ring', upper: 'both', seats: [R, W] } }),
+  stadium('nl_est_grolsch', 'De Grolsch Veste', 30205, 'nl_twente', { standColor: '#7a1a1a', look: { roof: 'ring', upper: 'both', seats: [R, W] } }),
+  stadium('nl_est_galgenwaard', 'Stadion "Galgenwaard"', 23750, 'nl_utrecht', { standColor: '#7a1a1a', look: { roof: 'sides', upper: 'both', seats: [R, W] } }),
+  stadium('nl_est_goffert', 'Goffertstadion', 12650, 'nl_nec', { standColor: '#2a2a2a', look: { roof: 'sides', upper: 'none', seats: [R, '#0a7a3a', K] } }),
+  stadium('nl_est_abelenstra', 'Abe Lenstra Stadion', 27224, 'nl_heerenveen', { standColor: '#1a3a7a', look: { roof: 'ring', upper: 'both', seats: ['#1b4fa0', W] } }),
+  stadium('nl_est_euroborg', 'Euroborg', 22550, 'nl_groningen', { standColor: '#1d5a34', look: { roof: 'ring', upper: 'both', seats: ['#0a7a3a', W] } }),
+  stadium('nl_est_kasteel', 'Spartastadion Het Kasteel', 10599, 'nl_sparta', { standColor: '#7a1a1a', timeOfDay: 'day', look: { roof: 'sides', upper: 'none', seats: [R, W] } }),
+  stadium('nl_est_mac3park', 'MAC³PARK stadion', 14000, 'nl_zwolle', { standColor: '#1a3a7a', look: { roof: 'ring', upper: 'none', seats: ['#1b4fa0', W] } }),
+  stadium('nl_est_adelaarshorst', 'De Adelaarshorst', 10400, 'nl_goahead', { standColor: '#7a1a1a', timeOfDay: 'day', look: { roof: 'sides', upper: 'none', seats: [R, '#f7d417'] } }),
+  stadium('nl_est_willem2', 'Koning Willem II Stadion', 15220, 'nl_willem2', { standColor: '#7a1a1a', look: { roof: 'sides', upper: 'none', seats: [R, '#1b4fa0', W] } }),
+  stadium('nl_est_woudestein', 'Stadion "Woudestein"', 4600, 'nl_excelsior', { standColor: '#2a2a2a', timeOfDay: 'day', look: { roof: 'none', upper: 'none', seats: [R, K] } }),
+  stadium('nl_est_werktalent', 'WerkTalent Stadion', 15000, 'nl_ado', { standColor: '#1d5a34', look: { roof: 'sides', upper: 'none', seats: ['#0a7a3a', '#f7d417'] } }),
+  stadium('nl_est_fortuna', 'Fortuna Sittard Stadion', 12000, 'nl_fortuna', { standColor: '#2a3a2a', timeOfDay: 'day', look: { roof: 'sides', upper: 'none', seats: ['#f7d417', '#0a7a3a'] } }),
+  stadium('nl_est_kooi', 'Kooi Stadion', 15000, 'nl_cambuur', { standColor: '#1a3a7a', look: { roof: 'ring', upper: 'none', seats: ['#f7d417', '#1b4fa0'] } }),
+  stadium('nl_est_buko', 'BUKO Stadion', 6000, 'nl_telstar', { standColor: '#2a2a2a', timeOfDay: 'day', look: { roof: 'none', upper: 'none', seats: [W, K] } }),
+];
+
+const classics: ClassicDef[] = [
+  { a: 'nl_ajax', b: 'nl_feyenoord', name: 'De Klassieker' },
+  { a: 'nl_ajax', b: 'nl_psv', name: 'De Topper' },
+  { a: 'nl_psv', b: 'nl_feyenoord', name: 'Duel de Gigantes' },
+  { a: 'nl_feyenoord', b: 'nl_sparta', name: 'Rotterdamse Derby' },
+  { a: 'nl_feyenoord', b: 'nl_excelsior', name: 'Derbi de Róterdam' },
+  { a: 'nl_sparta', b: 'nl_excelsior', name: 'Derbi de Róterdam' },
+  { a: 'nl_ajax', b: 'nl_az', name: 'Derbi de Holanda Septentrional' },
+  { a: 'nl_heerenveen', b: 'nl_groningen', name: 'Derby del Norte' },
+  { a: 'nl_heerenveen', b: 'nl_cambuur', name: 'Derbi de Frisia' },
+  { a: 'nl_twente', b: 'nl_goahead', name: 'Derbi de Overijssel' },
+  { a: 'nl_zwolle', b: 'nl_twente', name: 'Derbi de Overijssel' },
+  { a: 'nl_zwolle', b: 'nl_goahead', name: 'Derbi de Overijssel' },
+  { a: 'nl_willem2', b: 'nl_psv', name: 'Derbi de Brabante' },
+  { a: 'nl_nec', b: 'nl_willem2', name: 'Derbi del Sur' },
+  { a: 'nl_fortuna', b: 'nl_willem2', name: 'Derbi del Sur' },
+  { a: 'nl_ajax', b: 'nl_ado', name: 'Derbi de Holanda' },
+  { a: 'nl_ado', b: 'nl_feyenoord', name: 'Derbi de Holanda Meridional' },
+  { a: 'nl_telstar', b: 'nl_ajax', name: 'Derbi del Noordzeekanaal' },
+  { a: 'nl_telstar', b: 'nl_az', name: 'Derbi de Kennemerland' },
+];
+
+export const DATA: LeagueData = { teams, stadiums, classics };

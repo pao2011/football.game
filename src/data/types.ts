@@ -49,9 +49,11 @@ export interface TeamData {
   formation: FormationId;
   rating: number; // media orientativa 0..100
   players: PlayerData[]; // 11 titulares + suplentes (titulares = primeros 11)
+  /** Lanzadores designados (ids de jugador): se usan si están en el campo (modo Club). */
+  setPieces?: { penalty?: string; freeKick?: string; captain?: string };
 }
 
-export type FormationId = '4-3-3' | '4-4-2' | '4-2-3-1' | '3-5-2';
+export type FormationId = '4-3-3' | '4-4-2' | '4-2-3-1' | '3-5-2' | '4-1-2-1-2';
 
 export type Difficulty = 'amateur' | 'pro' | 'world' | 'legend';
 

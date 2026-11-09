@@ -85,6 +85,9 @@ export class Commentary {
         return { text: pick(['¡Cerca! Se fue rozando el palo', '¡Uy! Por poco', 'Se va desviado… ¡qué cerca estuvo!']), prio: 2 };
       case 'foul':
         return { text: pick([`Falta de ${n}`, `El árbitro pita falta de ${n}`, `Infracción de ${n}, tiro libre`]), prio: 1 };
+      case 'var':
+        if (e.kind === 'start') return { text: pick([`¡Atención! El VAR llama al árbitro: ${(e.text ?? '').toLowerCase()}`, `El VAR revisa la jugada: ${(e.text ?? '').toLowerCase()}`]), prio: 4 };
+        return { text: pick([`Decisión final del VAR: ${(e.text ?? '').toLowerCase()}`, `El árbitro lo comunica: ${(e.text ?? '').toLowerCase()}`]), prio: 4 };
       case 'advantage':
         return { text: pick(['¡Ley de la ventaja! Sigue el juego', 'El árbitro deja seguir: ventaja']), prio: 2 };
       case 'handball':

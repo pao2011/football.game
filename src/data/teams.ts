@@ -156,6 +156,7 @@ const SQUAD_POSITIONS: Record<FormationId, Position[]> = {
   '4-4-2': ['GK', 'DEF', 'DEF', 'DEF', 'DEF', 'MID', 'MID', 'MID', 'MID', 'FWD', 'FWD'],
   '4-2-3-1': ['GK', 'DEF', 'DEF', 'DEF', 'DEF', 'MID', 'MID', 'MID', 'MID', 'MID', 'FWD'],
   '3-5-2': ['GK', 'DEF', 'DEF', 'DEF', 'MID', 'MID', 'MID', 'MID', 'MID', 'FWD', 'FWD'],
+  '4-1-2-1-2': ['GK', 'DEF', 'DEF', 'DEF', 'DEF', 'MID', 'MID', 'MID', 'MID', 'FWD', 'FWD'],
 };
 const BENCH: Position[] = ['GK', 'DEF', 'DEF', 'MID', 'MID', 'FWD', 'FWD'];
 const START_NUMBERS: Record<FormationId, number[]> = {
@@ -163,6 +164,7 @@ const START_NUMBERS: Record<FormationId, number[]> = {
   '4-4-2': [1, 3, 4, 5, 2, 11, 8, 6, 7, 9, 10],
   '4-2-3-1': [1, 3, 4, 5, 2, 6, 8, 11, 10, 7, 9],
   '3-5-2': [1, 4, 5, 6, 3, 8, 10, 14, 2, 9, 11],
+  '4-1-2-1-2': [1, 3, 4, 5, 2, 6, 8, 7, 10, 9, 11],
 };
 
 function makePlayer(rng: Rng, teamId: string, idx: number, pos: Position, number: number, rating: number, usedNames: Set<string>, real?: RosterEntry): PlayerData {

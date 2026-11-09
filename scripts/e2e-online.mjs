@@ -34,7 +34,7 @@ async function newPlayer(name) {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`${name}: ${m.text()}`); });
   await page.addInitScript((n) => {
     if (!localStorage.getItem('football-elite-3d:settings')) {
-      localStorage.setItem('football-elite-3d:settings', JSON.stringify({ quality: 'low', shadows: false, resolutionScale: 0.5, antialias: false, halfMinutes: 2, onlineName: n, replays: false }));
+      localStorage.setItem('football-elite-3d:settings', JSON.stringify({ quality: 'low', shadows: false, resolutionScale: 0.5, antialias: false, halfMinutes: 2, onlineName: n, replays: false, menuReel: false }));
     }
   }, name);
   await page.goto(`http://localhost:${PORT}/`);
@@ -70,7 +70,7 @@ const waitFor = async (page, fn, ms = 30000, arg) => {
 async function toOnlineHub(page) {
   await page.waitForSelector('.title-screen');
   await page.keyboard.press('Enter');
-  await page.waitForSelector('.main-menu');
+  await page.waitForSelector('.mm');
   await page.click('[data-act=online]');
   await page.waitForSelector('#on-name');
   await page.click('.screen-footer [data-act=connect]');
@@ -273,6 +273,43 @@ await check('Clasificación de Division Rivals', async () => {
   await A.waitForSelector('.board');
   const t = await A.textContent('.board');
   assert(t.includes('Ana') && t.includes('Beto'), t);
+});
+
+await check('Soffti Club online: dos clubes se enfrentan con sus plantillas y el resultado cuenta en los dos', async () => {
+  for (const p of [A, B]) {
+    await p.reload();
+    await p.waitForSelector('.title-screen');
+    await p.keyboard.press('Enter');
+    await p.waitForSelector('.mm');
+    await p.click('[data-act=club]');
+    await p.waitForSelector('.club-create [data-act=create]');
+    await p.click('.club-create [data-act=create]');
+    await p.waitForSelector('.cb-hub [data-act=online]');
+    await p.click('.cb-hub [data-act=online]');
+  }
+  await waitFor(A, () => !!window.__runner?.online && !window.__runner.match.finished, 60000);
+  await waitFor(B, () => !!window.__runner?.online && !window.__runner.match.finished, 60000);
+  const names = await A.evaluate(() => window.__runner.match.teams.map((t) => t.data.id));
+  assert(names.every((id) => id.startsWith('online-')), `equipos de club: ${names}`);
+  for (const p of [A, B]) await p.evaluate(() => window.__runner.skipIntro());
+  await waitFor(B, () => window.__runner.guestSync?.received > 10 || window.__runner.remoteInput, 30000);
+  const hostPage = (await A.evaluate(() => window.__runner.online.role)) === 'host' ? A : B;
+  await hostPage.evaluate(() => {
+    const m = window.__runner.match;
+    m.teams[0].stats.goals = 1;
+    m.half = 2;
+    m.matchSeconds = 90 * 60 + 30;
+    m.announcedAdded = 0;
+    m.endHalf();
+  });
+  await A.waitForSelector('.rivals-change .cb-result', { timeout: 60000 });
+  await B.waitForSelector('.rivals-change .cb-result', { timeout: 60000 });
+  const rec = async (p) => p.evaluate(() => JSON.parse(localStorage.getItem('football-elite-3d:club')).online);
+  const [ra, rb] = [await rec(A), await rec(B)];
+  assert(ra.played === 1 && rb.played === 1, `partidos online: ${JSON.stringify([ra, rb])}`);
+  assert(ra.won + rb.won === 1 && ra.lost + rb.lost === 1, `un ganador y un perdedor: ${JSON.stringify([ra, rb])}`);
+  await A.click('[data-act=cont]');
+  await A.waitForSelector('.cb-hub');
 });
 
 await check('Sin errores de JavaScript', async () => {

@@ -131,9 +131,11 @@ export function placeForRestart(m: Match, r: Restart): Player | null {
       const goal = att.attackGoal;
       const cands = outfield(att);
       const distGoal = dist2D(spot, goal);
-      taker = distGoal < 32
+      const fkId = att.data.setPieces?.freeKick;
+      const designated = distGoal < 32 && fkId ? cands.find((p) => p.data.id === fkId && !p.sentOff) : undefined;
+      taker = designated ?? (distGoal < 32
         ? cands.sort((a, b) => b.data.attrs.shooting - a.data.attrs.shooting)[0]
-        : nearest(cands, spot);
+        : nearest(cands, spot));
       _v.set(goal.x - spot.x, 0, goal.z - spot.z).normalize();
       taker.pos.set(spot.x - _v.x * 1.2, 0, spot.z - _v.z * 1.2);
       face(taker, distGoal < 40 ? goal : { x: spot.x + att.attackDir * 10, z: spot.z });
@@ -164,7 +166,8 @@ export function placeForRestart(m: Match, r: Restart): Player | null {
     case 'penalty': {
       const goalX = att.attackDir * HALF_LENGTH;
       const cands = outfield(att).sort((a, b) => b.data.attrs.shooting - a.data.attrs.shooting);
-      taker = cands[0];
+      const penId = att.data.setPieces?.penalty;
+      taker = (penId ? cands.find((p) => p.data.id === penId && !p.sentOff) : undefined) ?? cands[0];
       taker.pos.set(spot.x - att.attackDir * 2.2, 0, -0.5);
       face(taker, { x: goalX, z: 0 });
       const gk = def.goalkeeper;

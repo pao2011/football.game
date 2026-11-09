@@ -8,6 +8,7 @@ const START_NUMBERS: Record<F, number[]> = {
   '4-4-2': [1, 3, 4, 5, 2, 11, 8, 6, 7, 9, 10],
   '4-2-3-1': [1, 3, 4, 5, 2, 6, 8, 11, 10, 7, 9],
   '3-5-2': [1, 4, 5, 6, 3, 8, 10, 14, 2, 9, 11],
+  '4-1-2-1-2': [1, 3, 4, 5, 2, 6, 8, 7, 10, 9, 11],
 };
 
 /**
@@ -121,11 +122,11 @@ const stadiums = [
   stadium('co_pascual', 'Estadio Olímpico Pascual Guerrero', 42300, 'co_america', { standColor: '#7a1220', look: { roof: 'none', upper: 'both', track: '#b4573f', seats: ['#e2001a', '#ffffff'] } }),
   stadium('co_palmaseca', 'Estadio Deportivo Cali', 52000, 'co_cali', { standColor: '#14452a', look: { roof: 'sides', upper: 'both', seats: ['#00a650', '#ffffff'] } }),
   stadium('co_metropolitano', 'Metropolitano Roberto Meléndez', 46692, 'co_junior', { standColor: '#7a1220', look: { roof: 'sides', upper: 'both', seats: ['#e30613', '#ffffff'] } }),
-  stadium('co_palogrande', 'Estadio Campeones del 36', 12000, 'co_oncecaldas', { timeOfDay: 'day', standColor: '#2a2a2a', look: { roof: 'sides', upper: 'none', seats: ['#ffffff', '#111111'] } }),
+  stadium('co_palogrande', 'Estadio Palogrande', 28678, 'co_oncecaldas', { timeOfDay: 'day', standColor: '#2a2a2a', look: { roof: 'sides', upper: 'none', seats: ['#ffffff', '#111111'] } }),
   stadium('co_murillo', 'Estadio Manuel Murillo Toro', 28100, 'co_tolima', { standColor: '#4a1020', look: { roof: 'none', upper: 'none', seats: ['#7a1230', '#f4c20d'] } }),
   stadium('co_alfonso_lopez', 'Estadio Américo Montanini', 28000, 'co_bucaramanga', { standColor: '#6b5a00', look: { roof: 'none', upper: 'none', seats: ['#f5d000', '#0a7a3d'] } }),
   stadium('co_hernan_ramirez', 'Santiago de las Atalayas', 8000, 'co_pereira', { standColor: '#6b3a00', look: { roof: 'none', upper: 'none', seats: ['#f5c400', '#d71920'] } }),
-  stadium('co_alberto_grisales', 'Estadio Huancayo', 20000, 'co_aguilas', { standColor: '#4a4000', look: { roof: 'sides', upper: 'none', seats: ['#f6c500', '#111111'] } }),
+  stadium('co_alberto_grisales', 'Estadio Cincuentenario', 4000, 'co_aguilas', { standColor: '#4a4000', look: { roof: 'sides', upper: 'none', seats: ['#f6c500', '#111111'] } }),
   stadium('co_armando_maestre', 'Estadio Armando Maestre Pavajeau', 11500, 'co_alianza', { timeOfDay: 'sunset', standColor: '#3a3300', look: { roof: 'none', upper: 'none', seats: ['#f7d117', '#111111'] } }),
   stadium('co_techo_for', 'Parque Estadio Olaya Herrera', 2500, 'co_fortaleza', { standColor: '#14305f', look: { roof: 'none', upper: 'none', seats: ['#1e4fa3', '#ffffff'] } }),
   stadium('co_bello_horizonte', 'Estadio Bello Horizonte', 15000, 'co_llaneros', { standColor: '#5a2a0a', look: { roof: 'none', upper: 'none', seats: ['#f26b1d', '#111111'] } }),

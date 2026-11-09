@@ -89,7 +89,7 @@ export function importTeam(json: string): TeamData {
     throw new Error('El archivo no es un JSON válido');
   }
   const t = (data as { team?: TeamData })?.team ?? (data as TeamData);
-  if (!validTeam(t)) throw new Error('El archivo no contiene un equipo de Football Elite 3D');
+  if (!validTeam(t)) throw new Error('El archivo no contiene un equipo de Soffti\'s Football Game');
   const copy: TeamData = structuredClone(t);
   copy.id = `${CUSTOM_PREFIX}${Date.now().toString(36)}${Math.floor(Math.random() * 1e4).toString(36)}`;
   copy.players = copy.players.map((p, i) => ({ ...p, id: `${copy.id}-${i}` }));
@@ -106,6 +106,6 @@ function validPlayer(p: PlayerData) {
 }
 function validTeam(t: TeamData | undefined): t is TeamData {
   return !!t && typeof t.name === 'string' && typeof t.id === 'string' && validKit(t.home) && validKit(t.away) && validKit(t.gkKit)
-    && ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2'].includes(t.formation) && Array.isArray(t.players) && t.players.length >= 11 && t.players.every(validPlayer)
+    && ['4-3-3', '4-4-2', '4-2-3-1', '3-5-2', '4-1-2-1-2'].includes(t.formation) && Array.isArray(t.players) && t.players.length >= 11 && t.players.every(validPlayer)
     && t.players.slice(0, 11).filter((p) => p.position === 'GK').length >= 1;
 }

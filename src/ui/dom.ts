@@ -28,7 +28,9 @@ export class Screen {
   onBack: (() => void) | null = null;
 
   constructor(parent: HTMLElement, html: string, private handlers: Handlers, private audio?: AudioEngine, cls = '') {
-    this.root = el('div', `screen ${cls}`, html);
+    this.root = el('div', `screen enter ${cls}`, html);
+    // la entrada escalonada solo se anima al abrir la pantalla (no al refrescarla)
+    window.setTimeout(() => this.root.classList.remove('enter'), 900);
     parent.appendChild(this.root);
     this.root.addEventListener('click', (e) => {
       const t = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
@@ -95,6 +97,10 @@ export class Screen {
     if ((window as any).__captureKey) return;
     // escribiendo en un campo de texto: solo Enter (acción del campo) y Esc
     const field = e.target as HTMLElement | null;
+    if (field && field.tagName === 'SELECT') {
+      if (e.code === 'Escape') field.blur();
+      return; // las listas desplegables usan sus propias teclas
+    }
     if (field && (field.tagName === 'INPUT' || field.tagName === 'TEXTAREA')) {
       if (e.code === 'Enter' || e.code === 'NumpadEnter') {
         e.preventDefault();
@@ -152,9 +158,14 @@ export class Screen {
     this.padTimer = requestAnimationFrame(tick);
   }
 
-  dispose() {
+  /** `fade`: la pantalla se desvanece (fundido cruzado con la siguiente) en vez de desaparecer de golpe. */
+  dispose(fade = false) {
     window.removeEventListener('keydown', this.keyHandler);
     cancelAnimationFrame(this.padTimer);
-    this.root.remove();
+    if (fade && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      this.root.classList.add('screen-out');
+      this.root.setAttribute('inert', '');
+      setTimeout(() => this.root.remove(), 220);
+    } else this.root.remove();
   }
 }

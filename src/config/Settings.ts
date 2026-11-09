@@ -16,10 +16,14 @@ export interface GameSettings {
   /** Bajar la resolución y las sombras solo si el equipo no llega a unos FPS fluidos. */
   autoQuality: boolean;
   showRadar: boolean;
+  /** Fondo del menú principal: un partido en vivo con cámaras de cine (se apaga solo si el equipo es lento). */
+  menuReel: boolean;
   showIndicators: boolean;
   cameraStyle: CameraStyle;
   cameraZoom: number;
   replays: boolean;
+  /** Árbitro falible y VAR. */
+  varEnabled: boolean;
   /** Avisos emergentes (atajada, falta, tiro libre…) y ayuda de controles en pantalla. */
   popups: boolean;
   touchControls: 'auto' | 'on' | 'off';
@@ -74,10 +78,12 @@ export const DEFAULT_SETTINGS: GameSettings = {
   antialias: true,
   autoQuality: true,
   showRadar: true,
+  menuReel: true,
   showIndicators: true,
   cameraStyle: 'broadcast',
   cameraZoom: 1,
   replays: true,
+  varEnabled: true,
   popups: false,
   touchControls: 'auto',
   masterVolume: 0.8,

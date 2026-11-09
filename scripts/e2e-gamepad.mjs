@@ -28,7 +28,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await page.addInitScript(() => {
-  localStorage.setItem('football-elite-3d:settings', JSON.stringify({ quality: 'low', shadows: false, resolutionScale: 0.6, halfMinutes: 2 }));
+  localStorage.setItem('football-elite-3d:settings', JSON.stringify({ quality: 'low', shadows: false, resolutionScale: 0.6, halfMinutes: 2, menuReel: false }));
   // mando simulado: window.__pad controla ejes y botones; hasta que se "conecta" no aparece en getGamepads()
   const mk = () => ({ id: 'Xbox 360 Controller (STANDARD GAMEPAD Vendor: 045e Product: 028e)', index: 0, connected: true, mapping: 'standard', timestamp: 0,
     axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })), hapticActuators: [] });
@@ -62,7 +62,7 @@ await check('Título: pista de mando; al conectar aparece el aviso "Mando conect
 await check('Menús con el mando: A entra, la cruceta navega, A acepta y B vuelve', async () => {
   await page.waitForSelector('.splash', { state: 'detached', timeout: 8000 });
   await tap(0); // A en el título
-  await page.waitForSelector('.main-menu', { timeout: 5000 });
+  await page.waitForSelector('.mm', { timeout: 5000 });
   const first = await page.evaluate(() => document.querySelector('.focus, [data-act].focused')?.getAttribute('data-act') ?? document.activeElement?.getAttribute('data-act'));
   await tap(13, 400); // cruceta abajo (pulsación larga: el menú lee el mando una vez por fotograma)
   const second = await page.evaluate(() => document.querySelector('.focus, [data-act].focused')?.getAttribute('data-act') ?? document.activeElement?.getAttribute('data-act'));
@@ -71,7 +71,7 @@ await check('Menús con el mando: A entra, la cruceta navega, A acepta y B vuelv
   await tap(0, 400); // A
   await page.waitForSelector('[data-act=play]', { timeout: 5000 });
   await tap(1, 400); // B vuelve
-  await page.waitForSelector('.main-menu', { timeout: 5000 });
+  await page.waitForSelector('.mm', { timeout: 5000 });
   await tap(0, 400);
   await page.waitForSelector('[data-act=play]', { timeout: 5000 });
 });

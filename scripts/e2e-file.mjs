@@ -19,7 +19,7 @@ page.on('framenavigated', (f) => { if (f === page.mainFrame()) errors.length = 0
 await page.goto(pathToFileURL(file).href);
 let ok = false;
 for (let i = 0; i < 100 && !ok; i++) {
-  ok = await page.evaluate(() => !!document.querySelector('#ui .title-screen, #ui .menu-item')).catch(() => false);
+  ok = await page.evaluate(() => !!document.querySelector('#ui .title-screen, #ui .mm-item')).catch(() => false);
   if (!ok) await page.waitForTimeout(200);
 }
 if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });

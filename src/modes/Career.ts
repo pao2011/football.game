@@ -205,6 +205,12 @@ export class Career {
       st.regularRounds = Math.max(...fx.map((f) => f.round));
       return fx;
     }
+    // zonas de distinto tamaño (cantidad impar de clubes): cada una juega la suya, sin interzonales
+    if (st.zones.A.length !== st.zones.B.length) {
+      const fx = [...roundRobin(shuffle(st.zones.A), double, stage, `${tag}a`), ...roundRobin(shuffle(st.zones.B), double, stage, `${tag}b`)];
+      st.regularRounds = Math.max(...fx.map((f) => f.round));
+      return fx.sort((x, y) => x.round - y.round);
+    }
     // dos zonas: se mezclan las parejas (igual en las dos zonas: las fechas libres de las parejas coinciden)
     const pairs = shuffle(st.zones.A.map((a, i) => ({ a, b: st.zones.B[i] })));
     const za = roundRobin(pairs.map((p) => p.a), double, stage, `${tag}a`);
@@ -300,9 +306,9 @@ export class Career {
     if (r.pens) o.pens = r.pens;
   }
 
-  /** Simula los partidos sin jugar de una ronda. */
+  /** Simula los partidos sin jugar de una ronda y de las anteriores (fechas libres del usuario en ligas de equipos impares). */
   private simRound(round: number, rng: Rng) {
-    for (const o of this.state.fixtures) if (!o.played && o.round === round) this.simFixture(o, rng);
+    for (const o of this.state.fixtures) if (!o.played && o.round <= round) this.simFixture(o, rng);
   }
 
   private rngFor(salt: number) {

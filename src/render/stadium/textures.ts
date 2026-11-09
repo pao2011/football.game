@@ -247,7 +247,7 @@ const BRANDS: Brand[] = [
   { text: 'NOVA DRINKS', bg: ['#0a2a6b', '#1d55d6'], fg: '#ffffff', accent: '#ff9d1c', italic: true, mark: 'star' },
   { text: 'KORVEX', bg: ['#050505', '#1b1b1b'], fg: '#e8ff2a', mark: 'bolt' },
   { text: 'SOLARA AIR', bg: ['#ff7a18', '#ffcf3a'], fg: '#14204a', mark: 'sun' },
-  { text: 'FOOTBALL ELITE 3D', bg: ['#0b0f14', '#16202b'], fg: '#ffffff', accent: '#38f27d', italic: true, mark: 'ball' },
+  { text: "SOFFTI'S FOOTBALL", bg: ['#0b0f14', '#16202b'], fg: '#ffffff', accent: '#38f27d', italic: true, mark: 'ball' },
   { text: 'ZENTRA BANK', bg: ['#00694a', '#00a06d'], fg: '#ffffff', mark: 'ring' },
   { text: 'VOLTIX', bg: ['#4b00c9', '#8a2bff'], fg: '#ffffff', accent: '#ffe14a', italic: true, mark: 'bolt' },
   { text: 'PIXELNET', bg: ['#ffffff', '#e9edf2'], fg: '#e0102a', mark: 'pixel' },
@@ -405,7 +405,7 @@ export function makeScreenTexture(name: string, home: string, away: string): THR
   ctx.fillText(name.toUpperCase(), W / 2, H * 0.4, W * 0.88);
   ctx.font = '700 44px Arial, sans-serif';
   ctx.fillStyle = '#38f27d';
-  ctx.fillText('FOOTBALL ELITE 3D  •  LIVE', W / 2, H * 0.76, W * 0.8);
+  ctx.fillText("SOFFTI'S FOOTBALL GAME  •  LIVE", W / 2, H * 0.76, W * 0.8);
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
   const tex = new THREE.CanvasTexture(c);
