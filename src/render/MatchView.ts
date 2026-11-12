@@ -285,7 +285,7 @@ export class MatchView {
       const ind = this.indicators[t.index];
       if (!ind) continue;
       const c = t.controlled;
-      ind.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay' && !this.ceremony;
+      ind.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay' && m.phase !== 'goal' && !this.ceremony;
       if (c) {
         ind.group.position.set(c.pos.x, 0, c.pos.z);
         ind.group.rotation.y = c.facing;
@@ -295,7 +295,7 @@ export class MatchView {
     if (this.indicator2) {
       const t = m.teams[m.config.humanTeam === 1 ? 1 : 0];
       const c = t.controlled2;
-      this.indicator2.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay' && !this.ceremony;
+      this.indicator2.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay' && m.phase !== 'goal' && !this.ceremony;
       if (c) {
         this.indicator2.group.position.set(c.pos.x, 0, c.pos.z);
         this.indicator2.group.rotation.y = c.facing;

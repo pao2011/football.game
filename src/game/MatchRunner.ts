@@ -471,9 +471,9 @@ export class MatchRunner {
     if (!i) return;
     let v = -1;
     if (i.pressed('skillUp')) v = i.held('finesse') ? 5 : 0;
-    else if (i.pressed('skillDown')) v = 1;
-    else if (i.pressed('skillRight')) v = 2;
-    else if (i.pressed('skillLeft')) v = 3;
+    else if (i.pressed('skillDown')) v = i.held('finesse') ? 6 : 1;
+    else if (i.pressed('skillRight')) v = i.held('finesse') ? 7 : 2;
+    else if (i.pressed('skillLeft')) v = i.held('finesse') ? 8 : 3;
     else if (i.pressed('skillSpin')) v = 4;
     if (v >= 0) sc.action.variant = v;
   }

@@ -21,6 +21,7 @@ import { BONE, BONE_DEFS } from './rig';
 import { Animator } from './animations';
 import { MAT, clearGeometryCache, getBodyGeometry, getHairGeometry } from './bodyGeometry';
 import { clearKitTextureCache, shirtTexture, shortsTexture, socksTexture } from './kitTextures';
+import { clearFaceTextureCache, faceTexture } from './faceTexture';
 
 export interface PlayerVisualSpec {
   kit: KitData;
@@ -85,7 +86,8 @@ export class PlayerModel {
     const seed = (hashStr(spec.name + '#' + spec.number) % 10000) / 10000;
 
     // materiales (propios de la instancia; las texturas están compartidas)
-    const skin = new THREE.MeshStandardMaterial({ color: skinColor(spec.skinTone), roughness: 0.62, metalness: 0 });
+    // la piel va en la textura (con la cara pintada); el material queda en blanco para no teñirla dos veces
+    const skin = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.58, metalness: 0, map: faceTexture({ skin: skinColor(spec.skinTone), hairColor: spec.hairColor || '#2a1d14', seed }, quality === 'low' ? 128 : 256) });
     const shirt = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.78, metalness: 0 });
     const shorts = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72, metalness: 0 });
     const socks = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0 });
@@ -180,5 +182,6 @@ export class PlayerModel {
   static clearSharedCache(): void {
     clearGeometryCache();
     clearKitTextureCache();
+    clearFaceTextureCache();
   }
 }

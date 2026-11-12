@@ -486,8 +486,11 @@ export class Match {
           const push = (minD - d) / 2;
           const nx = dx / d;
           const nz = dz / d;
-          const wa = a.frozen ? 0 : b.frozen ? 2 : 1;
-          const wb = b.frozen ? 0 : a.frozen ? 2 : 1;
+          // el más corpulento cede menos en el choque de cuerpos
+          const ma = a.data.height ** 3;
+          const mb = b.data.height ** 3;
+          const wa = a.frozen ? 0 : b.frozen ? 2 : (2 * mb) / (ma + mb);
+          const wb = b.frozen ? 0 : a.frozen ? 2 : (2 * ma) / (ma + mb);
           a.pos.x -= nx * push * wa;
           a.pos.z -= nz * push * wa;
           b.pos.x += nx * push * wb;
@@ -1956,7 +1959,7 @@ export class Match {
     this.enterPhase('goal');
     // Celebración
     for (const p of t.active) {
-      if (p === scorer) p.startAction('celebrate', 'celebrate', 3.4, 0, { variant: this.rng.int(0, 5) });
+      if (p === scorer) p.startAction('celebrate', 'celebrate', 3.4, 0, { variant: this.rng.int(0, 8) });
     }
     for (const p of this.otherTeam(team).active) {
       if (!p.isGK || this.rng.next() < 0.7) p.startAction('dejected', 'dejected', 3.2, 0, { variant: this.rng.int(0, 1) });
@@ -1975,12 +1978,17 @@ export class Match {
         _v.set(tx - p.pos.x, 0, tz - p.pos.z);
         const d = _v.length();
         p.sprinting = true;
-        p.desiredVel.copy(d > 1 ? _v.multiplyScalar(6 / d) : _v.set(0, 0, 0));
+        // de rodillas (1) se desliza frenando; silencio (4) y los festejos de parado (6-8) corren y frenan
+        const cv = p.action.variant;
+        const sp = cv === 1 ? Math.max(0, 6 - 2.6 * p.action.time) : (cv === 4 || cv >= 6) && p.action.time > 1.1 ? 0 : 6;
+        p.desiredVel.copy(d > 1 && sp > 0 ? _v.multiplyScalar(sp / d) : _v.set(0, 0, 0));
       } else if (this.phase === 'goal' && scorer && p.team === scorer.team && !p.isGK) {
         _v.set(scorer.pos.x - p.pos.x, 0, scorer.pos.z - p.pos.z);
         const d = _v.length();
         p.sprinting = false;
         p.desiredVel.copy(d > 2.2 ? _v.multiplyScalar(5 / d) : _v.set(0, 0, 0));
+        // los compañeros que llegan festejan con él (brazos en alto o saltando)
+        if (d < 3 && p.action.kind === 'none') p.startAction('celebrate', 'celebrate', Math.max(0.8, 3.2 - (this.time - this.goalTime)), 0, { variant: p.data.number % 2 ? 0 : 2 });
       } else {
         p.desiredVel.multiplyScalar(0.9);
         p.sprinting = false;

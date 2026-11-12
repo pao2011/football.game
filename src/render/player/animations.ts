@@ -854,8 +854,58 @@ function gkKick(c: Ctx, p: Pose) {
 
 // ------------------------------------------------------------------ celebraciones / reacciones
 function celebrate(c: Ctx, p: Pose) {
-  const v = ((c.variant % 6) + 6) % 6;
+  const v = ((c.variant % 9) + 9) % 9;
   const t = c.t;
+  if (v >= 6) {
+    // festejos de parado: corre con el puño en alto y, al frenar, hace el gesto
+    base(c, p);
+    const e = 1 - sstep(0.8, 2.5, c.v);
+    const run = 1 - e;
+    if (v === 6) {
+      // bailecito: cadera de lado a lado, rodillas que rebotan y brazos que giran delante del pecho
+      const s = Math.sin(t * 7);
+      const k = Math.abs(Math.sin(t * 7));
+      p.hips.x += 0.05 * s * e;
+      p.hips.y -= 0.05 * k * e;
+      p.addRot(BONE.hips, 0, 8 * s * e, 7 * s * e);
+      p.addRot(BONE.spine, 0, -6 * s * e, -9 * s * e);
+      p.addRot(BONE.head, 0, 0, 5 * s * e);
+      if (e > 0.5) {
+        solveLeg(p, 0, V(0.15, ANKLE_H, 0.02), FWD, footQ(0, 12));
+        solveLeg(p, 1, V(-0.15, ANKLE_H, -0.02), FWD, footQ(0, -12));
+      }
+      p.rot(BONE.uarmL, lerp(-150, -55 + 18 * s, e), 0, lerp(20, 22, e));
+      p.rot(BONE.uarmR, lerp(-30, -55 - 18 * s, e), 0, -22);
+      p.rot(BONE.farmL, lerp(-20, -95 - 25 * s, e), lerp(0, -35, e), 0);
+      p.rot(BONE.farmR, lerp(-90, -95 + 25 * s, e), lerp(0, 35, e), 0);
+    } else if (v === 7) {
+      // salto y caída de potencia: piernas abiertas, brazos hacia abajo y atrás, pecho afuera
+      const jump = Math.sin(Math.PI * clamp((t - 1.35) / 0.6, 0, 1));
+      const land = sstep(1.9, 2.05, t);
+      p.hips.y += 0.38 * jump - 0.05 * land;
+      if (land > 0 || jump > 0) {
+        const lift = jump * 0.38;
+        solveLeg(p, 0, V(0.12 + 0.2 * land, ANKLE_H + lift, 0), FWD, footQ(25 * jump, 14));
+        solveLeg(p, 1, V(-0.12 - 0.2 * land, ANKLE_H + lift, 0), FWD, footQ(25 * jump, -14));
+      }
+      p.addRot(BONE.chest, -12 * land, 0, 0);
+      p.addRot(BONE.head, -10 * land, 0, 0);
+      const a = Math.max(jump * (1 - land), 0);
+      p.rot(BONE.uarmL, lerp(-150 * run - 120 * a, 28, land), 0, lerp(20, 38, land));
+      p.rot(BONE.uarmR, lerp(-150 * run - 120 * a, 28, land), 0, -lerp(20, 38, land));
+      p.rot(BONE.farmL, lerp(-25, -6, land));
+      p.rot(BONE.farmR, lerp(-25, -6, land));
+    } else {
+      // brazos cruzados, mentón arriba, asintiendo a la tribuna
+      p.addRot(BONE.chest, -5 * e, 0, 0);
+      p.addRot(BONE.head, (-8 + 5 * Math.sin(t * 5)) * e, 0, 0);
+      p.rot(BONE.uarmL, lerp(-150, -28, e), -78 * e, lerp(20, 6, e));
+      p.rot(BONE.uarmR, lerp(-30, -34, e), 78 * e, lerp(-10, -6, e));
+      p.rot(BONE.farmL, lerp(-20, -98, e));
+      p.rot(BONE.farmR, lerp(-90, -104, e));
+    }
+    return;
+  }
   if (v === 4) {
     // "silencio": dedo índice en los labios mirando a la grada
     base(c, p);

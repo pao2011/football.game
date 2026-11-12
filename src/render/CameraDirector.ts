@@ -156,11 +156,16 @@ export class CameraDirector {
       fov = 34;
       damp = 6;
     } else if (m.phase === 'goal' && m.lastGoal?.scorer) {
-      const sc = m.lastGoal.scorer.pos;
-      targetLook.set(sc.x, 1.2, sc.z);
-      targetPos.set(sc.x - Math.sign(sc.x) * 6, 3.2, sc.z + (sc.z > 0 ? -9 : 9));
-      fov = 40;
-      damp = 3.5;
+      // plano corto de frente al goleador (va delante de él mientras corre), con un leve travelling lateral
+      const scorer = m.lastGoal.scorer;
+      const sc = scorer.pos;
+      const fx = Math.sin(scorer.facing);
+      const fz = Math.cos(scorer.facing);
+      const side = Math.sin(m.time * 0.6) * 1.8;
+      targetLook.set(sc.x, 1.3, sc.z);
+      targetPos.set(sc.x + fx * 5.2 + fz * side, 1.75, sc.z + fz * 5.2 - fx * side);
+      fov = 38;
+      damp = 4;
     } else {
       // Cámara de transmisión lateral
       const style = this.style;
