@@ -7,7 +7,7 @@ import { buildStands } from './stands';
 import { buildCrowd, type CrowdBuild } from './crowd';
 import { FanEffects } from './fanfx';
 import { lightPreset, makeSky, type LightPreset } from './sky';
-import { makeLedTexture, makeScreenTexture, makeGlowTexture, hashString, LED_PANELS } from './textures';
+import { makeLedAds, makeScreenTexture, makeGlowTexture, hashString, type LedAds } from './textures';
 import { makeStaticShadowUniforms, patchStaticShadow, type StaticShadowUniforms } from './shadowPatch';
 import { CORE_A, CORE_B, STAND_R, ROOF_IN_D, ROOF } from './layout';
 
@@ -56,7 +56,11 @@ export class Stadium {
   private scene: THREE.Scene | null = null;
   private time = 0;
   private excite = 0;
-  private ledScrollTex: THREE.Texture | null = null;
+  /** Anuncios LED: un solo anuncio a la vez en todas las pantallas; cambia cada LED_PERIOD s con un fundido. */
+  private led: LedAds | null = null;
+  private ledMat: THREE.MeshBasicMaterial | null = null;
+  private ledIntensity = 1;
+  private ledIdx = 0;
   private textures: THREE.Texture[] = [];
   private materials: THREE.Material[] = [];
   private su: StaticShadowUniforms;
@@ -112,7 +116,12 @@ export class Stadium {
     const sb = buildStands({ quality, standColor: data.standColor, roofColor: data.roofColor, homeColor, awayColor, roof: this.roofOn, night, upper: !data.small,
       roofSides: look.roof === 'sides', upperSides: look.upper, seats: look.seats, track: look.track, palcos: look.palcos });
     const staticMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0.05 });
-    staticMat.onBeforeCompile = (sh) => patchStaticShadow(sh, this.su);
+    // de noche los focos bañan las tribunas: hormigón, butacas y muros no quedan a oscuras
+    const standGlow = night ? '0.2' : '0.0';
+    staticMat.onBeforeCompile = (sh) => {
+      patchStaticShadow(sh, this.su);
+      sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * ${standGlow};`);
+    };
     this.materials.push(staticMat);
     const addMerged = (geos: THREE.BufferGeometry[], mat: THREE.Material, name: string, receive = true) => {
       if (geos.length === 0) return null;
@@ -131,29 +140,24 @@ export class Stadium {
         vertexColors: true,
         roughness: 0.7,
         metalness: 0.1,
-        emissive: new THREE.Color(data.roofColor).multiplyScalar(night ? 0.05 : 0.14),
+        emissive: new THREE.Color(data.roofColor).multiplyScalar(night ? 0.12 : 0.14),
       });
       roofMat.onBeforeCompile = (sh) => patchStaticShadow(sh, this.su);
       this.materials.push(roofMat);
       addMerged(sb.roof, roofMat, 'roof');
     }
 
-    const ledTex = makeLedTexture();
+    this.led = makeLedAds();
+    const ledTex = this.led.tex;
     ledTex.anisotropy = 8;
     this.textures.push(ledTex);
     const ledIntensity = night ? 1.0 : data.timeOfDay === 'sunset' ? 0.95 : 1.15;
+    this.ledIntensity = ledIntensity;
     const ledStaticMat = new THREE.MeshBasicMaterial({ map: ledTex, color: new THREE.Color(ledIntensity, ledIntensity, ledIntensity) });
+    this.ledMat = ledStaticMat;
     this.materials.push(ledStaticMat);
     addMerged(sb.ledStatic, ledStaticMat, 'led-static', false);
-    if (sb.ledScroll.length) {
-      const scrollTex = ledTex.clone();
-      scrollTex.needsUpdate = true;
-      this.ledScrollTex = scrollTex;
-      this.textures.push(scrollTex);
-      const ledScrollMat = new THREE.MeshBasicMaterial({ map: scrollTex, color: ledStaticMat.color.clone() });
-      this.materials.push(ledScrollMat);
-      addMerged(sb.ledScroll, ledScrollMat, 'led-scroll', false);
-    }
+    addMerged(sb.ledScroll, ledStaticMat, 'led-scroll', false);
 
     const screenTex = makeScreenTexture(data.name, homeColor, awayColor);
     this.textures.push(screenTex);
@@ -211,6 +215,8 @@ export class Stadium {
       { maxCount: this.q.crowdMax, occupancy, homeColor, awayColor, seed, receiveShadow: this.q.crowdShadow },
       this.su,
     );
+    this.crowd.uniforms.uGlow.value = night ? 0.5 : data.timeOfDay === 'sunset' ? 0.22 : 0.1;
+    this.crowd.uniforms.uFlash.value = night ? 1 : data.timeOfDay === 'sunset' ? 0.5 : 0.12;
     this.textures.push(this.crowd.atlas);
     this.materials.push(this.crowd.material);
     this.group.add(...this.crowd.meshes);
@@ -309,14 +315,18 @@ export class Stadium {
       this.crowd.uniforms.uTime.value = this.time;
       this.crowd.uniforms.uExcite.value = this.excite;
     }
-    if (this.ledScrollTex && this.q.ledAnim) {
-      // advertising rotation: slide one panel every 7 s (and slowly drift)
-      const period = 7;
-      const tr = 0.9;
-      const step = Math.floor(this.time / period);
-      const f = Math.min(1, (this.time - step * period) / tr);
-      const e = f * f * (3 - 2 * f);
-      this.ledScrollTex.offset.x = ((step + e) / LED_PANELS) % 1;
+    if (this.led && this.ledMat) {
+      // rotación de anuncios: se apaga, cambia la marca y vuelve a encender
+      const period = 8;
+      const fade = 0.45;
+      const k = Math.floor(this.time / period);
+      if (k !== this.ledIdx) {
+        this.ledIdx = k;
+        this.led.show(k);
+      }
+      const f = this.time - k * period;
+      const on = Math.min(1, f / fade, (period - f) / fade);
+      this.ledMat.color.setScalar(this.ledIntensity * (0.06 + 0.94 * on));
     }
     this.flags.update(this.time);
     this.nets.update(d);

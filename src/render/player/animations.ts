@@ -109,6 +109,7 @@ export interface Ctx {
   foot: number;
   variant: number;
   seed: number;
+  acc: number; // inclinación extra (grados) por acelerar (+) o frenar (-)
 }
 
 // ------------------------------------------------------------------ marcha
@@ -117,10 +118,10 @@ export const GAIT = {
   L: [1.0, 1.3, 2.1, 2.85, 3.45, 4.0],
   beta: [0.62, 0.6, 0.42, 0.35, 0.3, 0.26],
   hipsY: [0.955, 0.955, 0.95, 0.945, 0.94, 0.935],
-  lift: [0.03, 0.07, 0.17, 0.27, 0.34, 0.4],
-  kick: [0, 0, 0.06, 0.12, 0.16, 0.2],
-  lean: [0, 3, 8, 12, 16, 21],
-  arm: [3, 18, 32, 42, 52, 60],
+  lift: [0.03, 0.07, 0.17, 0.28, 0.36, 0.44],
+  kick: [0, 0, 0.06, 0.13, 0.18, 0.23],
+  lean: [0, 3, 7, 10, 13, 16],
+  arm: [3, 18, 34, 46, 57, 66],
   elbow: [10, 16, 70, 82, 88, 92],
   yaw: [0, 6, 8, 9, 10, 10],
   comp: [0, 0, 0.03, 0.04, 0.045, 0.05],
@@ -207,7 +208,7 @@ function locomotion(c: Ctx, p: Pose, dribble = false) {
   gaitFoot(pL, v, 0, dribble, 0, fsL);
   gaitFoot(pR, v, 1, dribble, touch, fsR);
   const fR = (fsR.fwd - fsL.fwd) * 0.5;
-  const lean = tbl(GS, GAIT.lean, v) + (dribble ? 8 : 0);
+  const lean = tbl(GS, GAIT.lean, v) + (dribble ? 8 : 0) + c.acc * sstep(0.3, 2.5, v);
   const yaw = tbl(GS, GAIT.yaw, v) * fR;
   const walk = 1 - sstep(1.6, 3.2, v);
   // cadera
@@ -367,8 +368,16 @@ function kick(c: Ctx, p: Pose, kind: KickKind) {
   p.rot(BONE.thighR, thighX, thighY, -4 - roll * 0.5);
   p.rot(BONE.shinR, shinX);
   p.rot(BONE.footR, footX);
+  // último paso: el pie de apoyo llega desde atrás y se clava al lado del balón; tras un tiro fuerte,
+  // el impulso lo levanta sobre la punta (pequeño salto de la continuación)
+  const plantZ = tr(n, [0, -0.16, 0.3, 0.1, 1, 0.1]);
+  const stepY = Math.sin(Math.PI * clamp(n / 0.3, 0, 1)) * 0.07;
+  const rise = kind === 'shoot' ? tr(n, [0, 0, 0.55, 0, 0.72, 22, 1, 0]) : 0;
+  p.hips.z = lerp(-0.08, 0.04, sstep(0, 0.45, n));
+  p.hips.y += rise * 0.0012;
   _pole.set(0.1, 0, 1);
-  solveLeg(p, 0, V(0.15, ANKLE_H, 0.06), _pole, footQ(0, 10));
+  solveLeg(p, 0, V(0.15, ankleForPitch(rise) + stepY, plantZ), _pole, footQ(rise, 10));
+  if (rise > 0) p.rot(BONE.toeL, -rise);
   p.rot(BONE.spine, spineX, -yaw * 0.5, -roll * 0.4);
   p.rot(BONE.chest, spineX * 0.6, -yaw * 0.5, -roll * 0.3);
   p.rot(BONE.neck, 8 * env, 0, 0);
@@ -731,7 +740,8 @@ function throwin(c: Ctx, p: Pose) {
 // ------------------------------------------------------------------ portero
 function gkDive(c: Ctx, p: Pose) {
   // versión hacia la DERECHA (-X); la izquierda es el espejo
-  const n = c.n;
+  // la estirada de la simulación ataja en sus primeras décimas: el gesto llega estirado a tiempo
+  const n = c.n < 0.3 ? c.n * 1.5 : 0.45 + (c.n - 0.3) * (0.55 / 0.7);
   // variantes: 0 normal, 1 rasa (a ras de suelo), 2 alta (vuelo largo con las yemas de los dedos)
   const hi = c.variant === 2, lo = c.variant === 1;
   const rz = hi ? tr(n, [0, 0, 0.12, -4, 0.3, 30, 0.5, 58, 0.62, 66, 0.75, 84, 1, 88]) : lo ? tr(n, [0, 0, 0.1, -2, 0.25, 48, 0.4, 82, 0.55, 90, 1, 90]) : tr(n, [0, 0, 0.12, -4, 0.3, 38, 0.45, 72, 0.6, 86, 1, 88]);
@@ -844,8 +854,58 @@ function gkKick(c: Ctx, p: Pose) {
 
 // ------------------------------------------------------------------ celebraciones / reacciones
 function celebrate(c: Ctx, p: Pose) {
-  const v = ((c.variant % 6) + 6) % 6;
+  const v = ((c.variant % 9) + 9) % 9;
   const t = c.t;
+  if (v >= 6) {
+    // festejos de parado: corre con el puño en alto y, al frenar, hace el gesto
+    base(c, p);
+    const e = 1 - sstep(0.8, 2.5, c.v);
+    const run = 1 - e;
+    if (v === 6) {
+      // bailecito: cadera de lado a lado, rodillas que rebotan y brazos que giran delante del pecho
+      const s = Math.sin(t * 7);
+      const k = Math.abs(Math.sin(t * 7));
+      p.hips.x += 0.05 * s * e;
+      p.hips.y -= 0.05 * k * e;
+      p.addRot(BONE.hips, 0, 8 * s * e, 7 * s * e);
+      p.addRot(BONE.spine, 0, -6 * s * e, -9 * s * e);
+      p.addRot(BONE.head, 0, 0, 5 * s * e);
+      if (e > 0.5) {
+        solveLeg(p, 0, V(0.15, ANKLE_H, 0.02), FWD, footQ(0, 12));
+        solveLeg(p, 1, V(-0.15, ANKLE_H, -0.02), FWD, footQ(0, -12));
+      }
+      p.rot(BONE.uarmL, lerp(-150, -55 + 18 * s, e), 0, lerp(20, 22, e));
+      p.rot(BONE.uarmR, lerp(-30, -55 - 18 * s, e), 0, -22);
+      p.rot(BONE.farmL, lerp(-20, -95 - 25 * s, e), lerp(0, -35, e), 0);
+      p.rot(BONE.farmR, lerp(-90, -95 + 25 * s, e), lerp(0, 35, e), 0);
+    } else if (v === 7) {
+      // salto y caída de potencia: piernas abiertas, brazos hacia abajo y atrás, pecho afuera
+      const jump = Math.sin(Math.PI * clamp((t - 1.35) / 0.6, 0, 1));
+      const land = sstep(1.9, 2.05, t);
+      p.hips.y += 0.38 * jump - 0.05 * land;
+      if (land > 0 || jump > 0) {
+        const lift = jump * 0.38;
+        solveLeg(p, 0, V(0.12 + 0.2 * land, ANKLE_H + lift, 0), FWD, footQ(25 * jump, 14));
+        solveLeg(p, 1, V(-0.12 - 0.2 * land, ANKLE_H + lift, 0), FWD, footQ(25 * jump, -14));
+      }
+      p.addRot(BONE.chest, -12 * land, 0, 0);
+      p.addRot(BONE.head, -10 * land, 0, 0);
+      const a = Math.max(jump * (1 - land), 0);
+      p.rot(BONE.uarmL, lerp(-150 * run - 120 * a, 28, land), 0, lerp(20, 38, land));
+      p.rot(BONE.uarmR, lerp(-150 * run - 120 * a, 28, land), 0, -lerp(20, 38, land));
+      p.rot(BONE.farmL, lerp(-25, -6, land));
+      p.rot(BONE.farmR, lerp(-25, -6, land));
+    } else {
+      // brazos cruzados, mentón arriba, asintiendo a la tribuna
+      p.addRot(BONE.chest, -5 * e, 0, 0);
+      p.addRot(BONE.head, (-8 + 5 * Math.sin(t * 5)) * e, 0, 0);
+      p.rot(BONE.uarmL, lerp(-150, -28, e), -78 * e, lerp(20, 6, e));
+      p.rot(BONE.uarmR, lerp(-30, -34, e), 78 * e, lerp(-10, -6, e));
+      p.rot(BONE.farmL, lerp(-20, -98, e));
+      p.rot(BONE.farmR, lerp(-90, -104, e));
+    }
+    return;
+  }
   if (v === 4) {
     // "silencio": dedo índice en los labios mirando a la grada
     base(c, p);
@@ -1236,6 +1296,43 @@ function shove(c: Ctx, p: Pose) {
   }
 }
 
+// ------------------------------------------------------------------ ceremonia previa
+/** Saludo protocolar, aplauso a la hinchada y lanzamiento de la moneda (sobre la marcha o quieto). */
+function ceremony(c: Ctx, p: Pose) {
+  base(c, p);
+  const t = c.t;
+  if (c.state === 'handshake') {
+    // brazo derecho adelantado y algo cruzado, cabeza hacia la mano que se estrecha
+    const pump = Math.sin(t * 9) * 3;
+    p.rot(BONE.uarmR, -52 + pump, 0, -6);
+    p.rot(BONE.farmR, -22 - pump, 0, 0);
+    p.rot(BONE.handR, 0, 0, 25);
+    p.addRot(BONE.head, 4, -10, 0);
+  } else if (c.state === 'applaud') {
+    // aplauso por encima de la cintura: las manos se juntan y se separan
+    const clap = Math.max(0, Math.sin(t * 13)) * 14;
+    p.rot(BONE.uarmL, -48, 0, 10 + clap);
+    p.rot(BONE.uarmR, -48, 0, -10 - clap);
+    p.rot(BONE.farmL, -78, -30, 0);
+    p.rot(BONE.farmR, -78, 30, 0);
+    p.addRot(BONE.head, -6, 0, 0);
+  } else {
+    // moneda: la mano sube al pecho, la lanza con el pulgar y la recoge en la palma
+    const n = c.n;
+    const up = sstep(0, 0.12, n);
+    const flick = sstep(0.12, 0.2, n) * (1 - sstep(0.3, 0.55, n));
+    const look = sstep(0.12, 0.25, n) * (1 - sstep(0.75, 0.95, n));
+    p.rot(BONE.uarmR, -45 * up - 45 * flick, 0, -10);
+    p.rot(BONE.farmR, -95 * up + 40 * flick, 0, 0);
+    p.rot(BONE.handR, -20 * flick, 0, 0);
+    const catchL = sstep(0.6, 0.78, n);
+    p.rot(BONE.uarmL, -40 * catchL, 0, 12);
+    p.rot(BONE.farmL, -80 * catchL, -20 * catchL, 0);
+    p.addRot(BONE.neck, -20 * look, 0, 0);
+    p.addRot(BONE.head, -15 * look, 0, 0);
+  }
+}
+
 // ------------------------------------------------------------------ despacho
 const DEFAULT_DUR: Partial<Record<AnimState, number>> = {
   pass: 0.45, lob: 0.55, shoot: 0.55, header: 0.75, volley: 0.55, scissor: 0.85, bicycle: 1.05, diving: 0.95, scorpion: 1.0, backheel: 0.5, tackle: 0.6, slide: 1.0, getup: 1.2, throwin: 1.0, trap: 0.4, skill: 0.6, shove: 0.9,
@@ -1327,6 +1424,10 @@ function evalState(c: Ctx, p: Pose) {
       return dejected(c, p);
     case 'shove':
       return shove(c, p);
+    case 'handshake':
+    case 'applaud':
+    case 'coin_toss':
+      return ceremony(c, p);
     case 'ref_card':
     case 'ref_warn':
     case 'ref_point':
@@ -1387,7 +1488,7 @@ export class Animator {
 
   constructor(private readonly seed: number) {
     this.phase = frac(seed * 3.7);
-    this.ctx = { state: 'idle', t: 0, n: 0, v: 0, phase: 0, jphase: 0, foot: 1, variant: 0, seed };
+    this.ctx = { state: 'idle', t: 0, n: 0, v: 0, phase: 0, jphase: 0, foot: 1, variant: 0, seed, acc: 0 };
   }
 
   /** heightScale = altura del jugador / 1.80. Devuelve la pose final (referencia interna). */
@@ -1395,6 +1496,9 @@ export class Animator {
     dt = clamp(dt, 0, 0.1);
     const vModel = Math.max(0, anim.speed) / Math.max(0.5, heightScale);
     const k = 1 - Math.exp(-dt / 0.12);
+    // arranques y frenadas: el cuerpo se inclina hacia delante al acelerar y hacia atrás al frenar
+    const accT = clamp((vModel - this.vs) * 5, -7, 9);
+    this.ctx.acc += (accT - this.ctx.acc) * (1 - Math.exp(-dt / 0.15));
     this.vs += (vModel - this.vs) * k;
     const dribble = anim.state === 'dribble';
     this.phase += (this.vs * dt) / strideLength(this.vs, dribble);

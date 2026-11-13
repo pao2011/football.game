@@ -41,7 +41,10 @@ export type AnimState =
   | 'ref_tv' // árbitro: dibuja la pantalla con las manos (revisión VAR)
   | 'ref_look' // árbitro: mira el monitor del VAR con la mano en el oído
   | 'ref_cancel' // árbitro: cruza y abre los brazos (decisión anulada)
-  | 'shove'; // empujón / roce con un rival (clásicos y peleas)
+  | 'shove' // empujón / roce con un rival (clásicos y peleas)
+  | 'handshake' // saludo protocolar: mano derecha extendida (caminando o quieto)
+  | 'applaud' // aplauso a la hinchada (formación inicial)
+  | 'coin_toss'; // árbitro: lanza la moneda del sorteo
 
 export interface AnimInfo {
   state: AnimState;

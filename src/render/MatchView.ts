@@ -8,7 +8,7 @@ import { BONE } from './player/rig';
 import { Stadium, type GfxQuality } from './stadium/Stadium';
 import { BallModel } from './BallModel';
 import { CameraDirector, type CameraStyle } from './CameraDirector';
-import { HALF_LENGTH } from '../config/constants';
+import { HALF_LENGTH, HALF_WIDTH } from '../config/constants';
 import { WeatherFX } from './WeatherFX';
 
 export interface ViewOptions {
@@ -67,6 +67,8 @@ export class MatchView {
   private tmpAnim: AnimInfo = { state: 'idle', time: 0, duration: 0, speed: 0, variant: 0, foot: 1 };
   private aimLine: THREE.Line;
   excitement = 0;
+  /** Ceremonia previa en curso: sin indicadores de jugador ni de pase. */
+  ceremony = false;
   private focus = new THREE.Vector3();
   private weatherFX: WeatherFX | null = null;
   private clock = 0;
@@ -102,7 +104,7 @@ export class MatchView {
     // Árbitro: equipación negra con detalles amarillos y una tarjeta en la mano derecha
     this.refModel = new PlayerModel({
       kit: { shirt: '#141414', shirt2: '#e6c200', pattern: 'solid', shorts: '#111111', socks: '#111111', number: '#e6c200' },
-      number: 0, name: '', skinTone: 2, hairColor: '#2b1d14', hairStyle: 1, height: 1.8, isGoalkeeper: false,
+      number: 0, name: '', skinTone: 0.3, hairColor: '#2b1d14', hairStyle: 1, height: 1.8, isGoalkeeper: false,
     }, mq);
     this.refModel.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = opts.shadows; });
     this.refCard = new THREE.Mesh(new THREE.PlaneGeometry(0.13, 0.18), new THREE.MeshBasicMaterial({ color: 0xffd400, side: THREE.DoubleSide }));
@@ -111,6 +113,25 @@ export class MatchView {
     this.refModel.attachToBone(BONE.handR, this.refCard);
     this.models.set('referee', this.refModel);
     this.scene.add(this.refModel.root);
+    // Jueces de línea: uno por banda, cada uno cubre una mitad, con el banderín en la mano derecha
+    if (!match.config.training) {
+      for (const side of [1, -1] as const) {
+        const model = new PlayerModel({
+          kit: { shirt: '#141414', shirt2: '#e6c200', pattern: 'solid', shorts: '#111111', socks: '#111111', number: '#e6c200' },
+          number: 0, name: side > 0 ? 'A1' : 'A2', skinTone: side > 0 ? 0.15 : 0.6, hairColor: side > 0 ? '#3a2a1c' : '#15100c', hairStyle: side > 0 ? 0 : 1, height: 1.77, isGoalkeeper: false,
+        }, mq);
+        model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = opts.shadows; });
+        const flag = new THREE.Group();
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.55, 6), new THREE.MeshStandardMaterial({ color: 0xe8e8e8, roughness: 0.5 }));
+        pole.position.y = -0.3;
+        const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.36, 0.28), new THREE.MeshBasicMaterial({ map: makeFlagTexture(), side: THREE.DoubleSide }));
+        cloth.position.set(0.18, -0.43, 0);
+        flag.add(pole, cloth);
+        model.attachToBone(BONE.handR, flag);
+        this.linesmen.push({ model, side, x: side * 10, anim: { state: 'idle', time: 0, duration: 0, speed: 0, variant: 0, foot: 1 } });
+        this.scene.add(model.root);
+      }
+    }
     this.varMonitor = makeVarMonitor();
     this.varMonitor.visible = false;
     this.scene.add(this.varMonitor);
@@ -173,6 +194,7 @@ export class MatchView {
 
   private refModel: PlayerModel;
   private refCard: THREE.Mesh;
+  private readonly linesmen: { model: PlayerModel; side: 1 | -1; x: number; anim: AnimInfo }[] = [];
   /** Monitor del VAR junto a la línea de banda (aparece durante la revisión). */
   private varMonitor: THREE.Group;
   private varMonScale = 0;
@@ -223,7 +245,7 @@ export class MatchView {
 
     // Ambiente: excitación según peligro de gol
     const danger = Math.max(0, (Math.abs(m.ball.pos.x) - (HALF_LENGTH - 30)) / 30);
-    const target = m.phase === 'goal' ? 1 : m.phase === 'play' ? danger * 0.8 : 0.15;
+    const target = m.phase === 'goal' ? 1 : this.ceremony ? 0.85 : m.phase === 'play' ? danger * 0.8 : 0.15; // en la salida de los equipos la tribuna salta
     this.excitement += (target - this.excitement) * Math.min(1, dt * (target > this.excitement ? 3 : 0.6));
     this.stadium.update(dt, this.excitement, this.camera, this.renderer.domElement.height);
     this.clock += dt;
@@ -258,6 +280,7 @@ export class MatchView {
     this.refModel.root.rotation.y = ref.facing;
     this.refModel.update(ref.anim, dt);
     this.refCard.visible = ref.anim.state === 'ref_card' && ref.anim.time > 0.12 && !!ref.cardColor;
+    this.updateLinesmen(dt);
     (this.refCard.material as THREE.MeshBasicMaterial).color.set(ref.cardColor === 'red' ? 0xe0201c : 0xffd400);
     // cámara de la amonestación: árbitro e infractor en primer plano
     const g = ref.gesture;
@@ -283,7 +306,7 @@ export class MatchView {
       const ind = this.indicators[t.index];
       if (!ind) continue;
       const c = t.controlled;
-      ind.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay';
+      ind.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay' && m.phase !== 'goal' && !this.ceremony;
       if (c) {
         ind.group.position.set(c.pos.x, 0, c.pos.z);
         ind.group.rotation.y = c.facing;
@@ -293,14 +316,14 @@ export class MatchView {
     if (this.indicator2) {
       const t = m.teams[m.config.humanTeam === 1 ? 1 : 0];
       const c = t.controlled2;
-      this.indicator2.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay';
+      this.indicator2.group.visible = !!c && !c.sentOff && this.opts.showIndicators && m.phase !== 'replay' && m.phase !== 'goal' && !this.ceremony;
       if (c) {
         this.indicator2.group.position.set(c.pos.x, 0, c.pos.z);
         this.indicator2.group.rotation.y = c.facing;
         this.indicator2.head.position.y = c.data.height + 0.55 + Math.sin(m.time * 5 + 1) * 0.05;
       }
     }
-    if (receiverPreview && this.opts.showIndicators) {
+    if (receiverPreview && this.opts.showIndicators && !this.ceremony) {
       this.receiverRing.visible = true;
       this.receiverRing.position.set(receiverPreview.pos.x, 0.03, receiverPreview.pos.z);
     } else {
@@ -404,13 +427,43 @@ export class MatchView {
     } else this.director.updateReplay(bp, this.replayGoalX, t, left);
   }
 
+  /**
+   * Jueces de línea: el de la banda +z cubre la mitad +x y el otro la mitad −x. Siguen la línea del
+   * penúltimo defensor (o el balón, si está más cerca del arco) y levantan el banderín cuando el balón
+   * sale por su lado o hay fuera de juego en su mitad.
+   */
+  private updateLinesmen(dt: number) {
+    const m = this.match;
+    for (const l of this.linesmen) {
+      const sx = l.side; // signo de x de la mitad que cubre
+      const def = m.teams[0].attackDir === -sx ? m.teams[0] : m.teams[1];
+      const xs = def.active.filter((p) => !p.sentOff).map((p) => p.pos.x * sx).sort((a, b) => b - a);
+      const target = sx * Math.min(HALF_LENGTH, Math.max(0, xs[1] ?? 0, m.ball.pos.x * sx));
+      const step = Math.max(-6.5 * dt, Math.min(6.5 * dt, target - l.x));
+      l.x += step;
+      const speed = dt > 0 ? Math.abs(step) / dt : 0;
+      const r = m.restart;
+      const flagUp = m.phase === 'stoppage' && !!r && r.stage === 'pause'
+        && (r.type === 'throwin' ? Math.sign(r.spot.z) === l.side : (r.type === 'corner' || r.type === 'goalkick' || r.type === 'indirect') && Math.sign(r.spot.x) === sx);
+      const moving = speed > 0.4 && !flagUp;
+      const state = flagUp ? 'ref_card' : moving ? 'locomotion' : 'idle';
+      l.anim.time = state === l.anim.state ? l.anim.time + dt : 0;
+      l.anim.state = state;
+      l.anim.duration = flagUp ? 2.5 : 0;
+      l.anim.speed = moving ? speed : 0;
+      l.model.root.position.set(l.x, 0, l.side * (HALF_WIDTH + 1.4));
+      l.model.root.rotation.y = moving ? (step > 0 ? Math.PI / 2 : -Math.PI / 2) : l.side > 0 ? Math.PI : 0;
+      l.model.update(l.anim, dt);
+    }
+  }
+
   /** Modelo 3D de un jugador (los suplentes se crean al entrar). */
   private createModel(p: Player) {
     const t = this.match.teams[p.team];
     const kit = p.isGK ? t.data.gkKit : t.kit;
     const model = new PlayerModel({
       kit, number: p.data.number, name: p.data.name.split(' ').slice(-1)[0], skinTone: p.data.skinTone,
-      hairColor: p.data.hairColor, hairStyle: p.data.hairStyle, height: p.data.height, isGoalkeeper: p.isGK,
+      hairColor: p.data.hairColor, hairStyle: p.data.hairStyle, height: p.data.height, isGoalkeeper: p.isGK, crest: t.data.crest.image,
     }, this.opts.quality);
     model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = this.opts.shadows; } });
     this.models.set(p.id, model);
@@ -477,6 +530,7 @@ export class MatchView {
 
   dispose() {
     for (const m of this.models.values()) m.dispose();
+    for (const l of this.linesmen) l.model.dispose();
     this.weatherFX?.dispose();
     this.stadium.dispose();
     this.scene.traverse((o) => {
@@ -486,6 +540,21 @@ export class MatchView {
   }
 }
 
+
+/** Banderín del juez de línea: cuadros amarillos y rojos. */
+function makeFlagTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#ffd400';
+  g.fillRect(0, 0, 32, 32);
+  g.fillStyle = '#e0201c';
+  g.fillRect(0, 0, 16, 16);
+  g.fillRect(16, 16, 16, 16);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
 
 /** Monitor del VAR: pie, pantalla con el rótulo "VAR" y una visera, mirando al campo. */
 function makeVarMonitor(): THREE.Group {

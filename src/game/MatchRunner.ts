@@ -7,6 +7,7 @@ import type { StadiumData } from '../data/types';
 import { Input, P1_SPLIT, P2_SPLIT, versusDevices, type Bindings } from '../input/Input';
 import { Match, type MatchConfig } from '../sim/Match';
 import { MatchView } from '../render/MatchView';
+import { Ceremony } from './Ceremony';
 import type { MatchEvent } from '../sim/types';
 import { HUD } from '../ui/HUD';
 import { Commentary } from '../ui/Commentary';
@@ -44,8 +45,6 @@ export interface OnlineLink {
 export const ONLINE_PAUSES = 3;
 export const ONLINE_PAUSE_MAX_S = 60;
 
-/** Duración de la presentación del partido (s). */
-const INTRO_SECONDS = 5.4;
 
 export interface MatchResultInfo {
   match: Match;
@@ -108,8 +107,13 @@ export class MatchRunner {
   /** Presentación inicial en curso (la simulación espera mientras dura). */
   inIntro = false;
   private introFrames = 0;
-  private introEndAt = 0;
   private introStadium: StadiumData | null = null;
+  /** Ceremonia previa (salida del túnel, saludo y sorteo) y su tiempo transcurrido. */
+  private ceremony: Ceremony | null = null;
+  private introT = 0;
+  /** Momentos de la ceremonia ya sonados (recibimiento, aplauso, sorteo) y próximo cohete suelto. */
+  private cues = new Set<string>();
+  private nextRocketAt = 0;
   private pendingTip: string | null = null;
   /** Velocidad de simulación (para pruebas automáticas). */
   timeScale = 1;
@@ -268,9 +272,31 @@ export class MatchRunner {
   skipIntro() {
     if (!this.inIntro) return;
     this.inIntro = false;
+    this.ceremony?.finish();
+    this.ceremony = null;
     this.hud.endIntro();
     this.view.director.endIntro();
     this.showTip();
+  }
+
+  /** La hinchada en la ceremonia: estalla al asomar los equipos, aplaude al formar y tira cohetes cada tanto. */
+  private ceremonySound(t: number) {
+    const cue = (id: string, at: number, fn: () => void) => {
+      if (t >= at && !this.cues.has(id)) { this.cues.add(id); fn(); }
+    };
+    // asoman por el túnel: recibimiento con fuegos, bengalas, papelitos, grito y cántico con bombo
+    cue('out', 1.3, () => {
+      this.view.stadium.fans.welcome();
+      this.audioEngine.cheer(1);
+      this.audioEngine.chant(1);
+    });
+    cue('lineup', 12.4, () => this.audioEngine.applause());
+    cue('chant', 15.5, () => this.audioEngine.chant(0.9));
+    cue('toss', 25, () => this.audioEngine.cheer(0.55));
+    if (t >= this.nextRocketAt && t < this.ceremony!.duration - 1) {
+      this.view.stadium.fans.fireworks(1 + Math.floor(Math.random() * 3));
+      this.nextRocketAt = t + 2.5 + Math.random() * 4;
+    }
   }
 
   start() {
@@ -292,17 +318,22 @@ export class MatchRunner {
     if (this.inIntro && !this.paused) {
       // presentación: la simulación espera; cualquier botón la salta
       if (this.introFrames < 3 && ++this.introFrames === 3) {
-        this.hud.playIntro(this.introStadium!, () => this.skipIntro());
-        // recibimiento: fuegos artificiales, bengalas, papelitos y cántico con bombo
-        this.view.stadium.fans.welcome();
-        this.audioEngine.chant(1);
+        this.ceremony = new Ceremony(m, this.view);
+        this.introT = 0;
+        this.hud.playIntro(this.introStadium!, () => this.skipIntro(), this.ceremony.duration);
         this.narrator.welcome();
-        this.view.director.startIntro(INTRO_SECONDS);
-        this.introEndAt = performance.now() + (INTRO_SECONDS * 1000) / this.timeScale;
+        this.cues.clear();
+        this.nextRocketAt = 6 + Math.random() * 3;
+      }
+      if (this.ceremony) {
+        this.introT += dt * this.timeScale;
+        this.ceremony.update(this.introT);
+        this.hud.setIntroCaption(this.ceremony.caption(this.introT));
+        this.ceremonySound(this.introT);
       }
       this.input.poll(dt);
       const pausePressed = this.input.pressed('pause');
-      if ((this.introFrames >= 3 && performance.now() >= this.introEndAt) || pausePressed || (['pass', 'shoot', 'sprint', 'through', 'lob'] as const).some((a) => this.input.pressed(a))) this.skipIntro();
+      if ((this.introFrames >= 3 && this.introT >= (this.ceremony?.duration ?? 0)) || pausePressed || (['pass', 'shoot', 'sprint', 'through', 'lob'] as const).some((a) => this.input.pressed(a))) this.skipIntro();
       this.input.poll(0);
       // Esc / pausa siempre abre el menú de pausa, también durante la presentación
       if (pausePressed) this.pause();
@@ -389,7 +420,7 @@ export class MatchRunner {
         this.audioEngine.cheer(1);
       }
     }
-    this.audio.update(Math.max(this.view.excitement, show), this.view.camera);
+    this.audio.update(Math.max(this.view.excitement, show, this.inIntro ? 0.85 : 0), this.view.camera);
     if (!this.paused) this.narrator.update(dt);
     this.hud.update(dt);
     this.commentary?.update();
@@ -440,9 +471,9 @@ export class MatchRunner {
     if (!i) return;
     let v = -1;
     if (i.pressed('skillUp')) v = i.held('finesse') ? 5 : 0;
-    else if (i.pressed('skillDown')) v = 1;
-    else if (i.pressed('skillRight')) v = 2;
-    else if (i.pressed('skillLeft')) v = 3;
+    else if (i.pressed('skillDown')) v = i.held('finesse') ? 6 : 1;
+    else if (i.pressed('skillRight')) v = i.held('finesse') ? 7 : 2;
+    else if (i.pressed('skillLeft')) v = i.held('finesse') ? 8 : 3;
     else if (i.pressed('skillSpin')) v = 4;
     if (v >= 0) sc.action.variant = v;
   }

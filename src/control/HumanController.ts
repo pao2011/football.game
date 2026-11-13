@@ -765,7 +765,9 @@ export class HumanController implements TeamController {
   }
 
   private makeKick(m: Match, team: Team, p: Player, b: Omit<Buffered, 'until'>, header: boolean) {
-    const err = 1;
+    const assisted = this.settings.passAssist >= 0.5;
+    // pases asistidos: mucho más precisos (y se reapuntan al receptor en el contacto); los tiros no cambian
+    const err = b.action === 'shoot' || !assisted ? 1 : 0.5;
     const dir = b.dir;
     if (b.combo && !header) {
       const req = this.comboKick(m, team, p, b, err);
@@ -786,12 +788,12 @@ export class HumanController implements TeamController {
           q = gg.runner;
           this.giveAndGo = null;
           const lead = q.pos.clone().addScaledVector(q.vel, 0.7);
-          return this.driven(buildGroundPass(m, p, lead, b.power - 0.2, err, q), b);
+          return this.homing(this.driven(buildGroundPass(m, p, lead, b.power - 0.2, err, q), b));
         }
         // sin dirección y sin nadie delante: al compañero mejor situado en cualquier dirección
         if (!q && b.noStick) q = this.pickFrom(p, team.active.filter((x) => x !== p && !x.isGK), dir);
         // LT + RB + A: vaselina corta (saca el balón del suelo); LT + A: pase con rosca
-        if (q && b.l2 && b.finesse) return buildLob(m, p, q.pos.clone().addScaledVector(q.vel, 0.6), 44, err, q, 'lob');
+        if (q && b.l2 && b.finesse) return this.homing(buildLob(m, p, q.pos.clone().addScaledVector(q.vel, 0.6), 44, err, q, 'lob'));
         if (q && b.l2) {
           const curved = buildCurvedPass(m, p, q.pos.clone().addScaledVector(q.vel, 0.5), err, q);
           if (curved) return curved;
@@ -807,7 +809,7 @@ export class HumanController implements TeamController {
           return this.driven(buildGroundPass(m, p, p.pos.clone().addScaledVector(dir, d), 0.2, err, q), b);
         }
         // RB + A: pase tenso (más rápido, como en FIFA)
-        return this.driven(buildGroundPass(m, p, target, b.power - 0.35, err, q), b);
+        return this.homing(this.driven(buildGroundPass(m, p, target, b.power - 0.35, err, q), b));
       }
       case 'through': {
         const q = this.pickReceiver(m, team, p, dir, true, !b.noStick);
@@ -820,6 +822,8 @@ export class HumanController implements TeamController {
         target.z = clamp(target.z, -HALF_WIDTH + 2, HALF_WIDTH - 2);
         // LB + Y o LT + Y: pase al hueco bombeado por encima de la defensa; RB + Y: al hueco potente
         const req = b.lb || b.l2 ? buildLob(m, p, target, 34, err, q ?? undefined, 'lob') : this.driven(buildGroundPass(m, p, target, 0.25, err, q ?? undefined, 'through'), b);
+        // al espacio: se reapunta desde donde esté el balón al golpearlo (no se desvía por el armado)
+        if (req.velocity.y < 2) req.aimAt = target;
         if (q) {
           q.duty = 'receive';
           q.tacticalTarget.copy(target);
@@ -852,7 +856,8 @@ export class HumanController implements TeamController {
         const target = q ? q.pos.clone().addScaledVector(q.vel, 0.5) : p.pos.clone().addScaledVector(dir, 15 + b.power * 35);
         if (q && this.settings.passAssist < 0.5) target.copy(p.pos).addScaledVector(dir, 12 + b.power * 40);
         // RB + X: pase elevado tenso (más bajo y rápido)
-        return buildLob(m, p, target, b.finesse ? 17 + b.power * 5 : 28 + b.power * 10, err, q ?? undefined, 'lob');
+        const lob = buildLob(m, p, target, b.finesse ? 17 + b.power * 5 : 28 + b.power * 10, err, q ?? undefined, 'lob');
+        return this.settings.passAssist >= 0.5 ? this.homing(lob) : lob;
       }
     }
   }
@@ -900,14 +905,21 @@ export class HumanController implements TeamController {
       q.forcedRunTarget.copy(target);
       const req = buildGroundPass(m, p, target, 0.45, err, q, 'through');
       req.velocity.multiplyScalar(1.12);
+      req.aimAt = target;
       return req;
     }
     if (b.combo === 'loftToFeet') {
       const q = this.pickReceiver(m, team, p, dir, false, !b.noStick);
       if (!q) return null;
-      return buildLob(m, p, q.pos.clone().addScaledVector(q.vel, 0.5), 46, err, q, 'lob');
+      return this.homing(buildLob(m, p, q.pos.clone().addScaledVector(q.vel, 0.5), 46, err, q, 'lob'));
     }
     return null;
+  }
+
+  /** Pase asistido: se reapunta al receptor en el contacto (ver KickRequest.homing). */
+  private homing<T extends { homing?: boolean; targetId?: string }>(req: T): T {
+    if (this.settings.passAssist >= 0.5 && req.targetId) req.homing = true;
+    return req;
   }
 
   /** RB (Shift) mantenido al pasar: pase tenso, un 25 % más rápido. */
@@ -1081,7 +1093,7 @@ export class HumanController implements TeamController {
       if (a === 'pass' || a === 'through') {
         const q = this.pickReceiver(m, team, p, dir, false, hasStick);
         const target = q ? q.pos.clone() : p.pos.clone().addScaledVector(dir, 15 + power * 15);
-        const req = buildGroundPass(m, p, target, power - 0.3, 1, q ?? undefined);
+        const req = this.homing(buildGroundPass(m, p, target, power - 0.3, 0.6, q ?? undefined));
         req.kind = 'gkthrow';
         req.velocity.y = a === 'through' ? 4 : 1.2;
         m.requestKick(p, req);
@@ -1149,7 +1161,7 @@ export class HumanController implements TeamController {
         const d = dist2D(m.ball.pos, target);
         const v = new Vector3(target.x - m.ball.pos.x, 0, target.z - m.ball.pos.z).normalize().multiplyScalar(clamp(d * 0.75 + 4, 6, a === 'lob' ? 19 : 15));
         v.y = clamp(d * 0.25 + 2, 3, 6.5);
-        m.requestKick(p, { kind: 'throwin', velocity: v, spin: new Vector3(), targetId: q?.id, power: 0.4, errorScale: 1 });
+        m.requestKick(p, this.homing({ kind: 'throwin', velocity: v, spin: new Vector3(), targetId: q?.id, power: 0.4, errorScale: 0.6 }));
         return;
       }
       if (a === 'shoot' && fk) {

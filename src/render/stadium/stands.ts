@@ -25,7 +25,7 @@ import {
   ROOF_IN_D,
   ROOF,
 } from './layout';
-import { LED_ASPECT, LED_PANELS } from './textures';
+import { LED_ASPECT } from './textures';
 
 export interface RowDef {
   samples: PSample[];
@@ -179,7 +179,17 @@ export function buildStands(o: StandOptions): StandBuild {
   {
     loftInto(opaque, ring, true, [{ a: { d: midBack, y: midTop }, b: { d: FACADE_D, y: midTop }, color: concrete }]);
     const fTop = o.roof ? ROOF.outLong - 0.3 : 34;
-    loftInto(opaque, ring, true, [{ a: { d: FACADE_D, y: midTop }, b: { d: FACADE_D, y: fTop, o: o.roof ? 1 : 0.4 }, color: facade }], yOff);
+    // muro de fondo en tres franjas: zócalo, banda con el color del club y paño superior
+    const fo = o.roof ? 1 : 0.4;
+    const h = fTop - midTop;
+    const y1 = midTop + h * 0.34;
+    const y2 = midTop + h * 0.5;
+    const club = C(o.homeColor).multiplyScalar(0.75);
+    loftInto(opaque, ring, true, [
+      { a: { d: FACADE_D, y: midTop }, b: { d: FACADE_D, y: y1, o: fo * 0.34 }, color: facade.clone().lerp(C(0x8a8f99), 0.25) },
+      { a: { d: FACADE_D, y: y1, o: fo * 0.34 }, b: { d: FACADE_D, y: y2, o: fo * 0.5 }, color: club },
+      { a: { d: FACADE_D, y: y2, o: fo * 0.5 }, b: { d: FACADE_D, y: fTop, o: fo }, color: facade },
+    ], yOff);
     // outer skin (only seen from aerial / replay cameras)
     const skin = C(o.roofColor).lerp(C(o.standColor), 0.35).multiplyScalar(0.8);
     loftInto(opaque, ring, true, [{ a: { d: FACADE_D + 0.35, y: fTop, o: o.roof ? 1 : 0.4 }, b: { d: FACADE_D + 0.35, y: 0 }, color: skin }], yOff);
@@ -525,4 +535,3 @@ export function appendGeo(gb: GeoBuilder, g: THREE.BufferGeometry) {
   g.dispose();
 }
 
-export const LED_U_PANEL = 1 / LED_PANELS;

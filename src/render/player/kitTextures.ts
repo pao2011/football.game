@@ -175,8 +175,8 @@ function yToShirtCanvas(y: number, H: number) {
   return (1 - v) * H;
 }
 
-export function shirtTexture(kit: KitData, number: number, name: string, size: number, longSleeves: boolean): THREE.CanvasTexture {
-  const key = `shirt|${JSON.stringify(kit)}|${number}|${name}|${size}|${longSleeves ? 1 : 0}`;
+export function shirtTexture(kit: KitData, number: number, name: string, size: number, longSleeves: boolean, crest?: string): THREE.CanvasTexture {
+  const key = `shirt|${JSON.stringify(kit)}|${number}|${name}|${size}|${longSleeves ? 1 : 0}|${crest ?? ''}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const W = size;
@@ -221,31 +221,74 @@ export function shirtTexture(kit: KitData, number: number, name: string, size: n
   const fTop = yToShirtCanvas(1.37, H);
   const fBot = yToShirtCanvas(1.3, H);
   drawText(ctx, num, W * 0.665, (fTop + fBot) / 2, fBot - fTop, sx, numColor, outline, W * 0.1);
-  // escudo en el pecho (lado izquierdo del jugador)
-  {
-    const cx = W * 0.84;
-    const cy = (fTop + fBot) / 2;
-    const r = (fBot - fTop) * 0.55;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.scale(sx, 1);
-    ctx.beginPath();
-    ctx.moveTo(-r, -r);
-    ctx.lineTo(r, -r);
-    ctx.lineTo(r, r * 0.2);
-    ctx.quadraticCurveTo(r, r * 0.9, 0, r * 1.3);
-    ctx.quadraticCurveTo(-r, r * 0.9, -r, r * 0.2);
-    ctx.closePath();
-    ctx.fillStyle = numColor;
-    ctx.fill();
-    ctx.lineWidth = Math.max(1, r * 0.25);
-    ctx.strokeStyle = trim;
-    ctx.stroke();
-    ctx.restore();
-  }
+  fabricShading(ctx, W, torsoH, H);
   const tex = finish(canvas);
+  // escudo real del equipo en el pecho (lado izquierdo del jugador); se pinta cuando carga la imagen
+  if (crest) {
+    const img = new Image();
+    img.onload = () => {
+      const h = (fBot - fTop) * 1.45;
+      const w = Math.min(h * (img.width / img.height) * sx, W * 0.09);
+      ctx.drawImage(img, W * 0.84 - w / 2, (fTop + fBot) / 2 - h / 2, w, h);
+      tex.needsUpdate = true;
+    };
+    img.src = crest;
+  }
   cache.set(key, tex);
   return tex;
+}
+
+/** Volumen de la tela pintado encima: sombra en los costados y bajo el pecho, pliegues en la cintura y trama fina. */
+function fabricShading(ctx: CanvasRenderingContext2D, W: number, torsoH: number, H: number) {
+  const band = (cu: number, half: number, a: number, y0 = 0, h = torsoH) => {
+    for (const off of [-1, 0, 1]) {
+      const x = (cu + off) * W;
+      const g = ctx.createLinearGradient(x - half * W, 0, x + half * W, 0);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(0.5, `rgba(${a < 0 ? '255,255,255' : '0,0,0'},${Math.abs(a)})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - half * W, y0, half * 2 * W, h);
+    }
+  };
+  // costados (bajo los brazos) más oscuros; pecho y omóplatos apenas más claros
+  band(0, 0.11, 0.2);
+  band(0.5, 0.11, 0.2);
+  band(SHIRT_U_FRONT, 0.1, -0.07, 0, torsoH * 0.5);
+  band(SHIRT_U_BACK, 0.1, -0.05, 0, torsoH * 0.45);
+  // sombra bajo los pectorales y pliegues de la tela en la cintura
+  const yPec = yToShirtCanvas(1.275, H);
+  const pec = ctx.createLinearGradient(0, yPec - torsoH * 0.03, 0, yPec + torsoH * 0.07);
+  pec.addColorStop(0, 'rgba(0,0,0,0)');
+  pec.addColorStop(0.4, 'rgba(0,0,0,0.1)');
+  pec.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = pec;
+  ctx.fillRect(W * 0.55, yPec - torsoH * 0.03, W * 0.4, torsoH * 0.1);
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 14; i++) {
+    // pseudoaleatorio fijo: las mismas arrugas en todas las camisetas
+    const r = (n: number) => { const x = Math.sin((i + 1) * 12.9898 * n) * 43758.5453; return x - Math.floor(x); };
+    const x = r(1) * W;
+    const y = yToShirtCanvas(0.99 + r(2) * 0.16, H);
+    const len = W * (0.03 + r(3) * 0.05);
+    ctx.strokeStyle = i % 2 ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = Math.max(1, W * 0.006);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.quadraticCurveTo(x + len * 0.5, y + (r(4) - 0.5) * torsoH * 0.05, x + len, y + (r(5) - 0.5) * torsoH * 0.03);
+    ctx.stroke();
+  }
+  // dobladillo inferior y mangas: sombra hacia el borde
+  const hem = ctx.createLinearGradient(0, torsoH * 0.93, 0, torsoH);
+  hem.addColorStop(0, 'rgba(0,0,0,0)');
+  hem.addColorStop(1, 'rgba(0,0,0,0.16)');
+  ctx.fillStyle = hem;
+  ctx.fillRect(0, torsoH * 0.93, W, torsoH * 0.07);
+  band(0.25, 0.2, 0.12, torsoH, H - torsoH); // cara interna de la manga
+  // trama fina de la tela técnica
+  ctx.fillStyle = 'rgba(0,0,0,0.035)';
+  const step = Math.max(2, Math.round(W / 128));
+  for (let x = 0; x < W; x += step * 2) ctx.fillRect(x, 0, step, H);
 }
 
 export function shortsTexture(kit: KitData, number: number, size: number): THREE.CanvasTexture {
@@ -304,6 +347,78 @@ export function socksTexture(kit: KitData): THREE.CanvasTexture {
 }
 
 /** Libera todas las texturas de equipación cacheadas. */
+/** Botín: suela oscura con tapones, entresuela, cordones sobre la lengüeta, franja lateral, talonera y puntera. */
+export function bootTexture(color: string): THREE.CanvasTexture {
+  const key = `boot|${color}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const g = canvas.getContext('2d')!;
+  const light = luminance(color) > 0.45;
+  const accent = light ? '#15171c' : '#f4f4f4';
+  const X = (u: number) => u * S;
+  const Y = (v: number) => (1 - v) * S; // v = 0 talón, 1 punta
+  g.fillStyle = color;
+  g.fillRect(0, 0, S, S);
+  // volumen: más oscuro hacia la suela, brillo en el empeine
+  for (const [u, half, c] of [[0.25, 0.2, 'rgba(255,255,255,0.16)'], [0.75, 0.3, 'rgba(0,0,0,0.35)']] as const) {
+    const gr = g.createLinearGradient(X(u - half), 0, X(u + half), 0);
+    gr.addColorStop(0, 'rgba(0,0,0,0)');
+    gr.addColorStop(0.5, c);
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr;
+    g.fillRect(X(u - half), 0, X(half * 2), S);
+  }
+  // suela y tapones
+  g.fillStyle = '#101114';
+  g.fillRect(X(0.63), 0, X(0.24), S);
+  g.fillStyle = '#c9ccd2';
+  for (const [u, v] of [[0.69, 0.12], [0.81, 0.12], [0.75, 0.3], [0.68, 0.62], [0.82, 0.62], [0.7, 0.82], [0.8, 0.82], [0.75, 0.93]]) {
+    g.beginPath();
+    g.arc(X(u), Y(v), S * 0.022, 0, Math.PI * 2);
+    g.fill();
+  }
+  // entresuela (filete de contraste entre la suela y el cuerpo del botín)
+  g.fillStyle = accent;
+  g.fillRect(X(0.605), 0, X(0.025), S);
+  g.fillRect(X(0.87), 0, X(0.025), S);
+  // lengüeta y cordones
+  g.fillStyle = 'rgba(0,0,0,0.3)';
+  g.fillRect(X(0.19), Y(0.66), X(0.12), Y(0.3) - Y(0.66));
+  g.strokeStyle = accent;
+  g.lineWidth = Math.max(1.5, S * 0.016);
+  g.lineCap = 'round';
+  for (let i = 0; i < 5; i++) {
+    const v = 0.34 + i * 0.07;
+    g.beginPath();
+    g.moveTo(X(0.195), Y(v));
+    g.lineTo(X(0.305), Y(v + 0.035));
+    g.moveTo(X(0.305), Y(v));
+    g.lineTo(X(0.195), Y(v + 0.035));
+    g.stroke();
+  }
+  // franja curva en cada costado (diseño propio), talonera y puntera reforzada
+  g.lineWidth = S * 0.045;
+  for (const u of [0.03, 0.47]) {
+    const dir = u < 0.25 ? 1 : -1;
+    g.beginPath();
+    g.moveTo(X(u + dir * 0.09), Y(0.2));
+    g.quadraticCurveTo(X(u - dir * 0.02), Y(0.45), X(u + dir * 0.1), Y(0.8));
+    g.stroke();
+  }
+  g.fillStyle = accent;
+  g.fillRect(0, Y(0.06), X(0.6), Y(0) - Y(0.06));
+  g.fillRect(X(0.9), Y(0.06), X(0.1), Y(0) - Y(0.06));
+  g.fillStyle = 'rgba(255,255,255,0.12)';
+  g.fillRect(0, 0, X(0.6), Y(0.9));
+  const tex = finish(canvas);
+  cache.set(key, tex);
+  return tex;
+}
+
 export function clearKitTextureCache() {
   for (const t of cache.values()) t.dispose();
   cache.clear();

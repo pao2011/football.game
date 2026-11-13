@@ -4,6 +4,7 @@ import { CRESTS } from './crests';
 import { ROSTERS } from './rosters';
 import { EXTRA_LEAGUES } from './leagues/index';
 import { TM_ROSTERS } from './leagues/tmRosters';
+import { NATION_SEEDS } from './nations';
 
 // Los 30 equipos de la Liga Profesional Argentina 2026 con sus colores, escudos y plantillas reales (rosters.ts).
 
@@ -226,9 +227,12 @@ export const TEAMS: TeamData[] = SEEDS.map((s) => {
 /** Equipos del juego (sin los creados en el editor): los únicos que se usan en el modo online. */
 export const BUILTIN_TEAM_COUNT = SEEDS.length;
 
+/** Selecciones nacionales: aparte de TEAMS para no mezclarse con los clubes (carrera, Soffti Club, online). */
+export const NATIONS: TeamData[] = NATION_SEEDS.map(buildTeam);
+
 export function getTeam(id: string): TeamData {
   // equipos que ya no existen (partidas guardadas, rivales online con otra versión): el primero de la lista
-  return TEAMS.find((t) => t.id === id) ?? TEAMS[0];
+  return TEAMS.find((t) => t.id === id) ?? NATIONS.find((t) => t.id === id) ?? TEAMS[0];
 }
 
 /** Media general de un jugador para su puesto. */

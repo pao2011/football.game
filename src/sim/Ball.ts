@@ -145,7 +145,8 @@ export class Ball {
       this.pos.y = BALL_RADIUS;
       if (v.y < -0.6) {
         ev.bounce = Math.max(ev.bounce, Math.min(1, -v.y / 12));
-        v.y = -v.y * RESTITUTION * this.env.bounce;
+        // cuanto más fuerte pica, más energía pierde (el balón se deforma): un pelotazo no rebota como una pelota de goma
+        v.y = -v.y * RESTITUTION * this.env.bounce * (1 - Math.min(0.2, Math.max(0, -v.y - 7) * 0.02));
         // Rozamiento en el bote + transferencia de efecto (topspin acelera, backspin frena)
         v.x *= this.env.skid;
         v.z *= this.env.skid;

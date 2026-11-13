@@ -481,6 +481,11 @@ export class FanEffects {
     this.queueConfetti(this.awaySpots, this.away, 250);
   }
 
+  /** Unos cuantos cohetes sueltos desde las gradas (ceremonia previa). */
+  fireworks(n = 3) {
+    for (let i = 0; i < n; i++) this.rocket(i * (0.25 + this.rand() * 0.35), this.rand() < 0.3, this.rand() < 0.5 ? this.home : this.away);
+  }
+
   /** Gol: la hinchada del equipo que marca enciende bengalas, tira papelitos y hay fuegos artificiales. */
   goal(team: 0 | 1) {
     const spots = team === 0 ? this.homeSpots : this.awaySpots;

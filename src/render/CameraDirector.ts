@@ -28,6 +28,8 @@ export class CameraDirector {
   cardFocus: { a: THREE.Vector3; b: THREE.Vector3 } | null = null;
   /** Tiro libre directo del jugador: balón y punto de mira (cámara detrás del lanzador). */
   freeKickAim: { target: THREE.Vector3 } | null = null;
+  /** Plano de la ceremonia previa (salida de los equipos, saludo y sorteo): lo manda el guion. */
+  ceremonyShot: { pos: THREE.Vector3; look: THREE.Vector3; fov: number; cut: boolean } | null = null;
   private readonly probe = new THREE.PerspectiveCamera();
   private readonly tmp = new THREE.Vector3();
 
@@ -86,6 +88,19 @@ export class CameraDirector {
     }
     this.replayT = 0;
 
+    const cs = this.ceremonyShot;
+    if (cs) {
+      // al cambiar de plano, corte seco; dentro del plano, seguimiento suave
+      const k = cs.cut ? 1 : 1 - Math.exp(-2.6 * dt);
+      this.pos.lerp(cs.pos, k);
+      this.look.lerp(cs.look, k);
+      this.camera.position.copy(this.pos);
+      this.camera.fov += (cs.fov - this.camera.fov) * k;
+      this.camera.updateProjectionMatrix();
+      this.camera.lookAt(this.look);
+      return;
+    }
+
     if (this.introT < this.introLen && m.phase === 'kickoff' && m.half === 1 && m.time < 6) {
       // Plano de presentación: barrido sobre el estadio
       this.introT += dt;
@@ -141,11 +156,16 @@ export class CameraDirector {
       fov = 34;
       damp = 6;
     } else if (m.phase === 'goal' && m.lastGoal?.scorer) {
-      const sc = m.lastGoal.scorer.pos;
-      targetLook.set(sc.x, 1.2, sc.z);
-      targetPos.set(sc.x - Math.sign(sc.x) * 6, 3.2, sc.z + (sc.z > 0 ? -9 : 9));
-      fov = 40;
-      damp = 3.5;
+      // plano corto de frente al goleador (va delante de él mientras corre), con un leve travelling lateral
+      const scorer = m.lastGoal.scorer;
+      const sc = scorer.pos;
+      const fx = Math.sin(scorer.facing);
+      const fz = Math.cos(scorer.facing);
+      const side = Math.sin(m.time * 0.6) * 1.8;
+      targetLook.set(sc.x, 1.3, sc.z);
+      targetPos.set(sc.x + fx * 5.2 + fz * side, 1.75, sc.z + fz * 5.2 - fx * side);
+      fov = 38;
+      damp = 4;
     } else {
       // Cámara de transmisión lateral
       const style = this.style;

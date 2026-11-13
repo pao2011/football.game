@@ -7,6 +7,7 @@ import {
   SHIRT_TORSO_V0, SHIRT_Y0, SHIRT_Y1, SHORTS_PELVIS_Y0, SHORTS_PELVIS_Y1, SHORTS_LEG_Y0, SHORTS_LEG_Y1, SOCK_Y0, SOCK_Y1,
 } from './kitTextures';
 import type { ModelQualityLike } from './types';
+import { HEAD_Y0, HEAD_Y1 } from './faceTexture';
 
 export const MAT = { skin: 0, shirt: 1, shorts: 2, socks: 3, boots: 4, dark: 5, gloves: 6 } as const;
 export const MAT_COUNT = 7;
@@ -306,7 +307,7 @@ function blob(
     keys.push({ d: t * len, rs: rs * k, rf: rf * k, w, lin: false });
   }
   keys[0].mat = mat;
-  sweep(b, { path: [from, to], ref, keys, segments: segs, flipU: false, uv: () => [0.5, 0.5] }, { ...q, maxLen: 10 });
+  sweep(b, { path: [from, to], ref, keys, segments: segs, flipU: false, uv: () => [0.5, 0.25] }, { ...q, maxLen: 10 });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -326,9 +327,11 @@ function torsoKeys(): Key[] {
   const k = (y: number, rs: number, rf: number, rb: number, cf: number, w: W, extra: Partial<Key> = {}): Key => ({ d: y - 0.8, rs, rf, rb, cf, w, ...extra });
   return [
     // pantalón (pelvis)
-    k(0.832, 0.02, 0.02, 0.02, 0, { [H]: 1 }, { mat: MAT.shorts }),
-    k(0.85, 0.1, 0.07, 0.08, 0, { [H]: 1 }),
-    k(0.885, 0.155, 0.095, 0.11, 0, { [H]: 1 }),
+    // la tela cuelga entre las piernas (tiro del pantalón) en vez de marcar la entrepierna
+    k(0.772, 0.015, 0.015, 0.015, 0, { [H]: 1 }, { mat: MAT.shorts }),
+    k(0.79, 0.07, 0.06, 0.07, 0, { [H]: 1 }),
+    k(0.835, 0.125, 0.088, 0.1, 0, { [H]: 1 }),
+    k(0.885, 0.158, 0.098, 0.112, 0, { [H]: 1 }),
     k(0.93, 0.172, 0.104, 0.122, 0, { [H]: 1 }),
     k(0.99, 0.168, 0.104, 0.112, 0, { [H]: 1 }, { lin: true }),
     // camiseta: dobladillo plegado por fuera del pantalón
@@ -338,20 +341,21 @@ function torsoKeys(): Key[] {
     k(1.04, 0.172, 0.112, 0.116, 0, { [H]: 0.6, [SP]: 0.4 }),
     k(1.13, 0.166, 0.113, 0.112, 0, { [SP]: 1 }),
     k(1.22, 0.172, 0.122, 0.112, 0.004, { [SP]: 0.6, [CH]: 0.4 }),
-    k(1.31, 0.184, 0.128, 0.113, 0.006, { [CH]: 1 }),
-    k(1.38, 0.198, 0.12, 0.11, 0.003, { [CH]: 1 }),
-    k(1.425, 0.212, 0.106, 0.102, 0, { [CH]: 1 }, { pf: 2.7, pb: 2.7 }),
-    k(1.455, 0.186, 0.092, 0.088, 0, { [CH]: 1 }, { pf: 2.6, pb: 2.6 }),
-    k(1.472, 0.13, 0.078, 0.076, 0.001, { [CH]: 0.9, [NK]: 0.1 }),
-    k(1.483, 0.09, 0.068, 0.068, 0.002, { [CH]: 0.8, [NK]: 0.2 }),
-    k(1.503, 0.068, 0.066, 0.066, 0.004, { [CH]: 0.6, [NK]: 0.4 }, { lin: true }),
+    k(1.31, 0.188, 0.132, 0.116, 0.006, { [CH]: 1 }),
+    k(1.38, 0.204, 0.123, 0.113, 0.003, { [CH]: 1 }),
+    k(1.425, 0.218, 0.108, 0.104, 0, { [CH]: 1 }, { pf: 2.7, pb: 2.7 }),
+    // hombros y trapecios: suben en pendiente hasta el cuello (tapan el arranque del brazo)
+    k(1.455, 0.212, 0.094, 0.092, 0, { [CH]: 1 }, { pf: 2.5, pb: 2.5 }),
+    k(1.475, 0.172, 0.082, 0.082, 0.001, { [CH]: 0.9, [NK]: 0.1 }, { pf: 2.2, pb: 2.2 }),
+    k(1.49, 0.115, 0.074, 0.074, 0.002, { [CH]: 0.8, [NK]: 0.2 }),
+    k(1.506, 0.076, 0.07, 0.072, 0.004, { [CH]: 0.6, [NK]: 0.4 }, { lin: true }),
     // cuello (piel)
-    k(1.496, 0.059, 0.057, 0.059, 0.004, { [CH]: 0.6, [NK]: 0.4 }, { mat: MAT.skin }),
-    k(1.53, 0.057, 0.054, 0.059, 0.006, { [NK]: 1 }),
-    k(1.562, 0.058, 0.058, 0.061, 0.01, { [NK]: 0.5, [HD]: 0.5 }),
+    k(1.498, 0.066, 0.062, 0.066, 0.004, { [CH]: 0.6, [NK]: 0.4 }, { mat: MAT.skin }),
+    k(1.53, 0.063, 0.059, 0.065, 0.006, { [NK]: 1 }),
+    k(1.562, 0.062, 0.061, 0.065, 0.01, { [NK]: 0.5, [HD]: 0.5 }),
     // cabeza
-    k(1.576, 0.062, 0.07, 0.064, 0.016, { [HD]: 1 }),
-    k(1.594, 0.069, 0.085, 0.07, 0.012, { [HD]: 1 }),
+    k(1.576, 0.064, 0.07, 0.066, 0.016, { [HD]: 1 }),
+    k(1.594, 0.072, 0.085, 0.072, 0.012, { [HD]: 1 }),
     k(1.61, 0.074, 0.088, 0.077, 0.008, { [HD]: 1 }),
     k(1.635, 0.0775, 0.09, 0.086, 0.004, { [HD]: 1 }),
     k(1.665, 0.0785, 0.092, 0.097, 0, { [HD]: 1 }),
@@ -422,7 +426,8 @@ function buildTorso(b: Builder, q: Quality) {
     uv: (u, p, _d, mat) => {
       if (mat === MAT.shirt) return shirtUV(u, p);
       if (mat === MAT.shorts) return [u, 0.5 + 0.5 * Math.min(1, Math.max(0, (p.y - SHORTS_PELVIS_Y0) / (SHORTS_PELVIS_Y1 - SHORTS_PELVIS_Y0)))];
-      return [u, 0.5];
+      // piel: la cabeza muestrea la cara pintada (mitad superior de la textura); el cuello, piel lisa
+      return [u, p.y < HEAD_Y0 ? 0.25 : 0.5 + 0.5 * Math.min(1, (p.y - HEAD_Y0) / (HEAD_Y1 - HEAD_Y0))];
     },
   }, q);
 }
@@ -443,8 +448,8 @@ function buildArmL(b: Builder, q: Quality, gk: boolean) {
   const HA = BONE.handL;
   const keys: Key[] = [
     { d: 0, rs: 0.02, rf: 0.02, w: { [CL]: 0.5, [UA]: 0.5 }, mat: MAT.shirt },
-    { d: 0.02, rs: 0.042, rf: 0.046, w: { [CL]: 0.3, [UA]: 0.7 } },
-    { d: 0.06, rs: 0.053, rf: 0.055, w: { [UA]: 1 } },
+    { d: 0.02, rs: 0.034, rf: 0.044, w: { [CL]: 0.3, [UA]: 0.7 } },
+    { d: 0.06, rs: 0.05, rf: 0.055, w: { [UA]: 1 } },
   ];
   if (!gk) {
     keys.push(
@@ -453,11 +458,11 @@ function buildArmL(b: Builder, q: Quality, gk: boolean) {
       { d: 0.205, rs: 0.054, rf: 0.055, w: { [UA]: 1 }, lin: true },
       { d: 0.2, rs: 0.044, rf: 0.044, w: { [UA]: 1 }, lin: true },
       { d: 0.2, rs: 0.044, rf: 0.044, w: { [UA]: 1 }, mat: MAT.skin },
-      { d: 0.26, rs: 0.042, rf: 0.043, w: { [UA]: 1 } },
-      { d: dEl - 0.04, rs: 0.036, rf: 0.037, w: { [UA]: 0.85, [FA]: 0.15 } },
+      { d: 0.26, rs: 0.045, rf: 0.048, w: { [UA]: 1 } },
+      { d: dEl - 0.04, rs: 0.038, rf: 0.039, w: { [UA]: 0.85, [FA]: 0.15 } },
       { d: dEl, rs: 0.034, rf: 0.035, rb: 0.033, w: { [UA]: 0.5, [FA]: 0.5 } },
-      { d: dEl + 0.05, rs: 0.039, rf: 0.042, w: { [UA]: 0.1, [FA]: 0.9 } },
-      { d: dEl + 0.13, rs: 0.032, rf: 0.032, w: { [FA]: 1 } },
+      { d: dEl + 0.05, rs: 0.042, rf: 0.045, w: { [UA]: 0.1, [FA]: 0.9 } },
+      { d: dEl + 0.13, rs: 0.034, rf: 0.034, w: { [FA]: 1 } },
       { d: dWr - 0.015, rs: 0.024, rf: 0.028, w: { [FA]: 0.75, [HA]: 0.25 } },
       { d: dWr + 0.005, rs: 0.02, rf: 0.024, w: { [FA]: 0.4, [HA]: 0.6 } },
       { d: dWr + 0.015, rs: 0.006, rf: 0.008, w: { [HA]: 1 } },
@@ -485,7 +490,7 @@ function buildArmL(b: Builder, q: Quality, gk: boolean) {
     flipU: false,
     uv: (u, _p, d, mat) => {
       if (mat === MAT.shirt) return [u, SHIRT_TORSO_V0 * (1 - Math.min(1, d / sleeveEnd)) * 0.98 + 0.002];
-      return [u, 0.5];
+      return [u, 0.25];
     },
   }, q);
 }
@@ -493,18 +498,19 @@ function buildArmL(b: Builder, q: Quality, gk: boolean) {
 function buildHandL(b: Builder, q: Quality, gk: boolean) {
   const HA = BONE.handL;
   const s = gk ? 1.12 : 0.92;
+  const t = gk ? 1.55 : 1; // guantes acolchados: más gruesos que una mano
   const wr = WRIST.clone();
   const tip = wr.clone().add(V(0.005, -0.185 * (gk ? 1.08 : 1), 0.012));
   const keys: Key[] = [
-    { d: -0.005, rs: 0.015 * s, rf: 0.02 * s, w: { [HA]: 1 }, mat: gk ? MAT.gloves : MAT.skin },
-    { d: 0.01, rs: 0.019 * s, rf: 0.029 * s, w: { [HA]: 1 } },
-    { d: 0.05, rs: 0.017 * s, rf: 0.041 * s, cs: 0.0, w: { [HA]: 1 } },
-    { d: 0.095, rs: 0.016 * s, rf: 0.044 * s, cs: 0.003, w: { [HA]: 1 } },
-    { d: 0.135, rs: 0.013 * s, rf: 0.039 * s, cs: 0.008, w: { [HA]: 1 } },
-    { d: 0.17, rs: 0.01 * s, rf: 0.03 * s, cs: 0.014, w: { [HA]: 1 } },
+    { d: -0.005, rs: 0.015 * s * t, rf: 0.02 * s, w: { [HA]: 1 }, mat: gk ? MAT.gloves : MAT.skin },
+    { d: 0.01, rs: 0.019 * s * t, rf: 0.029 * s, w: { [HA]: 1 } },
+    { d: 0.05, rs: 0.017 * s * t, rf: 0.041 * s, cs: 0.0, w: { [HA]: 1 } },
+    { d: 0.095, rs: 0.016 * s * t, rf: 0.044 * s, cs: 0.003, w: { [HA]: 1 } },
+    { d: 0.135, rs: 0.013 * s * t, rf: 0.039 * s, cs: 0.008, w: { [HA]: 1 } },
+    { d: 0.17, rs: 0.01 * s * t, rf: 0.03 * s, cs: 0.014, w: { [HA]: 1 } },
     { d: 0.188 * (gk ? 1.08 : 1), rs: 0.004, rf: 0.012, cs: 0.017, w: { [HA]: 1 } },
   ];
-  sweep(b, { path: [wr, tip], ref: FWD, keys, segments: q.segSmall + (q.segSmall <= 4 ? 0 : 4), flipU: false, uv: () => [0.5, 0.5] }, q);
+  sweep(b, { path: [wr, tip], ref: FWD, keys, segments: q.segSmall + (q.segSmall <= 4 ? 0 : 4), flipU: false, uv: () => [0.5, 0.25] }, q);
   if (q.segSmall <= 4) return;
   // pulgar
   const th0 = wr.clone().add(V(-0.008, -0.03, 0.022 * s));
@@ -521,7 +527,7 @@ function buildHandL(b: Builder, q: Quality, gk: boolean) {
     ],
     segments: q.segSmall,
     flipU: false,
-    uv: () => [0.5, 0.5],
+    uv: () => [0.5, 0.25],
   }, q);
 }
 
@@ -548,16 +554,16 @@ function buildLegL(b: Builder, q: Quality) {
     { d: dy(0.742), rs: 0.077, rf: 0.079, rb: 0.077, w: { [TH]: 1 }, lin: true },
     // piel: muslo y rodilla
     { d: dy(0.742), rs: 0.077, rf: 0.079, rb: 0.077, w: { [TH]: 1 }, mat: MAT.skin },
-    { d: dy(0.66), rs: 0.069, rf: 0.072, rb: 0.067, w: { [TH]: 1 } },
-    { d: dy(0.56), rs: 0.055, rf: 0.058, rb: 0.052, w: { [TH]: 0.92, [SH]: 0.08 } },
+    { d: dy(0.66), rs: 0.073, rf: 0.077, rb: 0.07, w: { [TH]: 1 } },
+    { d: dy(0.56), rs: 0.058, rf: 0.062, rb: 0.054, w: { [TH]: 0.92, [SH]: 0.08 } },
     { d: dy(0.5), rs: 0.05, rf: 0.056, rb: 0.048, w: { [TH]: 0.55, [SH]: 0.45 } },
     { d: dy(0.475), rs: 0.049, rf: 0.054, rb: 0.049, w: { [TH]: 0.3, [SH]: 0.7 }, lin: true },
     // medias con espinillera
     { d: dy(0.475), rs: 0.049, rf: 0.054, rb: 0.049, w: { [TH]: 0.3, [SH]: 0.7 }, mat: MAT.socks, lin: true },
     { d: dy(0.469), rs: 0.055, rf: 0.059, rb: 0.056, w: { [TH]: 0.2, [SH]: 0.8 } },
     { d: dy(0.44), rs: 0.055, rf: 0.058, rb: 0.058, w: { [TH]: 0.05, [SH]: 0.95 } },
-    { d: dy(0.36), rs: 0.054, rf: 0.054, rb: 0.064, w: { [SH]: 1 } },
-    { d: dy(0.26), rs: 0.045, rf: 0.046, rb: 0.048, w: { [SH]: 1 } },
+    { d: dy(0.36), rs: 0.057, rf: 0.055, rb: 0.07, w: { [SH]: 1 } },
+    { d: dy(0.26), rs: 0.047, rf: 0.046, rb: 0.052, w: { [SH]: 1 } },
     { d: dy(0.16), rs: 0.034, rf: 0.036, rb: 0.035, w: { [SH]: 1 } },
     { d: dy(0.11), rs: 0.032, rf: 0.034, rb: 0.036, w: { [SH]: 0.6, [FT]: 0.4 } },
     { d: dy(0.07), rs: 0.03, rf: 0.032, rb: 0.034, w: { [SH]: 0.2, [FT]: 0.8 } },
@@ -572,7 +578,7 @@ function buildLegL(b: Builder, q: Quality) {
     uv: (u, p, _d, mat) => {
       if (mat === MAT.shorts) return [u * 0.5, 0.5 * Math.min(1, Math.max(0, (p.y - SHORTS_LEG_Y0) / (SHORTS_LEG_Y1 - SHORTS_LEG_Y0)))];
       if (mat === MAT.socks) return [u, Math.min(1, Math.max(0, (p.y - SOCK_Y0) / (SOCK_Y1 - SOCK_Y0)))];
-      return [u, 0.5];
+      return [u, 0.25];
     },
   }, q);
 }
@@ -605,7 +611,8 @@ function buildBootL(b: Builder, q: Quality) {
     keys,
     segments: q.segLimb,
     flipU: false,
-    uv: () => [0.5, 0.5],
+    // u: 0 cara interna, 0,25 empeine, 0,5 cara externa, 0,75 suela · v: del talón (0) a la punta (1)
+    uv: (u, _p, d) => [u, d / 0.278],
   }, q);
 }
 
@@ -616,39 +623,6 @@ function buildHeadDetailsL(b: Builder, q: Quality) {
   const earC = V(0.077, 1.672, -0.008);
   blob(b, earC.clone().add(V(0, 0.032, -0.006)), earC.clone().add(V(0.002, -0.03, 0.004)), V(0.3, 0, 1).normalize(), 0.011, 0.02, hw, MAT.skin, seg, q,
     (t) => Math.sqrt(Math.max(0, 1 - (2 * t - 1) ** 2)) * (1 - 0.35 * t));
-  // ojo (sobre la superficie de la cara)
-  const ex = 0.031;
-  const ey = 1.693;
-  const s = new THREE.Vector3();
-  let th = Math.acos(Math.min(1, ex / 0.077));
-  headSurface(th, ey, s);
-  // ajustar th para que x coincida
-  for (let i = 0; i < 4; i++) {
-    th += (s.x - ex) / 0.08;
-    headSurface(th, ey, s);
-  }
-  const eyeZ = s.z - 0.006;
-  blob(b, V(ex, ey, eyeZ - 0.006), V(ex, ey, eyeZ + 0.007), UP, 0.0115, 0.0068, hw, MAT.dark, seg, q);
-  if (q.segSmall <= 4) return;
-  // ceja
-  const by = 1.709;
-  const b0 = new THREE.Vector3();
-  const b1 = new THREE.Vector3();
-  headSurface(Math.PI / 2 - 0.18, by, b0);
-  headSurface(Math.PI / 2 - 0.62, by + 0.002, b1);
-  b0.z -= 0.0015;
-  b1.z -= 0.0025;
-  blob(b, b0, b1, V(0, 0.3, 1).normalize(), 0.0035, 0.004, hw, MAT.dark, Math.max(4, seg - 2), q, (t) => 0.6 + 0.4 * Math.sin(Math.PI * Math.min(1, t * 1.1)));
-  // media boca (desde el centro hacia la comisura; el reflejo completa la otra mitad)
-  const my = 1.622;
-  const m0 = new THREE.Vector3();
-  const m1 = new THREE.Vector3();
-  headSurface(Math.PI / 2, my, m0);
-  headSurface(Math.PI / 2 - 0.3, my + 0.002, m1);
-  m0.x = -0.004;
-  m0.z -= 0.0025;
-  m1.z -= 0.003;
-  blob(b, m0, m1, V(0, 0.2, 1).normalize(), 0.0032, 0.004, hw, MAT.dark, 4, q, (t) => 1 - 0.6 * t * t);
 }
 
 // ---------------------------------------------------------------------------------------------

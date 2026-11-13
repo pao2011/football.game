@@ -17,7 +17,8 @@ export interface CrowdBuild {
   meshes: THREE.InstancedMesh[];
   material: THREE.MeshLambertMaterial;
   atlas: THREE.Texture;
-  uniforms: { uTime: { value: number }; uExcite: { value: number } };
+  /** uGlow: cuánto se ilumina sola la tribuna (focos); uFlash: frecuencia de los flashes de celulares. */
+  uniforms: { uTime: { value: number }; uExcite: { value: number }; uGlow: { value: number }; uFlash: { value: number } };
   count: number;
   /** Muestra de asientos ocupados (para banderas, bengalas, papelitos…). n apunta hacia fuera del campo. */
   spots: FanSpot[];
@@ -71,11 +72,13 @@ export function buildCrowd(rows: RowDef[], o: CrowdOptions, su: StaticShadowUnif
   const widen = Math.min(1.45, Math.max(1, Math.sqrt(0.8 / Math.max(p, 0.05))));
 
   const atlas = makeCrowdAtlas();
-  const uniforms = { uTime: { value: 0 }, uExcite: { value: 0 } };
+  const uniforms = { uTime: { value: 0 }, uExcite: { value: 0 }, uGlow: { value: 0.1 }, uFlash: { value: 0 } };
   const material = new THREE.MeshLambertMaterial({ map: atlas, alphaTest: 0.5, side: THREE.FrontSide });
   material.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = uniforms.uTime;
     sh.uniforms.uExcite = uniforms.uExcite;
+    sh.uniforms.uGlow = uniforms.uGlow;
+    sh.uniforms.uFlash = uniforms.uFlash;
     patchStaticShadow(sh, su);
     sh.vertexShader =
       `uniform float uTime;
@@ -87,6 +90,8 @@ attribute vec4 aMisc;
 varying vec3 vShirt;
 varying vec3 vSkin;
 varying vec3 vDark;
+varying vec2 vLocal;
+varying float vPhase;
 ` +
       sh.vertexShader.replace(
         '#include <begin_vertex>',
@@ -110,19 +115,40 @@ varying vec3 vDark;
           vShirt = aShirt;
           vSkin = aSkin;
           vDark = aDark;
+          vLocal = uv;
+          vPhase = aMisc.x;
         }`,
       );
     sh.fragmentShader =
-      `varying vec3 vShirt;
+      `uniform float uTime;
+uniform float uExcite;
+uniform float uGlow;
+uniform float uFlash;
+varying vec3 vShirt;
 varying vec3 vSkin;
 varying vec3 vDark;
+varying vec2 vLocal;
+varying float vPhase;
 ` +
       sh.fragmentShader.replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        {
+          // la tribuna iluminada por los focos (no queda a oscuras de noche)
+          totalEmissiveRadiance += diffuseColor.rgb * uGlow;
+          // flashes de celulares: cada tanto un hincha dispara uno (más seguido cuando hay emoción)
+          float tick = floor( uTime * 10.0 );
+          float rnd = fract( sin( tick * 12.9898 + vPhase * 4378.233 ) * 43758.5453 );
+          float fl = step( 1.0 - 0.0009 * uFlash * ( 0.6 + 3.0 * uExcite ), rnd );
+          totalEmissiveRadiance += fl * vec3( 7.0 ) * smoothstep( 0.34, 0.0, distance( vLocal, vec2( 0.5, 0.74 ) ) );
+        }`,
+      ).replace(
         '#include <map_fragment>',
         `{
           vec4 m = texture2D( map, vMapUv );
           vec3 col = ( m.r * vShirt + m.g * vSkin + m.b * vDark ) / max( m.r + m.g + m.b, 1.0 );
-          diffuseColor.rgb *= col;
+          // volumen: cada hincha se oscurece hacia los bordes, como un cuerpo redondeado
+          diffuseColor.rgb *= col * ( 0.66 + 0.34 * sin( vLocal.x * 3.1416 ) );
           diffuseColor.a *= m.a;
         }`,
       );

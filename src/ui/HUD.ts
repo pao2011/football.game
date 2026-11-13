@@ -168,10 +168,12 @@ export class HUD {
   }
 
   /** Presentación del partido: estadio, escudos y nombres de los equipos y el aviso de inicio. */
-  playIntro(stadium: StadiumData, onSkip: () => void) {
+  playIntro(stadium: StadiumData, onSkip: () => void, seconds = 5.4) {
     const [h, a] = this.match.teams;
     const el = document.createElement('div');
     el.className = 'match-intro';
+    // el aviso de inicio sale al final de la ceremonia
+    el.style.setProperty('--go-at', `${Math.max(4.1, seconds - 1.3)}s`);
     el.style.setProperty('--home', h.kit.shirt);
     el.style.setProperty('--away', a.kit.shirt);
     const team = (t: typeof h, cls: string) => `<div class="mi-team ${cls}">
@@ -179,13 +181,24 @@ export class HUD {
         <b>${t.data.name}</b><small>${t.data.city} · ${t.formation}</small></div>`;
     el.innerHTML = `
       <div class="mi-bar mi-bar-h"></div><div class="mi-bar mi-bar-a"></div>
-      <div class="mi-top">${this.match.config.classic ? `<span style="color:#ff5a4f">🔥 ${this.match.config.classic.toUpperCase()} 🔥</span><br>` : ''}${stadium.name.toUpperCase()}<small>${stadium.capacity.toLocaleString('es-ES')} espectadores${this.match.config.neutral ? ' · cancha neutral' : ''}</small></div>
+      <div class="mi-top">${this.match.config.final ? `<span class="mi-final">🏆 FINAL · ${esc(this.match.config.final).toUpperCase()} 🏆</span><br>` : ''}${this.match.config.classic ? `<span style="color:#ff5a4f">🔥 ${this.match.config.classic.toUpperCase()} 🔥</span><br>` : ''}${stadium.name.toUpperCase()}<small>${stadium.capacity.toLocaleString('es-ES')} espectadores${this.match.config.neutral ? ' · cancha neutral' : ''}</small></div>
       <div class="mi-row">${team(h, 'mi-home')}<div class="mi-vs">VS</div>${team(a, 'mi-away')}</div>
       <div class="mi-go">¡COMIENZA EL PARTIDO!</div>
+      <div class="mi-cap"></div>
       <div class="mi-skip">toca para saltar</div>`;
     el.addEventListener('pointerdown', (e) => { e.preventDefault(); onSkip(); });
     this.root.appendChild(el);
     this.intro = el;
+  }
+
+  /** Rótulo de la ceremonia previa (salida, saludo, sorteo). */
+  setIntroCaption(text: string) {
+    const c = this.intro?.querySelector('.mi-cap') as HTMLElement | null;
+    if (!c || c.textContent === text) return;
+    c.textContent = text;
+    c.style.animation = 'none';
+    void c.offsetWidth;
+    c.style.animation = '';
   }
 
   endIntro() {

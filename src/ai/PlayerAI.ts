@@ -543,7 +543,7 @@ function decide(m: Match, p: Player, team: Team, opponents: Player[]) {
         score,
         label: 'pass',
         run: () => {
-          const ok = m.requestKick(p, buildGroundPass(m, p, target, 0, err, q));
+          const ok = m.requestKick(p, { ...buildGroundPass(m, p, target, 0, err, q), homing: true });
           // pared: tras un pase corto hacia delante en campo rival, el pasador sigue corriendo al espacio
           if (ok && d < 20 && progress > 0 && pu > -5 && p.slot.position !== 'DEF' && m.rng.next() < 0.55) {
             const run = team.toWorld(clamp(pu + 13, -HALF_LENGTH + 8, HALF_LENGTH - 6), clamp(team.l(p.pos) * 0.85, -HALF_WIDTH + 4, HALF_WIDTH - 4));

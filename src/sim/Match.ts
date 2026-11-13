@@ -10,7 +10,7 @@ import { updateOutfieldAI, aiTakeSetPiece } from '../ai/PlayerAI';
 import { updateGoalkeeperAI } from '../ai/GoalkeeperAI';
 import { dist2D, Rng, clamp, approachAngle as approachAngleRad } from '../util/math';
 import { Ball } from './Ball';
-import { applyKickError } from './Kicks';
+import { applyKickError, homePassVelocity } from './Kicks';
 import { Player, type KickRequest } from './Player';
 import { Team } from './Team';
 import { SKILL_KINDS, SKILL_NAMES, type MatchEvent, type SkillKind } from './types';
@@ -54,6 +54,8 @@ export interface MatchConfig {
   aggregate?: [number, number];
   /** VAR y errores arbitrales (por defecto activos; no se usan en entrenamiento, penales ni online). */
   var?: boolean;
+  /** Final: nombre de la copa en juego (sale en la ceremonia previa, junto a los equipos). */
+  final?: string;
   /** Modo entrenamiento. */
   training?: 'free' | 'penalties' | 'freekicks';
   /** Clima (por defecto despejado). */
@@ -484,8 +486,11 @@ export class Match {
           const push = (minD - d) / 2;
           const nx = dx / d;
           const nz = dz / d;
-          const wa = a.frozen ? 0 : b.frozen ? 2 : 1;
-          const wb = b.frozen ? 0 : a.frozen ? 2 : 1;
+          // el más corpulento cede menos en el choque de cuerpos
+          const ma = a.data.height ** 3;
+          const mb = b.data.height ** 3;
+          const wa = a.frozen ? 0 : b.frozen ? 2 : (2 * mb) / (ma + mb);
+          const wb = b.frozen ? 0 : a.frozen ? 2 : (2 * ma) / (ma + mb);
           a.pos.x -= nx * push * wa;
           a.pos.z -= nz * push * wa;
           b.pos.x += nx * push * wb;
@@ -509,7 +514,16 @@ export class Match {
       const g = this.gkHolding;
       const f = g.forward(_v);
       b.held = true;
-      b.pos.set(g.pos.x + f.x * 0.3, 1.05, g.pos.z + f.z * 0.3);
+      const hs = g.data.height / 1.8;
+      if (g.action.kind === 'dive') {
+        // atajada en estirada: el balón sigue en las manos, por encima de la cabeza, y cae con el arquero
+        const d = g.action.dir;
+        const land = clamp((g.action.time - 0.35) / 0.45, 0, 1);
+        const side = Math.sign(d.z) || 1;
+        b.pos.set(g.pos.x + f.x * 0.15, Math.max(0.28, (0.45 + d.y) * (1 - land) + 0.3 * land), g.pos.z + side * (0.9 + 0.35 * land) * hs);
+      } else {
+        b.pos.set(g.pos.x + f.x * 0.32, 1.12 * hs, g.pos.z + f.z * 0.32);
+      }
       if (g.action.kind === 'kick' && g.action.kick && (g.action.kick.kind === 'gkthrow')) b.pos.y = 1.9;
       return;
     }
@@ -635,7 +649,7 @@ export class Match {
     }
 
     if (gkHands) {
-      const catchable = relSpeed < 15 + p.data.attrs.goalkeeping * 0.11;
+      const catchable = relSpeed < 12 + p.data.attrs.goalkeeping * 0.1;
       if (catchable) {
         this.gkCatch(p);
       } else {
@@ -646,7 +660,8 @@ export class Match {
 
     // Balón aéreo (centros, pelotazos): control con el pecho o el muslo si no viene demasiado fuerte
     const aerial = height > 0.5;
-    const limit = aerial ? 7 + ctrl * 12 : 9 + ctrl * 13 + (height > 0.35 ? -3 : 0);
+    const meant = this.intendedReceiver === p ? 4 : 0; // el receptor del pase lo espera: lo controla mejor
+    const limit = (aerial ? 7 + ctrl * 12 : 9 + ctrl * 13 + (height > 0.35 ? -3 : 0)) + meant;
     if (relSpeed > limit) {
       // Rebote en el cuerpo: el balón sale despedido con menos velocidad
       _w.set(b.pos.x - p.pos.x, 0, b.pos.z - p.pos.z).normalize();
@@ -772,13 +787,34 @@ export class Match {
 
   private parry(gk: Player) {
     const b = this.ball;
-    const away = -gk.team === 0 ? 1 : 1;
-    void away;
     const team = this.teams[gk.team];
-    // Despeje hacia fuera del arco y hacia el costado
-    const outX = team.attackDir;
+    const outX = team.attackDir; // hacia el campo
     const side = b.pos.z >= gk.pos.z ? 1 : -1;
-    const sp = b.speed * 0.38;
+    const speed = b.speed;
+    const towardGoal = b.vel.x * outX < -2;
+    const r = this.rng.next();
+    if (towardGoal && speed > 11 && (r < 0.5 || Math.abs(b.pos.z) > GOAL_HALF_WIDTH - 1.6 || b.pos.y > GOAL_HEIGHT - 0.5)) {
+      // mano firme: la manda al córner, por fuera del palo o por encima del travesaño
+      const lineX = -outX * (HALF_LENGTH + 1.2);
+      const over = b.pos.y > GOAL_HEIGHT - 0.6 && r < 0.6;
+      const tz = over ? b.pos.z + b.vel.z * 0.05 : side * (GOAL_HALF_WIDTH + 1.6 + this.rng.next() * 2.5);
+      const dx = lineX - b.pos.x;
+      const dz = tz - b.pos.z;
+      const d = Math.max(0.5, Math.hypot(dx, dz));
+      const h = clamp(speed * 0.35, 5, 11);
+      const t = d / h;
+      // por encima: que cruce la línea a más de 3 m; por fuera del palo: un globito
+      const vy = over ? 4.9 * t + (3.3 - b.pos.y) / t : 1 + this.rng.next() * 2;
+      b.vel.set((dx / d) * h, clamp(vy, 1, 11), (dz / d) * h);
+      b.spin.set(0, 0, 0);
+      this.setLastTouch(gk, false, 'deflection');
+      gk.noTouchUntil = this.time + 0.8;
+      this.emit({ type: 'save', team: gk.team, playerId: gk.id });
+      this.registerSave(gk);
+      return;
+    }
+    // Despeje hacia fuera del arco y hacia el costado
+    const sp = speed * 0.38;
     b.vel.set(outX * sp * 0.6, 1.5 + this.rng.next() * 2.5, side * sp * 0.8);
     this.setLastTouch(gk, false, 'deflection');
     gk.noTouchUntil = this.time + 0.6;
@@ -840,7 +876,8 @@ export class Match {
         this.offsideTeam = -1;
         if (this.isBackPass(gk)) continue; // no puede usar las manos: lo resuelve el control con el pie
         const rel = b.speed;
-        const catchLimit = 13 + gk.data.attrs.goalkeeping * 0.12 - (k === 'dive' ? 6 : 0);
+        // los tiros fuertes o en estirada se rechazan más que se atrapan (y muchos van al córner)
+        const catchLimit = 11 + gk.data.attrs.goalkeeping * 0.1 - (k === 'dive' ? 5 : 0);
         if (rel < catchLimit && Math.abs(b.pos.y - 1.1) < 0.9) this.gkCatch(gk);
         else this.parry(gk);
         return;
@@ -927,7 +964,11 @@ export class Match {
       b.held = false;
       this.gkHolding = null;
       const f = p.forward(_v);
-      if (req.kind === 'throwin') b.pos.set(p.pos.x + f.x * 0.2, 2.1, p.pos.z + f.z * 0.2);
+      if (req.kind === 'throwin') {
+        // el ejecutor está fuera de la línea: el balón sale ya dentro del campo (si no, se cobraba otro lateral)
+        const z = p.pos.z + f.z * 0.2;
+        b.pos.set(p.pos.x + f.x * 0.2, 2.1, Math.sign(z || 1) * Math.min(Math.abs(z), HALF_WIDTH - 0.3));
+      }
       else if (req.kind === 'gkthrow') b.pos.set(p.pos.x + f.x * 0.5, 1.7, p.pos.z + f.z * 0.5);
       else b.pos.set(p.pos.x + f.x * 0.6, 0.7, p.pos.z + f.z * 0.6);
     } else if (req.kind !== 'header' && !req.aerial) {
@@ -960,6 +1001,10 @@ export class Match {
         v.z = (dz / d) * h;
       }
     }
+    if (req.homing && req.targetId && req.targetId !== p.id) {
+      const q = this.playersAll.find((x) => x.id === req.targetId);
+      if (q && !q.sentOff) homePassVelocity(b.pos, q.pos.x, q.pos.z, q.vel.x, q.vel.z, v);
+    }
     const skill = (req.kind === 'shoot' || req.kind === 'finesse' || req.kind === 'penalty' || req.kind === 'chip') ? a.shooting
       : req.kind === 'header' ? (a.shooting + a.control) / 2
         : req.kind === 'gkthrow' || req.kind === 'punt' ? Math.max(a.passing, a.goalkeeping * 0.8)
@@ -982,6 +1027,11 @@ export class Match {
     const low = !!req.style?.low;
     applyKickError(v, baseAng * q * scale, 0.06 * q * scale, (req.kind === 'shoot' && !low ? 0.045 : 0.02) * q * scale, gauss);
     if (low) v.y = Math.min(v.y, 0.7); // el tiro raso sigue pegado al césped
+    if (req.kind === 'throwin') {
+      // el saque de banda siempre entra al campo (el error no puede devolverlo afuera)
+      const inward = -Math.sign(b.pos.z || 1);
+      if (v.z * inward < 1.2) v.z = inward * 1.2;
+    }
     // Sobrepotenciar un disparo lo eleva (como en los juegos de fútbol modernos)
     if (req.kind === 'shoot' && !low && !req.aerial && req.power > 0.8) v.y += (req.power - 0.8) * 4 * (1.2 - a.shooting / 100) * 2;
     b.held = false;
@@ -1909,7 +1959,7 @@ export class Match {
     this.enterPhase('goal');
     // Celebración
     for (const p of t.active) {
-      if (p === scorer) p.startAction('celebrate', 'celebrate', 3.4, 0, { variant: this.rng.int(0, 5) });
+      if (p === scorer) p.startAction('celebrate', 'celebrate', 3.4, 0, { variant: this.rng.int(0, 8) });
     }
     for (const p of this.otherTeam(team).active) {
       if (!p.isGK || this.rng.next() < 0.7) p.startAction('dejected', 'dejected', 3.2, 0, { variant: this.rng.int(0, 1) });
@@ -1928,12 +1978,17 @@ export class Match {
         _v.set(tx - p.pos.x, 0, tz - p.pos.z);
         const d = _v.length();
         p.sprinting = true;
-        p.desiredVel.copy(d > 1 ? _v.multiplyScalar(6 / d) : _v.set(0, 0, 0));
+        // de rodillas (1) se desliza frenando; silencio (4) y los festejos de parado (6-8) corren y frenan
+        const cv = p.action.variant;
+        const sp = cv === 1 ? Math.max(0, 6 - 2.6 * p.action.time) : (cv === 4 || cv >= 6) && p.action.time > 1.1 ? 0 : 6;
+        p.desiredVel.copy(d > 1 && sp > 0 ? _v.multiplyScalar(sp / d) : _v.set(0, 0, 0));
       } else if (this.phase === 'goal' && scorer && p.team === scorer.team && !p.isGK) {
         _v.set(scorer.pos.x - p.pos.x, 0, scorer.pos.z - p.pos.z);
         const d = _v.length();
         p.sprinting = false;
         p.desiredVel.copy(d > 2.2 ? _v.multiplyScalar(5 / d) : _v.set(0, 0, 0));
+        // los compañeros que llegan festejan con él (brazos en alto o saltando)
+        if (d < 3 && p.action.kind === 'none') p.startAction('celebrate', 'celebrate', Math.max(0.8, 3.2 - (this.time - this.goalTime)), 0, { variant: p.data.number % 2 ? 0 : 2 });
       } else {
         p.desiredVel.multiplyScalar(0.9);
         p.sprinting = false;
