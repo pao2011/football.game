@@ -13,7 +13,7 @@ import { FORMATION_IDS, FORMATIONS } from '../data/formations';
 import { classicName, matchHeat } from '../data/classics';
 import { LEAGUES, getLeague, leagueLogo, leagueOfTeam } from '../data/leagues';
 import { GENERIC_STADIUMS, STADIUMS, getStadium, stadiumForHome } from '../data/stadiums';
-import { BUILTIN_TEAM_COUNT, TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
+import { BUILTIN_TEAM_COUNT, NATIONS, TEAMS, chooseAwayKit, getTeam, playerOverall } from '../data/teams';
 import { WEATHER_NAMES, randomWeather, type Weather } from '../sim/Weather';
 import { disciplineOf, isAvailable } from '../modes/Availability';
 import { ACHIEVEMENTS, unlock, unlockedSet, type AchievementDef } from '../modes/Achievements';
@@ -25,6 +25,7 @@ import { ACTIONS, ACTION_LABELS, FIFA_CLASSIC, Input, WASD_ALT, keyLabel, versus
 import { MAX_SUBS, type MatchConfig } from '../sim/Match';
 import { manOfTheMatch, playerRatings } from '../sim/Ratings';
 import { Continental, CUPS, cupEligibleTeams, type CupId } from '../modes/Continental';
+import { GROUP_LETTERS, NATION_CUPS, Nations, nationCupEligible } from '../modes/Nations';
 import { Career, SQUAD_MAX, SQUAD_MIN, buyPlayer, marketOffers, playerPrice, sellPlayer } from '../modes/Career';
 import { Tournament } from '../modes/Tournament';
 import type { Fixture, StandingRow } from '../modes/Competition';
@@ -97,6 +98,7 @@ type MatchContext =
   | { mode: 'tournament'; fixture: Fixture }
   | { mode: 'career'; fixture: Fixture }
   | { mode: 'continental'; fixture: Fixture }
+  | { mode: 'nations'; fixture: Fixture }
   | { mode: 'club'; meta: ClubMatchMeta }
   | { mode: 'training' };
 
@@ -464,6 +466,7 @@ export class App {
     this.cardsMenu('SOFFTI\'S FOOTBALL GAME', 'Competiciones', [
       { act: 'tournament', icon: '🏆', title: 'Copa Élite', sub: 'Torneo: fase de grupos y eliminatorias', go: () => this.tournamentHub() },
       { act: 'continental', icon: '🌎', title: 'Copas internacionales', sub: 'Libertadores, Sudamericana, Champions, Europa y Conference League', go: () => this.continentalHub() },
+      { act: 'nations', icon: '🏳️', title: 'Selecciones', sub: 'Mundial, Eurocopa, Copa América, Nations League, copas continentales y eliminatorias', go: () => this.nationsHub() },
       { act: 'career', icon: '📈', title: 'Carrera', sub: '21 ligas de Sudamérica y Europa', go: () => this.careerHub() },
     ]);
   }
@@ -808,6 +811,7 @@ export class App {
   private competitionFor(config: MatchConfig, ctx: MatchContext): string {
     if (ctx.mode === 'continental') return Continental.load()?.state.cup ?? 'friendly';
     if (ctx.mode === 'tournament') return 'tournament';
+    if (ctx.mode === 'nations') { const id = Nations.load()?.state.cup ?? 'friendly'; return id.startsWith('elim-') ? 'eliminatorias' : id; }
     if (ctx.mode === 'club') return 'club';
     const lh = leagueOfTeam(config.home.id);
     return lh && lh.id === leagueOfTeam(config.away.id)?.id ? lh.id : 'friendly';
@@ -1420,6 +1424,7 @@ export class App {
     if (ctx?.mode === 'tournament') this.tournamentHub();
     else if (ctx?.mode === 'career') this.careerHub();
     else if (ctx?.mode === 'continental') this.continentalHub();
+    else if (ctx?.mode === 'nations') this.nationsHub();
     else if (ctx?.mode === 'club') this.clubUI.hub();
     else if (ctx?.mode === 'training') this.trainingScreen();
     else this.mainMenu();
@@ -1489,6 +1494,10 @@ export class App {
       availabilityMsgs = this.continental.recordUserResult(ctx.fixture, r.home, r.away, r.penalties ?? undefined, d);
       if (this.continental.state.champion === this.continental.state.userTeam) addAch('cup');
     }
+    if (ctx.mode === 'nations' && this.nations) {
+      this.nations.recordUserResult(ctx.fixture, r.home, r.away, r.penalties ?? undefined);
+      if (this.nations.state.champion === this.nations.state.userTeam) addAch('cup');
+    }
     let clubBlock = '';
     if (ctx.mode === 'club') {
       const st = m.teams[0].stats;
@@ -1509,7 +1518,7 @@ export class App {
     this.setMenuMode(true);
     const scorers = (t: typeof h) => t.scorers.map((s) => `⚽ ${esc(s.name)} ${s.minute}'`).join('<br>') || '<span class="muted">—</span>';
     const pens = r.penalties ? `<div class="muted" style="text-align:center">Penales: ${r.penalties[0]} - ${r.penalties[1]}</div>` : '';
-    const cont = ctx.mode === 'online' ? (ctx.start.mode === 'club' ? 'Volver al club' : 'Menú online') : ctx.mode === 'tournament' ? 'Volver al torneo' : ctx.mode === 'career' ? 'Volver a la carrera' : ctx.mode === 'continental' ? 'Volver a la copa' : ctx.mode === 'club' ? 'Volver al club' : ctx.mode === 'training' ? 'Entrenamiento' : 'Menú principal';
+    const cont = ctx.mode === 'online' ? (ctx.start.mode === 'club' ? 'Volver al club' : 'Menú online') : ctx.mode === 'tournament' ? 'Volver al torneo' : ctx.mode === 'career' ? 'Volver a la carrera' : ctx.mode === 'continental' ? 'Volver a la copa' : ctx.mode === 'nations' ? 'Volver a la competición' : ctx.mode === 'club' ? 'Volver al club' : ctx.mode === 'training' ? 'Entrenamiento' : 'Menú principal';
     this.show(`
       <div class="screen-header"><div><div class="crumb">RESULTADO FINAL</div><h2>${r.winner === -1 ? 'Empate' : `Gana ${esc(m.teams[r.winner].data.name)}`}</h2></div></div>
       <div class="screen-body"><div class="grid2">
@@ -1897,8 +1906,8 @@ export class App {
   // ==================================================================
 
   /** Elegir un equipo (opcionalmente solo entre los ids dados, p. ej. los de una liga). */
-  private pickTeamScreen(title: string, crumb: string, onPick: (id: string) => void, back: () => void, only?: string[], startIdx = 0) {
-    const list = only ? TEAMS.filter((t) => only.includes(t.id)) : TEAMS;
+  private pickTeamScreen(title: string, crumb: string, onPick: (id: string) => void, back: () => void, only?: string[], startIdx = 0, pool: TeamData[] = TEAMS) {
+    const list = only ? pool.filter((t) => only.includes(t.id)) : pool;
     let idx = startIdx;
     const render = () => `
       <div class="screen-header"><div><div class="crumb">${crumb}</div><h2>${title}</h2></div></div>
@@ -1911,8 +1920,8 @@ export class App {
       teamNext: () => { idx = (idx + 1) % list.length; s.refresh(render()); },
       teamSearch: () => this.teamSearchScreen({
         title, crumb, teams: list, current: list[idx].id,
-        onPick: (id) => { idx = Math.max(0, list.findIndex((t) => t.id === id)); this.pickTeamScreen(title, crumb, onPick, back, only, idx); },
-        back: () => this.pickTeamScreen(title, crumb, onPick, back, only, idx),
+        onPick: (id) => { idx = Math.max(0, list.findIndex((t) => t.id === id)); this.pickTeamScreen(title, crumb, onPick, back, only, idx, pool); },
+        back: () => this.pickTeamScreen(title, crumb, onPick, back, only, idx, pool),
       }),
       ok: () => onPick(list[idx].id),
       back,
@@ -2111,6 +2120,97 @@ export class App {
           homeLineup: side === 0 ? this.career?.matchLineup() ?? st.lineup : undefined, awayLineup: side === 1 ? this.career?.matchLineup() ?? st.lineup : undefined,
           weather: randomWeather(Math.random()),
         }, this.stadiumForCtx({ mode: 'career', fixture: next }), { mode: 'career', fixture: next });
+      },
+    }, () => this.mainMenu());
+  }
+
+  nations: Nations | null = null;
+  private nationsView: 'grupo' | 'grupos' | 'eliminatorias' = 'grupo';
+
+  /** Selecciones: elegir la competición y la selección, jugar grupos y eliminatorias, o un amistoso internacional. */
+  nationsHub() {
+    this.setMenuMode(true);
+    this.nations = this.nations ?? Nations.load();
+    const c = this.nations;
+    const lookup = (id: string) => getTeam(id);
+    if (!c) {
+      const handlers: Handlers = { back: () => this.competeMenu() };
+      for (const cup of NATION_CUPS) {
+        handlers[`nc-${cup.id}`] = () => this.pickTeamScreen(`Elige tu selección · ${cup.name}`, 'SELECCIONES', (id) => { this.nations = Nations.create(cup.id, id); this.nationsView = 'grupo'; this.nationsHub(); }, () => this.nationsHub(), nationCupEligible(cup), 0, NATIONS);
+      }
+      // amistoso internacional: se eligen las dos selecciones y se juega como un partido rápido
+      handlers.friendly = () => this.pickTeamScreen('Amistoso · elige tu selección', 'SELECCIONES', (a) => this.pickTeamScreen('Amistoso · elige el rival', 'SELECCIONES', (b) => {
+        const home = getTeam(a);
+        const away = getTeam(b);
+        this.playMatch({ home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: 0, halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty, extraTime: false, penalties: false, weather: randomWeather(Math.random()) }, STADIUMS[this.quick.stadium].id, { mode: 'quick' });
+      }, () => this.nationsHub(), NATIONS.filter((t) => t.id !== a).map((t) => t.id), 0, NATIONS), () => this.nationsHub(), undefined, 0, NATIONS);
+      const item = (cup: (typeof NATION_CUPS)[number]) => `<button class="menu-item" data-act="nc-${cup.id}" style="text-align:left;padding:10px 14px"><span>${esc(cup.name)}<small>${esc(cup.blurb)}</small></span></button>`;
+      const section = (g: string) => `<h3 style="margin:14px 0 8px">${g}</h3><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${NATION_CUPS.filter((x) => x.group === g).map(item).join('')}</div>`;
+      this.show(`
+        <div class="screen-header"><div><div class="crumb">SELECCIONES · ${NATIONS.length} PAÍSES</div><h2>Elige la competición</h2></div></div>
+        <div class="screen-body"><div style="max-width:860px;margin:0 auto">${section('Mundial')}${section('Continentales')}${section('Eliminatorias')}
+          <h3 style="margin:14px 0 8px">Amistoso</h3><button class="menu-item" data-act="friendly" style="text-align:left;padding:10px 14px"><span>Amistoso internacional<small>Elige las dos selecciones y juega un partido</small></span></button></div></div>
+        <div class="screen-footer"><button class="btn" data-act="back">Volver</button></div>`, handlers, () => this.competeMenu());
+      return;
+    }
+    const st = c.state;
+    const def = c.def;
+    const next = c.nextUserFixture();
+    const knock = st.fixtures.filter((f) => f.knockout);
+    const single = def.groups <= 1;
+    const VIEWS = (def.groups === 0 ? ['eliminatorias'] : def.qualify === 0 ? (single ? ['grupo'] : ['grupo', 'grupos']) : single ? ['grupo', 'eliminatorias'] : ['grupo', 'grupos', 'eliminatorias']) as ('grupo' | 'grupos' | 'eliminatorias')[];
+    const NAMES = { grupo: single ? 'Tabla' : 'Mi grupo', grupos: 'Todos los grupos', eliminatorias: 'Eliminatorias' } as const;
+    const view = VIEWS.includes(this.nationsView) ? this.nationsView : VIEWS[0];
+    const champion = st.champion ? getTeam(st.champion) : null;
+    const me = getTeam(st.userTeam);
+    if (champion) this.celebrate(`nations:${st.cup}:${st.seed}`, champion, def.name, 'Selecciones', champion.id === st.userTeam);
+    const status = champion
+      ? `<div class="panel" style="text-align:center"><div class="crumb" style="color:var(--warn)">CAMPEÓN</div><div style="display:flex;justify-content:center;margin:10px">${crestSVG(champion, 110)}</div><h2>${esc(champion.name)}</h2>${champion.id === st.userTeam ? `<p>¡Has ganado la ${esc(def.name)}! 🏆</p>` : '<p class="muted">Mejor suerte la próxima vez.</p>'}</div>`
+      : st.done ? `<div class="panel" style="text-align:center"><div style="display:flex;justify-content:center;margin:10px">${crestSVG(me, 90)}</div><h2>${c.userQualified ? `¡${esc(me.name)} clasificó al Mundial! 🎉` : `${esc(me.name)} quedó fuera del Mundial`}</h2></div>`
+      : st.eliminated ? '<div class="panel"><b>Tu selección quedó eliminada.</b> <span class="muted">Simula el resto para ver al campeón.</span></div>' : '';
+    const groupFx = (g: number) => st.fixtures.filter((f) => !f.knockout && st.groups[g].includes(f.home));
+    const note = def.qualify === 0 ? `Clasifica${(def.spots ?? 1) > 1 ? `n los ${def.spots} primeros` : ' el primero'} al Mundial.` : `Pasa${def.qualify > 1 ? `n los ${def.qualify} primeros` : ' el primero'} de cada grupo${def.thirds ? ` y los ${def.thirds} mejores terceros` : ''}.`;
+    const groupPanel = (g: number) => `<div class="panel" style="margin-bottom:12px"><h3>${single ? 'Tabla' : `Grupo ${GROUP_LETTERS[g]}`}</h3>${this.tableHTML(c.standings(g), st.userTeam, lookup)}<div class="muted" style="font-size:12px;margin-top:6px">${note}</div>${view === 'grupo' ? `<div style="margin-top:10px">${(st.groups[g].length > 5 ? groupFx(g).filter((f) => f.home === st.userTeam || f.away === st.userTeam) : groupFx(g)).map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('')}</div>` : ''}</div>`;
+    let body = '';
+    if (view === 'grupo') body = groupPanel(c.userGroup);
+    else if (view === 'grupos') body = st.groups.map((_, g) => groupPanel(g)).join('');
+    else {
+      const rounds = [...new Set(knock.map((f) => f.round))];
+      body = rounds.length
+        ? rounds.map((r) => { const fx = knock.filter((f) => f.round === r); return `<div class="panel" style="margin-bottom:12px"><h3>${esc(fx[0].stage)}</h3>${fx.map((f) => this.fixtureHTML(f, st.userTeam, lookup)).join('')}</div>`; }).join('')
+        : `<div class="panel"><p class="muted">${note} Las eliminatorias son a partido único en cancha neutral, con prórroga y penales.</p></div>`;
+    }
+    this.show(`
+      <div class="screen-header"><div><div class="crumb">SELECCIONES · ${esc(me.name)}</div><h2>${esc(def.name)}</h2></div></div>
+      <div class="screen-body">
+        ${status}
+        ${next ? `<div class="panel" style="margin-bottom:16px"><div class="crumb">PRÓXIMO PARTIDO · ${esc(next.stage.toUpperCase())}</div>${this.fixtureHTML(next, st.userTeam, lookup)}${next.venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(next.venue).name)}</div>` : ''}</div>` : ''}
+        ${VIEWS.length > 1 ? this.stepper('Ver', NAMES[view], 'view') : ''}
+        ${body}
+      </div>
+      <div class="screen-footer">
+        <button class="btn" data-act="back">Menú</button>
+        <button class="btn danger" data-act="abandon">${st.done ? 'Nueva competición' : 'Abandonar'}</button>
+        ${next ? '<button class="btn" data-act="simMatch">Simular partido</button>' : ''}
+        ${next ? '<button class="btn primary" data-act="play">Jugar partido</button>' : !st.done ? '<button class="btn primary" data-act="simRest">Simular el resto</button>' : ''}
+      </div>`, {
+      back: () => this.mainMenu(),
+      abandon: () => { Nations.clear(); this.nations = null; this.nationsHub(); },
+      viewPrev: () => { this.nationsView = VIEWS[(VIEWS.indexOf(view) + VIEWS.length - 1) % VIEWS.length]; this.nationsHub(); },
+      viewNext: () => { this.nationsView = VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length]; this.nationsHub(); },
+      simMatch: () => { c.simulateUserFixture(); this.nationsHub(); },
+      simRest: () => { c.simulateAll(); this.nationsHub(); },
+      play: () => {
+        if (!next) return;
+        const home = getTeam(next.home);
+        const away = getTeam(next.away);
+        const side = next.home === st.userTeam ? 0 : 1;
+        this.playMatch({
+          home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: side,
+          halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty,
+          extraTime: next.knockout, penalties: next.knockout, neutral: def.neutral, weather: randomWeather(Math.random()),
+          final: next.stage === 'Final' ? def.name : undefined,
+        }, this.stadiumForCtx({ mode: 'nations', fixture: next }), { mode: 'nations', fixture: next });
       },
     }, () => this.mainMenu());
   }

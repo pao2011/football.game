@@ -231,158 +231,70 @@ export function makeNetTexture(): THREE.CanvasTexture {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Advertising (fictional brands)
+// Advertising: marcas deportivas (src/assets/brands), un solo anuncio a la vez en todas las pantallas
 // ---------------------------------------------------------------------------------------------
 
-interface Brand {
-  text: string;
-  bg: [string, string];
-  fg: string;
-  accent?: string;
-  italic?: boolean;
-  mark?: 'star' | 'bolt' | 'wave' | 'ring' | 'sun' | 'drop' | 'pixel' | 'ball';
+const BRAND_LOGOS = import.meta.glob('../../assets/brands/*.webp', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
+/** physical aspect ratio of one ad (length / height): cada anuncio ocupa un tramo largo del cartel */
+export const LED_ASPECT = 16;
+
+export interface LedAds {
+  tex: THREE.CanvasTexture;
+  /** Cantidad de anuncios de la rotación. */
+  count: number;
+  /** Pinta el anuncio i (módulo count) en todas las pantallas. */
+  show(i: number): void;
 }
 
-const BRANDS: Brand[] = [
-  { text: 'NOVA DRINKS', bg: ['#0a2a6b', '#1d55d6'], fg: '#ffffff', accent: '#ff9d1c', italic: true, mark: 'star' },
-  { text: 'KORVEX', bg: ['#050505', '#1b1b1b'], fg: '#e8ff2a', mark: 'bolt' },
-  { text: 'SOLARA AIR', bg: ['#ff7a18', '#ffcf3a'], fg: '#14204a', mark: 'sun' },
-  { text: "SOFFTI'S FOOTBALL", bg: ['#0b0f14', '#16202b'], fg: '#ffffff', accent: '#38f27d', italic: true, mark: 'ball' },
-  { text: 'ZENTRA BANK', bg: ['#00694a', '#00a06d'], fg: '#ffffff', mark: 'ring' },
-  { text: 'VOLTIX', bg: ['#4b00c9', '#8a2bff'], fg: '#ffffff', accent: '#ffe14a', italic: true, mark: 'bolt' },
-  { text: 'PIXELNET', bg: ['#ffffff', '#e9edf2'], fg: '#e0102a', mark: 'pixel' },
-  { text: 'AQUAFRESCA', bg: ['#0090c8', '#29c6f0'], fg: '#ffffff', accent: '#bff6ff', mark: 'drop' },
-];
-export const LED_PANELS = BRANDS.length;
-/** physical aspect ratio of one ad panel (length / height) */
-export const LED_ASPECT = 7.5;
-
-function drawMark(ctx: CanvasRenderingContext2D, mark: Brand['mark'], x: number, y: number, r: number, color: string) {
-  ctx.save();
-  ctx.fillStyle = color;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = r * 0.22;
-  ctx.beginPath();
-  switch (mark) {
-    case 'star':
-      for (let i = 0; i < 10; i++) {
-        const a = -Math.PI / 2 + (i * Math.PI) / 5;
-        const rr = i % 2 ? r * 0.45 : r;
-        ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
-      }
-      ctx.fill();
-      break;
-    case 'bolt':
-      ctx.moveTo(x + r * 0.2, y - r);
-      ctx.lineTo(x - r * 0.5, y + r * 0.1);
-      ctx.lineTo(x, y + r * 0.1);
-      ctx.lineTo(x - r * 0.2, y + r);
-      ctx.lineTo(x + r * 0.55, y - r * 0.15);
-      ctx.lineTo(x + r * 0.05, y - r * 0.15);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'sun':
-      ctx.arc(x, y, r * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-      for (let i = 0; i < 8; i++) {
-        const a = (i * Math.PI) / 4;
-        ctx.beginPath();
-        ctx.moveTo(x + Math.cos(a) * r * 0.7, y + Math.sin(a) * r * 0.7);
-        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
-        ctx.stroke();
-      }
-      break;
-    case 'ring':
-      ctx.arc(x, y, r * 0.75, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(x, y, r * 0.3, 0, Math.PI * 2);
-      ctx.fill();
-      break;
-    case 'drop':
-      ctx.moveTo(x, y - r);
-      ctx.quadraticCurveTo(x + r * 0.8, y + r * 0.1, x, y + r * 0.8);
-      ctx.quadraticCurveTo(x - r * 0.8, y + r * 0.1, x, y - r);
-      ctx.fill();
-      break;
-    case 'pixel':
-      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) if ((i + j) % 2 === 0) ctx.fillRect(x - r + i * r * 0.7, y - r + j * r * 0.7, r * 0.6, r * 0.6);
-      break;
-    case 'ball':
-      ctx.arc(x, y, r * 0.8, 0, Math.PI * 2);
-      ctx.stroke();
-      for (let i = 0; i < 5; i++) {
-        const a = -Math.PI / 2 + (i * 2 * Math.PI) / 5;
-        ctx.lineTo(x + Math.cos(a) * r * 0.35, y + Math.sin(a) * r * 0.35);
-      }
-      ctx.closePath();
-      ctx.fill();
-      break;
-    default:
-      break;
-  }
-  ctx.restore();
-}
-
-/** LED strip with all brands side by side; one panel = 1/LED_PANELS of u. */
-export function makeLedTexture(): THREE.CanvasTexture {
-  const PW = 512;
+/**
+ * Pantallas LED: la textura es un único anuncio que se repite a lo largo de los carteles, así todo el
+ * estadio muestra la misma marca; Stadium la va cambiando cada pocos segundos con show().
+ */
+export function makeLedAds(): LedAds {
   const PH = 128;
-  const { c, ctx } = makeCanvas(PW * BRANDS.length, PH);
-  const sx = PW / PH / LED_ASPECT; // horizontal pre-compression so text is not stretched
-  BRANDS.forEach((b, i) => {
-    const x0 = i * PW;
-    const grad = ctx.createLinearGradient(x0, 0, x0 + PW, PH);
-    grad.addColorStop(0, b.bg[0]);
-    grad.addColorStop(1, b.bg[1]);
-    ctx.fillStyle = grad;
-    ctx.fillRect(x0, 0, PW, PH);
-    // subtle diagonal sheen
-    ctx.fillStyle = 'rgba(255,255,255,0.06)';
-    ctx.beginPath();
-    ctx.moveTo(x0 + PW * 0.55, 0);
-    ctx.lineTo(x0 + PW * 0.75, 0);
-    ctx.lineTo(x0 + PW * 0.6, PH);
-    ctx.lineTo(x0 + PW * 0.4, PH);
-    ctx.fill();
-    if (b.accent) {
-      ctx.fillStyle = b.accent;
-      ctx.fillRect(x0, PH - 10, PW, 10);
-    }
-    ctx.save();
-    ctx.translate(x0 + PW / 2, PH / 2);
-    ctx.scale(sx, 1);
-    const font = `${b.italic ? 'italic ' : ''}900 ${b.text.length > 12 ? 70 : 84}px "Arial Black", "Helvetica Neue", Arial, sans-serif`;
-    ctx.font = font;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const tw = ctx.measureText(b.text).width;
-    const markR = 34;
-    const total = tw + (b.mark ? markR * 2.6 : 0);
-    const maxW = (PW / sx) * 0.9;
-    const k = Math.min(1, maxW / total);
-    ctx.scale(k, k);
-    let tx = 0;
-    if (b.mark) {
-      drawMark(ctx, b.mark, -total / 2 + markR, 2, markR, b.accent ?? b.fg);
-      tx = markR * 1.3;
-    }
-    ctx.fillStyle = b.fg;
-    ctx.fillText(b.text, tx, 6);
-    ctx.restore();
-    // panel separators (LED module seams)
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(x0, 0, 2, PH);
-  });
-  // LED pixel grid
-  ctx.fillStyle = 'rgba(0,0,0,0.18)';
-  for (let y = 0; y < PH; y += 4) ctx.fillRect(0, y, c.width, 1);
+  const PW = PH * LED_ASPECT;
+  const { c, ctx } = makeCanvas(PW, PH);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
-  return tex;
+  const imgs = Object.keys(BRAND_LOGOS).sort().map((key) => {
+    const img = new Image();
+    img.src = BRAND_LOGOS[key];
+    return img;
+  });
+  let current = -1;
+  const paint = (i: number) => {
+    const img = imgs[i];
+    const bg = ctx.createLinearGradient(0, 0, 0, PH);
+    bg.addColorStop(0, '#ffffff');
+    bg.addColorStop(1, '#e4e8ee');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, PW, PH);
+    if (img?.complete && img.naturalWidth > 0) {
+      // logo grande y centrado, con aire a los lados; los isotipos angostos se repiten tres veces a lo largo
+      const k = Math.min((PH * 0.78) / img.height, (PW * 0.6) / img.width);
+      const w = img.width * k;
+      const h = img.height * k;
+      const xs = w < PW * 0.2 ? [PW / 6, PW / 2, (PW * 5) / 6] : [PW / 2];
+      for (const x of xs) ctx.drawImage(img, x - w / 2, (PH - h) / 2, w, h);
+    }
+    // costura entre módulos y trama de píxeles LED
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(0, 0, 3, PH);
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    for (let y = 0; y < PH; y += 4) ctx.fillRect(0, y, PW, 1);
+    tex.needsUpdate = true;
+  };
+  const show = (i: number) => {
+    if (!imgs.length) return;
+    current = ((i % imgs.length) + imgs.length) % imgs.length;
+    paint(current);
+  };
+  // si el logo en pantalla todavía no había cargado, se pinta al llegar
+  imgs.forEach((img, i) => { img.onload = () => { if (i === current) paint(i); }; });
+  show(0);
+  return { tex, count: imgs.length, show };
 }
 
 export function makeScreenTexture(name: string, home: string, away: string): THREE.CanvasTexture {

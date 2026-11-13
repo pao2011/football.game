@@ -25,7 +25,7 @@ import {
   ROOF_IN_D,
   ROOF,
 } from './layout';
-import { LED_ASPECT, LED_PANELS } from './textures';
+import { LED_ASPECT } from './textures';
 
 export interface RowDef {
   samples: PSample[];
@@ -535,4 +535,3 @@ export function appendGeo(gb: GeoBuilder, g: THREE.BufferGeometry) {
   g.dispose();
 }
 
-export const LED_U_PANEL = 1 / LED_PANELS;
