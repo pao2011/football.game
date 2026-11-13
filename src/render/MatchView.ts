@@ -463,7 +463,7 @@ export class MatchView {
     const kit = p.isGK ? t.data.gkKit : t.kit;
     const model = new PlayerModel({
       kit, number: p.data.number, name: p.data.name.split(' ').slice(-1)[0], skinTone: p.data.skinTone,
-      hairColor: p.data.hairColor, hairStyle: p.data.hairStyle, height: p.data.height, isGoalkeeper: p.isGK,
+      hairColor: p.data.hairColor, hairStyle: p.data.hairStyle, height: p.data.height, isGoalkeeper: p.isGK, crest: t.data.crest.image,
     }, this.opts.quality);
     model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = this.opts.shadows; } });
     this.models.set(p.id, model);

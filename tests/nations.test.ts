@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { NATIONS, TEAMS, getTeam } from '../src/data/teams';
 import { NATION_CONFED } from '../src/data/nations';
+import { NATION_ROSTERS } from '../src/data/nationRosters';
 import { NATION_CUPS, Nations, nationCupEligible } from '../src/modes/Nations';
 
 describe('Selecciones y sus competiciones', () => {
@@ -12,6 +13,21 @@ describe('Selecciones y sus competiciones', () => {
       expect(NATION_CONFED[t.id]).toBeDefined();
       expect(getTeam(t.id)).toBe(t);
       expect(TEAMS.includes(t)).toBe(false);
+    }
+  });
+
+  it('los planteles reales tienen 18 jugadores con dorsales únicos y llegan al equipo', () => {
+    const squads = Object.entries(NATION_ROSTERS);
+    expect(squads.length).toBeGreaterThanOrEqual(20);
+    for (const [file, sq] of squads) {
+      expect(sq.roster.length, file).toBe(18);
+      expect(new Set(sq.roster.map((r) => r.number)).size, file).toBe(18);
+      expect(new Set(sq.roster.map((r) => r.name)).size, file).toBe(18);
+      const team = getTeam(`nt_${file}`);
+      expect(team.id, file).toBe(`nt_${file}`);
+      expect(team.players.map((p) => p.name)).toEqual(sq.roster.map((r) => r.name));
+      expect(team.players[0].position).toBe('GK');
+      expect(team.players[11].position).toBe('GK');
     }
   });
 
@@ -39,6 +55,12 @@ describe('Selecciones y sus competiciones', () => {
         }
       }
     }
+  });
+
+  it('todas las selecciones tienen escudo y todas las competiciones su logo (ninguno dibujado)', () => {
+    const fs = require('node:fs') as typeof import('node:fs');
+    for (const t of NATIONS) expect(fs.existsSync(`src/assets/crests/${t.id}.webp`), t.id).toBe(true);
+    for (const c of NATION_CUPS) expect(fs.existsSync(`src/assets/leagues/${c.id}.webp`), c.id).toBe(true);
   });
 
   it('el Mundial respeta los cupos por confederación y la Eurocopa clasifica a 16', () => {

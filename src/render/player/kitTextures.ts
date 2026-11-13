@@ -175,8 +175,8 @@ function yToShirtCanvas(y: number, H: number) {
   return (1 - v) * H;
 }
 
-export function shirtTexture(kit: KitData, number: number, name: string, size: number, longSleeves: boolean): THREE.CanvasTexture {
-  const key = `shirt|${JSON.stringify(kit)}|${number}|${name}|${size}|${longSleeves ? 1 : 0}`;
+export function shirtTexture(kit: KitData, number: number, name: string, size: number, longSleeves: boolean, crest?: string): THREE.CanvasTexture {
+  const key = `shirt|${JSON.stringify(kit)}|${number}|${name}|${size}|${longSleeves ? 1 : 0}|${crest ?? ''}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const W = size;
@@ -221,30 +221,19 @@ export function shirtTexture(kit: KitData, number: number, name: string, size: n
   const fTop = yToShirtCanvas(1.37, H);
   const fBot = yToShirtCanvas(1.3, H);
   drawText(ctx, num, W * 0.665, (fTop + fBot) / 2, fBot - fTop, sx, numColor, outline, W * 0.1);
-  // escudo en el pecho (lado izquierdo del jugador)
-  {
-    const cx = W * 0.84;
-    const cy = (fTop + fBot) / 2;
-    const r = (fBot - fTop) * 0.55;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.scale(sx, 1);
-    ctx.beginPath();
-    ctx.moveTo(-r, -r);
-    ctx.lineTo(r, -r);
-    ctx.lineTo(r, r * 0.2);
-    ctx.quadraticCurveTo(r, r * 0.9, 0, r * 1.3);
-    ctx.quadraticCurveTo(-r, r * 0.9, -r, r * 0.2);
-    ctx.closePath();
-    ctx.fillStyle = numColor;
-    ctx.fill();
-    ctx.lineWidth = Math.max(1, r * 0.25);
-    ctx.strokeStyle = trim;
-    ctx.stroke();
-    ctx.restore();
-  }
   fabricShading(ctx, W, torsoH, H);
   const tex = finish(canvas);
+  // escudo real del equipo en el pecho (lado izquierdo del jugador); se pinta cuando carga la imagen
+  if (crest) {
+    const img = new Image();
+    img.onload = () => {
+      const h = (fBot - fTop) * 1.45;
+      const w = Math.min(h * (img.width / img.height) * sx, W * 0.09);
+      ctx.drawImage(img, W * 0.84 - w / 2, (fTop + fBot) / 2 - h / 2, w, h);
+      tex.needsUpdate = true;
+    };
+    img.src = crest;
+  }
   cache.set(key, tex);
   return tex;
 }

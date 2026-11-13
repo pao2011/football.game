@@ -32,6 +32,8 @@ export interface PlayerVisualSpec {
   hairStyle: number;
   height: number;
   isGoalkeeper: boolean;
+  /** Escudo del equipo (URL de imagen) para el pecho de la camiseta. */
+  crest?: string;
 }
 
 export type ModelQuality = 'low' | 'medium' | 'high';
@@ -159,7 +161,7 @@ export class PlayerModel {
     const texSize = this.quality === 'low' ? 256 : 512;
     const gk = this.spec.isGoalkeeper;
     const shirt = this.materials[MAT.shirt];
-    shirt.map = shirtTexture(kit, number, name, texSize, gk);
+    shirt.map = shirtTexture(kit, number, name, texSize, gk, this.spec.crest);
     shirt.needsUpdate = true;
     const shorts = this.materials[MAT.shorts];
     shorts.map = shortsTexture(kit, number, texSize >> 1);

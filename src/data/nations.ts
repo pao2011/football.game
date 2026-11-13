@@ -1,7 +1,8 @@
 // Selecciones nacionales: escudo (src/assets/crests/nt_<archivo>.webp), colores, nivel y confederación.
-// Las plantillas se generan (nombres inventados) con el nivel de cada selección.
+// Las selecciones principales traen su plantel real (nationRosters.ts); en el resto los nombres se generan.
 import type { FormationId, KitData } from './types';
 import type { TeamSeed } from './teams';
+import { NATION_ROSTERS } from './nationRosters';
 import { crest, kit, GK_BLACK, GK_GREEN, GK_ORANGE, GK_PURPLE, GK_YELLOW } from './seedUtil';
 
 export type Confed = 'UEFA' | 'CONMEBOL' | 'CONCACAF' | 'CAF' | 'AFC' | 'OFC';
@@ -111,6 +112,8 @@ export const NATION_SEEDS: TeamSeed[] = ROWS.map(([file, name, short, confed, ra
     id, name, short, city: confed, crest: crest(id, shirt === W ? shirt2 : shirt, shirt === W ? W : shirt2),
     home: kit(shirt, shirt2, pattern, shorts, socks, number),
     away: kit(awayShirt, awayShirt, 'solid', awayShorts, awayShirt, awayNumber),
-    gkKit: GKS[i % GKS.length], formation: FORMATIONS[i % FORMATIONS.length], rating, seed: 9000 + i,
+    gkKit: GKS[i % GKS.length], rating, seed: 9000 + i,
+    // plantel real (y su formación) en las selecciones principales; en el resto, formación por turno
+    formation: NATION_ROSTERS[file]?.formation ?? FORMATIONS[i % FORMATIONS.length], roster: NATION_ROSTERS[file]?.roster,
   };
 });

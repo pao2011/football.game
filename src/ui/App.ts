@@ -2144,7 +2144,7 @@ export class App {
         const away = getTeam(b);
         this.playMatch({ home, away, homeKit: home.home, awayKit: chooseAwayKit(home, away), humanTeam: 0, halfLengthSec: this.settings.halfMinutes * 60, difficulty: this.settings.difficulty, extraTime: false, penalties: false, weather: randomWeather(Math.random()) }, STADIUMS[this.quick.stadium].id, { mode: 'quick' });
       }, () => this.nationsHub(), NATIONS.filter((t) => t.id !== a).map((t) => t.id), 0, NATIONS), () => this.nationsHub(), undefined, 0, NATIONS);
-      const item = (cup: (typeof NATION_CUPS)[number]) => `<button class="menu-item" data-act="nc-${cup.id}" style="text-align:left;padding:10px 14px"><span>${esc(cup.name)}<small>${esc(cup.blurb)}</small></span></button>`;
+      const item = (cup: (typeof NATION_CUPS)[number]) => `<button class="menu-item" data-act="nc-${cup.id}" style="display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px;text-align:left;padding:10px 14px"><img src="${leagueLogo(cup.id) ?? ''}" alt="" style="height:46px;width:46px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box;flex:none"><span>${esc(cup.name)}<small>${esc(cup.blurb)}</small></span></button>`;
       const section = (g: string) => `<h3 style="margin:14px 0 8px">${g}</h3><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${NATION_CUPS.filter((x) => x.group === g).map(item).join('')}</div>`;
       this.show(`
         <div class="screen-header"><div><div class="crumb">SELECCIONES · ${NATIONS.length} PAÍSES</div><h2>Elige la competición</h2></div></div>
@@ -2163,7 +2163,7 @@ export class App {
     const view = VIEWS.includes(this.nationsView) ? this.nationsView : VIEWS[0];
     const champion = st.champion ? getTeam(st.champion) : null;
     const me = getTeam(st.userTeam);
-    if (champion) this.celebrate(`nations:${st.cup}:${st.seed}`, champion, def.name, 'Selecciones', champion.id === st.userTeam);
+    if (champion) this.celebrate(`nations:${st.cup}:${st.seed}`, champion, def.name, 'Selecciones', champion.id === st.userTeam, leagueLogo(st.cup));
     const status = champion
       ? `<div class="panel" style="text-align:center"><div class="crumb" style="color:var(--warn)">CAMPEÓN</div><div style="display:flex;justify-content:center;margin:10px">${crestSVG(champion, 110)}</div><h2>${esc(champion.name)}</h2>${champion.id === st.userTeam ? `<p>¡Has ganado la ${esc(def.name)}! 🏆</p>` : '<p class="muted">Mejor suerte la próxima vez.</p>'}</div>`
       : st.done ? `<div class="panel" style="text-align:center"><div style="display:flex;justify-content:center;margin:10px">${crestSVG(me, 90)}</div><h2>${c.userQualified ? `¡${esc(me.name)} clasificó al Mundial! 🎉` : `${esc(me.name)} quedó fuera del Mundial`}</h2></div>`
@@ -2181,7 +2181,7 @@ export class App {
         : `<div class="panel"><p class="muted">${note} Las eliminatorias son a partido único en cancha neutral, con prórroga y penales.</p></div>`;
     }
     this.show(`
-      <div class="screen-header"><div><div class="crumb">SELECCIONES · ${esc(me.name)}</div><h2>${esc(def.name)}</h2></div></div>
+      <div class="screen-header"><div><div class="crumb">SELECCIONES · ${esc(me.name)}</div><h2 style="display:flex;align-items:center;gap:12px"><img src="${leagueLogo(st.cup) ?? ''}" alt="" style="height:46px;width:46px;object-fit:contain;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box"><span>${esc(def.name)}</span></h2></div></div>
       <div class="screen-body">
         ${status}
         ${next ? `<div class="panel" style="margin-bottom:16px"><div class="crumb">PRÓXIMO PARTIDO · ${esc(next.stage.toUpperCase())}</div>${this.fixtureHTML(next, st.userTeam, lookup)}${next.venue ? `<div class="muted" style="font-size:12px">${esc(getStadium(next.venue).name)}</div>` : ''}</div>` : ''}
