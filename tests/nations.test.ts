@@ -16,18 +16,26 @@ describe('Selecciones y sus competiciones', () => {
     }
   });
 
-  it('los planteles reales tienen 18 jugadores con dorsales únicos y llegan al equipo', () => {
+  it('los planteles reales tienen 18 jugadores, dorsales únicos y solo nombres de la lista de convocados', () => {
+    const fs = require('node:fs') as typeof import('node:fs');
+    const listed = new Set(fs.readFileSync('tests/fixtures/player-names.txt', 'utf8').split('\n'));
     const squads = Object.entries(NATION_ROSTERS);
-    expect(squads.length).toBeGreaterThanOrEqual(20);
+    expect(squads.length).toBeGreaterThanOrEqual(50);
+    const seen = new Map<string, string>();
     for (const [file, sq] of squads) {
       expect(sq.roster.length, file).toBe(18);
       expect(new Set(sq.roster.map((r) => r.number)).size, file).toBe(18);
-      expect(new Set(sq.roster.map((r) => r.name)).size, file).toBe(18);
       const team = getTeam(`nt_${file}`);
       expect(team.id, file).toBe(`nt_${file}`);
-      expect(team.players.map((p) => p.name)).toEqual(sq.roster.map((r) => r.name));
-      expect(team.players[0].position).toBe('GK');
-      expect(team.players[11].position).toBe('GK');
+      sq.roster.forEach((r, i) => {
+        if (!r.name) return; // sin jugador de la lista para ese puesto: nombre generado
+        expect(listed.has(r.name), `${file}: ${r.name}`).toBe(true);
+        expect(seen.get(r.name), `${r.name} repetido en ${file}`).toBeUndefined();
+        seen.set(r.name, file);
+        expect(team.players[i].name).toBe(r.name);
+      });
+      // los once titulares siempre son jugadores reales
+      expect(sq.roster.slice(0, 11).every((r) => r.name), file).toBe(true);
     }
   });
 
