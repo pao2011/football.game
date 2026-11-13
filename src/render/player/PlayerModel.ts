@@ -20,7 +20,7 @@ import type { AnimInfo } from '../../sim/types';
 import { BONE, BONE_DEFS } from './rig';
 import { Animator } from './animations';
 import { MAT, clearGeometryCache, getBodyGeometry, getHairGeometry } from './bodyGeometry';
-import { clearKitTextureCache, shirtTexture, shortsTexture, socksTexture } from './kitTextures';
+import { bootTexture, clearKitTextureCache, shirtTexture, shortsTexture, socksTexture } from './kitTextures';
 import { clearFaceTextureCache, faceTexture } from './faceTexture';
 
 export interface PlayerVisualSpec {
@@ -91,7 +91,7 @@ export class PlayerModel {
     const shirt = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.78, metalness: 0 });
     const shorts = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72, metalness: 0 });
     const socks = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0 });
-    const boots = new THREE.MeshStandardMaterial({ color: BOOT_COLORS[hashStr(spec.name) % BOOT_COLORS.length], roughness: 0.35, metalness: 0.05 });
+    const boots = new THREE.MeshStandardMaterial({ color: 0xffffff, map: bootTexture(BOOT_COLORS[hashStr(spec.name) % BOOT_COLORS.length]), roughness: 0.32, metalness: 0.05 });
     const dark = new THREE.MeshStandardMaterial({ color: 0x1a1210, roughness: 0.35, metalness: 0 });
     const gloves = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.7, metalness: 0 });
     this.materials = [];

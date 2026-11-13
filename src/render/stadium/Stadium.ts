@@ -112,7 +112,12 @@ export class Stadium {
     const sb = buildStands({ quality, standColor: data.standColor, roofColor: data.roofColor, homeColor, awayColor, roof: this.roofOn, night, upper: !data.small,
       roofSides: look.roof === 'sides', upperSides: look.upper, seats: look.seats, track: look.track, palcos: look.palcos });
     const staticMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0.05 });
-    staticMat.onBeforeCompile = (sh) => patchStaticShadow(sh, this.su);
+    // de noche los focos bañan las tribunas: hormigón, butacas y muros no quedan a oscuras
+    const standGlow = night ? '0.2' : '0.0';
+    staticMat.onBeforeCompile = (sh) => {
+      patchStaticShadow(sh, this.su);
+      sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * ${standGlow};`);
+    };
     this.materials.push(staticMat);
     const addMerged = (geos: THREE.BufferGeometry[], mat: THREE.Material, name: string, receive = true) => {
       if (geos.length === 0) return null;
@@ -131,7 +136,7 @@ export class Stadium {
         vertexColors: true,
         roughness: 0.7,
         metalness: 0.1,
-        emissive: new THREE.Color(data.roofColor).multiplyScalar(night ? 0.05 : 0.14),
+        emissive: new THREE.Color(data.roofColor).multiplyScalar(night ? 0.12 : 0.14),
       });
       roofMat.onBeforeCompile = (sh) => patchStaticShadow(sh, this.su);
       this.materials.push(roofMat);
@@ -211,6 +216,8 @@ export class Stadium {
       { maxCount: this.q.crowdMax, occupancy, homeColor, awayColor, seed, receiveShadow: this.q.crowdShadow },
       this.su,
     );
+    this.crowd.uniforms.uGlow.value = night ? 0.5 : data.timeOfDay === 'sunset' ? 0.22 : 0.1;
+    this.crowd.uniforms.uFlash.value = night ? 1 : data.timeOfDay === 'sunset' ? 0.5 : 0.12;
     this.textures.push(this.crowd.atlas);
     this.materials.push(this.crowd.material);
     this.group.add(...this.crowd.meshes);

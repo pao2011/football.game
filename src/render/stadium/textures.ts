@@ -509,12 +509,31 @@ export function makeCrowdAtlas(): THREE.CanvasTexture {
         ctx.fillStyle = SHIRT(1);
         ctx.fillRect(cx - 4, shoulderY + 4, 8, hipY - shoulderY - 4);
       }
+      // cuello de la prenda y pliegue bajo el pecho (tono más oscuro de la misma camiseta)
+      ctx.fillStyle = SHIRT(shirtShade * 0.72);
+      ctx.fillRect(cx - 7 * sc, shoulderY, 14 * sc, 3);
+      ctx.fillRect(cx - bw / 2 + 3, hipY - 4, bw - 6, 3);
       // neck + head
-      ctx.fillStyle = SKIN;
+      ctx.fillStyle = 'rgb(0,190,0)'; // el cuello queda en sombra bajo el mentón
       ctx.fillRect(cx - 4 * sc, headY + headR - 3, 8 * sc, 9 * sc);
+      ctx.fillStyle = SKIN;
       ctx.beginPath();
       ctx.ellipse(cx, headY, headR * 0.92, headR, 0, 0, Math.PI * 2);
       ctx.fill();
+      // cara: ojos y boca (abierta, gritando, con los brazos en alto)
+      ctx.fillStyle = DARK;
+      for (const sgn of [-1, 1]) {
+        ctx.beginPath();
+        ctx.arc(cx + sgn * headR * 0.36, headY + headR * 0.08, 1.3 * sc, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgb(0,70,0)';
+      if (pose === 0) ctx.fillRect(cx - headR * 0.3, headY + headR * 0.52, headR * 0.6, 1.5);
+      else {
+        ctx.beginPath();
+        ctx.ellipse(cx, headY + headR * 0.55, headR * 0.26, headR * 0.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
       // hair / caps
       if (v === 2) {
         ctx.fillStyle = SHIRT(0.8);

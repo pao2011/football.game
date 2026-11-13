@@ -611,7 +611,8 @@ function buildBootL(b: Builder, q: Quality) {
     keys,
     segments: q.segLimb,
     flipU: false,
-    uv: () => [0.5, 0.25],
+    // u: 0 cara interna, 0,25 empeine, 0,5 cara externa, 0,75 suela · v: del talón (0) a la punta (1)
+    uv: (u, _p, d) => [u, d / 0.278],
   }, q);
 }
 

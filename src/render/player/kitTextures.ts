@@ -358,6 +358,78 @@ export function socksTexture(kit: KitData): THREE.CanvasTexture {
 }
 
 /** Libera todas las texturas de equipación cacheadas. */
+/** Botín: suela oscura con tapones, entresuela, cordones sobre la lengüeta, franja lateral, talonera y puntera. */
+export function bootTexture(color: string): THREE.CanvasTexture {
+  const key = `boot|${color}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const g = canvas.getContext('2d')!;
+  const light = luminance(color) > 0.45;
+  const accent = light ? '#15171c' : '#f4f4f4';
+  const X = (u: number) => u * S;
+  const Y = (v: number) => (1 - v) * S; // v = 0 talón, 1 punta
+  g.fillStyle = color;
+  g.fillRect(0, 0, S, S);
+  // volumen: más oscuro hacia la suela, brillo en el empeine
+  for (const [u, half, c] of [[0.25, 0.2, 'rgba(255,255,255,0.16)'], [0.75, 0.3, 'rgba(0,0,0,0.35)']] as const) {
+    const gr = g.createLinearGradient(X(u - half), 0, X(u + half), 0);
+    gr.addColorStop(0, 'rgba(0,0,0,0)');
+    gr.addColorStop(0.5, c);
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr;
+    g.fillRect(X(u - half), 0, X(half * 2), S);
+  }
+  // suela y tapones
+  g.fillStyle = '#101114';
+  g.fillRect(X(0.63), 0, X(0.24), S);
+  g.fillStyle = '#c9ccd2';
+  for (const [u, v] of [[0.69, 0.12], [0.81, 0.12], [0.75, 0.3], [0.68, 0.62], [0.82, 0.62], [0.7, 0.82], [0.8, 0.82], [0.75, 0.93]]) {
+    g.beginPath();
+    g.arc(X(u), Y(v), S * 0.022, 0, Math.PI * 2);
+    g.fill();
+  }
+  // entresuela (filete de contraste entre la suela y el cuerpo del botín)
+  g.fillStyle = accent;
+  g.fillRect(X(0.605), 0, X(0.025), S);
+  g.fillRect(X(0.87), 0, X(0.025), S);
+  // lengüeta y cordones
+  g.fillStyle = 'rgba(0,0,0,0.3)';
+  g.fillRect(X(0.19), Y(0.66), X(0.12), Y(0.3) - Y(0.66));
+  g.strokeStyle = accent;
+  g.lineWidth = Math.max(1.5, S * 0.016);
+  g.lineCap = 'round';
+  for (let i = 0; i < 5; i++) {
+    const v = 0.34 + i * 0.07;
+    g.beginPath();
+    g.moveTo(X(0.195), Y(v));
+    g.lineTo(X(0.305), Y(v + 0.035));
+    g.moveTo(X(0.305), Y(v));
+    g.lineTo(X(0.195), Y(v + 0.035));
+    g.stroke();
+  }
+  // franja curva en cada costado (diseño propio), talonera y puntera reforzada
+  g.lineWidth = S * 0.045;
+  for (const u of [0.03, 0.47]) {
+    const dir = u < 0.25 ? 1 : -1;
+    g.beginPath();
+    g.moveTo(X(u + dir * 0.09), Y(0.2));
+    g.quadraticCurveTo(X(u - dir * 0.02), Y(0.45), X(u + dir * 0.1), Y(0.8));
+    g.stroke();
+  }
+  g.fillStyle = accent;
+  g.fillRect(0, Y(0.06), X(0.6), Y(0) - Y(0.06));
+  g.fillRect(X(0.9), Y(0.06), X(0.1), Y(0) - Y(0.06));
+  g.fillStyle = 'rgba(255,255,255,0.12)';
+  g.fillRect(0, 0, X(0.6), Y(0.9));
+  const tex = finish(canvas);
+  cache.set(key, tex);
+  return tex;
+}
+
 export function clearKitTextureCache() {
   for (const t of cache.values()) t.dispose();
   cache.clear();
