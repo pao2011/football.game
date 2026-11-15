@@ -25,6 +25,25 @@ Juego de fútbol 3D completo, 11 contra 11 con arquero, con física de balón pr
 
 ---
 
+## 🏁 Apex Grand Prix — juego de monoplazas 3D para móvil
+
+Segundo juego del repositorio, independiente del de fútbol: **`apex-gp.html`** (un solo archivo de 0,6 MB; ábrelo en el navegador del móvil o del PC) o `racing.html` con `npm run dev`. Todo el contenido es original y ficticio: 11 equipos, 22 pilotos y 18 circuitos propios.
+
+- **Circuitos** (`src/racing/track.ts`): 18 trazados con pianos en los vértices y a la salida de las curvas, escapatorias de césped / grava / asfalto, muros, calle de boxes con 11 garajes y mecánicos, parrilla y semáforo. Cuatro ambientes (bosque, desierto, urbano, nieve).
+- **Física** (`src/racing/sim.ts`): agarre con carga aerodinámica, círculo de fricción, subviraje y trompos, rebufo, ERS, pianos, césped y grava, choques coche-coche y contra el muro con daños y abandonos.
+- **Neumáticos**: blando, medio, duro, intermedio y lluvia, con distinto agarre, degradación, «cliff», temperatura y comportamiento según la humedad de la pista. Clima dinámico.
+- **Fin de semana**: libres, clasificación Q1-Q2-Q3 con eliminados, clasificación sprint y sprint en los circuitos marcados, vuelta de formación, salida con semáforos, carrera con paradas y estrategias de la IA. Cualquier sesión se puede simular.
+- **Dirección de carrera**: banderas amarilla, verde, azul, blanca y negra, negra y a cuadros; safety car y VSC; sanciones de 5 / 10 s, drive-through, stop-and-go y descalificación por salida falsa, límites de pista, colisiones, adelantar con amarilla / SC / VSC, exceso de velocidad con VSC o en boxes, ignorar banderas azules y no usar dos compuestos.
+- **Campeonato** de 18 rondas con puntos de pilotos y constructores (se guarda en el dispositivo).
+- **Móvil**: la interfaz se escala sola a cualquier pantalla (horizontal o vertical), con dirección por deslizamiento o botones, pedales táctiles, ayudas configurables y resolución dinámica.
+
+```bash
+npm run build:racing    # genera dist-racing/ y apex-gp.html
+npx vitest run tests/racing-track.test.ts tests/racing-sim.test.ts
+```
+
+---
+
 ## 1. Tecnología elegida y por qué
 
 | Componente | Elección |
