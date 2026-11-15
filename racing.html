@@ -17,7 +17,7 @@
       #ui { position: fixed; inset: 0; font-size: clamp(10px, 1.25vmin + 0.55vw, 19px); padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); pointer-events: none; }
       #ui > * { pointer-events: auto; }
       button { font: inherit; color: inherit; border: 0; cursor: pointer; }
-      .screen { position: absolute; inset: 0; overflow-y: auto; touch-action: pan-y; background: linear-gradient(160deg, rgba(8, 10, 16, 0.94), rgba(20, 8, 10, 0.9)); padding: 1.4em max(1.4em, env(safe-area-inset-right)) 2em max(1.4em, env(safe-area-inset-left)); display: flex; flex-direction: column; align-items: center; gap: 1em; }
+      .screen { position: absolute; inset: 0; overflow-y: auto; touch-action: pan-y; background: linear-gradient(160deg, rgba(8, 10, 16, 0.94), rgba(20, 8, 10, 0.9)); padding-block: 1.4em 2em; padding-left: max(16px, 1.4em, env(safe-area-inset-left, 0px)); padding-right: max(16px, 1.4em, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; align-items: center; gap: 1em; }
       .screen.glass { background: rgba(6, 8, 13, 0.72); backdrop-filter: blur(6px); justify-content: center; }
       h1 { font-size: 2.6em; margin: 0.2em 0 0; letter-spacing: 0.06em; font-style: italic; font-weight: 900; text-align: center; }
       h1 b { color: var(--acc); }
