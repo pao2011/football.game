@@ -45,11 +45,14 @@ h2{font-size:30px;font-weight:900;text-align:center}
 .btn{width:100%;border:0;border-radius:18px;padding:16px;font-size:19px;font-weight:900;letter-spacing:1px;color:#fff;cursor:pointer;background:linear-gradient(180deg,var(--a1),color-mix(in srgb,var(--a1) 60%,#000));box-shadow:0 6px 0 color-mix(in srgb,var(--a1) 40%,#000),0 10px 24px rgba(0,0,0,.35);transition:transform .12s,box-shadow .12s;text-transform:uppercase}
 .btn:active{transform:translateY(5px);box-shadow:0 1px 0 color-mix(in srgb,var(--a1) 40%,#000)}
 .btn.b2{background:linear-gradient(180deg,var(--a2),color-mix(in srgb,var(--a2) 55%,#000));box-shadow:0 6px 0 color-mix(in srgb,var(--a2) 35%,#000),0 10px 24px rgba(0,0,0,.35)}
+.btn.b4{color:#1a0b3d;background:linear-gradient(180deg,var(--a3),color-mix(in srgb,var(--a3) 60%,#000));box-shadow:0 6px 0 color-mix(in srgb,var(--a3) 35%,#000),0 10px 24px rgba(0,0,0,.35)}
+.btn:disabled{opacity:.4}
+#picPrev{width:180px;height:180px;object-fit:cover;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .btn.b3{background:rgba(255,255,255,.12);box-shadow:0 6px 0 rgba(0,0,0,.3)}
 .btn:focus-visible{outline:3px solid #fff;outline-offset:3px}
 .menu-btns{width:min(320px,100%);display:flex;flex-direction:column;gap:14px;margin-top:18px}
 .menu-btns .btn{animation:rise .6s backwards cubic-bezier(.2,.9,.3,1.3)}
-.menu-btns .btn:nth-child(2){animation-delay:.08s}.menu-btns .btn:nth-child(3){animation-delay:.16s}
+.menu-btns .btn:nth-child(2){animation-delay:.08s}.menu-btns .btn:nth-child(3){animation-delay:.16s}.menu-btns .btn:nth-child(4){animation-delay:.24s}
 @keyframes rise{from{opacity:0;transform:translateY(30px) scale(.9)}}
 .stat{font-size:15px;opacity:.85;font-weight:700}
 .big{font-size:56px;font-weight:900;text-shadow:0 0 20px var(--a2)}
@@ -104,6 +107,7 @@ h2{font-size:30px;font-weight:900;text-align:center}
   <div class="menu-btns">
     <button class="btn" data-go="classic">Classic</button>
     <button class="btn b2" data-go="levels">Levels</button>
+    <button class="btn b4" data-go="picture">Picture</button>
     <button class="btn b3" data-go="settings">Settings</button>
   </div>
   <div class="stat" id="menuBest"></div>
@@ -114,6 +118,18 @@ h2{font-size:30px;font-weight:900;text-align:center}
   <h2>Levels</h2>
   <div class="sub" id="starTotal"></div>
   <div id="levelGrid"></div>
+</div>
+
+<div class="screen" id="picture">
+  <button class="back" data-go="menu" aria-label="Back">‹</button>
+  <div class="card">
+    <h2>Picture Mode</h2>
+    <div class="sub">Drop blocks on every square to reveal your picture</div>
+    <img id="picPrev" alt="Your picture" style="display:none">
+    <label class="btn b2" for="picFile">Choose Image</label>
+    <input type="file" id="picFile" accept="image/*" hidden>
+    <button class="btn" id="picPlay" disabled>Play</button>
+  </div>
 </div>
 
 <div class="screen" id="settings">
@@ -311,20 +327,16 @@ function shade(hex, a) {
   return shadeCache[key] = `rgb(${m(n >> 16)},${m(n >> 8 & 255)},${m(n & 255)})`;
 }
 function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
-function quad(a, b, c, d, e, f, g, h, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, d); ctx.lineTo(e, f); ctx.lineTo(g, h); ctx.closePath(); ctx.fill(); }
-// solid square block with a bevel: lit top/left, shaded bottom/right, glossy face
-function drawBlock(x, y, s, col, a = 1) {
-  const b = s * .15, X = x + s, Y = y + s;
+// flat square block: solid face, thin light top edge, thin dark bottom edge.
+// `tile` = [r,c] paints that slice of the player's picture instead of a colour.
+function drawBlock(x, y, s, col, a = 1, tile) {
+  const b = Math.max(1.5, s * .07);
   ctx.globalAlpha = a;
-  quad(x, y, X, y, X - b, y + b, x + b, y + b, shade(col, .5));
-  quad(x, y, x + b, y + b, x + b, Y - b, x, Y, shade(col, .22));
-  quad(X, y, X, Y, X - b, Y - b, X - b, y + b, shade(col, -.25));
-  quad(x, Y, x + b, Y - b, X - b, Y - b, X, Y, shade(col, -.45));
-  const g = ctx.createLinearGradient(x, y + b, X, Y - b);
-  g.addColorStop(0, shade(col, .18)); g.addColorStop(1, shade(col, -.1));
-  ctx.fillStyle = g; ctx.fillRect(x + b, y + b, s - 2 * b, s - 2 * b);
-  ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.fillRect(x + b, y + b, (s - 2 * b) * .45, (s - 2 * b) * .18);
-  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.strokeRect(x + .5, y + .5, s - 1, s - 1);
+  if (tile) ctx.drawImage(picCanvas, tile[1] * 64, tile[0] * 64, 64, 64, x, y, s, s);
+  else { ctx.fillStyle = col; ctx.fillRect(x, y, s, s); }
+  ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(x, y, s, b);
+  ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(x, y + s - b, s, b);
+  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.strokeRect(x + .5, y + .5, s - 1, s - 1);
   ctx.globalAlpha = 1;
 }
 function drawPiece(p, x, y, s, a = 1, col) { const c = col || pal()[p.ci]; for (const [r, cc] of p.cells) drawBlock(x + cc * s, y + r * s, s, c, a); }
@@ -356,7 +368,8 @@ function newTray() {
 }
 function startGame(mode, level = 0) {
   const def = mode === 'level' ? levelDef(level) : null;
-  G = { mode, level, def, grid: def ? levelGrid(def) : emptyGrid(), pop: emptyGrid(), clearing: [], tray: [], score: 0, shown: 0, moves: 0, combo: 0, sinceClear: 0, over: false, won: false, endT: 0, paused: false, pw: { bomb: 1, laser: 1, swap: 1 }, aim: null, aimCell: null };
+  G = { mode, level, def, grid: def ? levelGrid(def) : emptyGrid(), pop: emptyGrid(), clearing: [], tray: [], score: 0, shown: 0, moves: 0, combo: 0, sinceClear: 0, over: false, won: false, endT: 0, paused: false, pw: { bomb: 1, laser: 1, swap: 1 }, aim: null, aimCell: null, stuckT: null,
+    rev: mode === 'picture' ? emptyGrid() : null, revealed: 0 };
   for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (G.grid[r][c] !== null) G.pop[r][c] = now + (r + c) * 35;
   parts = []; popups = []; beams = []; drag = null;
   newTray(); updateHud(); show(null); renderPower();
@@ -383,7 +396,7 @@ function aimCells(k, r, c) {
 const cellAt = (x, y) => { const c = Math.floor((x - bx) / cell), r = Math.floor((y - by) / cell); return r >= 0 && c >= 0 && r < N && c < N ? { r, c } : null; };
 function bumpScore() { const sc = $('#score'); sc.classList.remove('bump'); void sc.offsetWidth; sc.classList.add('bump'); }
 function usePower(k, r, c) {
-  let n = 0;
+  let n = 0; G.stuckT = null;
   for (const [R, C] of aimCells(k, r, c)) if (G.grid[R][C] !== null) {
     G.clearing.push({ r: R, c: C, ci: G.grid[R][C], t0: now + Math.hypot(R - r, C - c) * 40, burst: false });
     G.grid[R][C] = null; n++;
@@ -400,14 +413,15 @@ function usePower(k, r, c) {
   checkStuck();
 }
 function useSwap() {
-  G.pw.swap--; newTray(); sfx.swap();
+  G.pw.swap--; G.stuckT = null; newTray(); sfx.swap();
   for (let i = 0; i < 3; i++) { const [x, y] = slotCenter(i); burst(x, y, pal()[i * 2], 14, 5); }
   $('#power').classList.remove('nudge'); renderPower(); checkStuck();
 }
-// out of moves only ends the game once no power-up is left to rescue it
+// out of moves: with power-ups left, give a 3s countdown to use one (drawn in drawGame), else game over
 function checkStuck() {
-  if (G.tray.some(t => !t.used && canPlace(G.grid, t))) return;
-  if (G.pw.bomb + G.pw.laser + G.pw.swap > 0) { popup('No room! Use a power-up', W / 2, by + bsize / 2, '#fff', 24, 1800); $('#power').classList.add('nudge'); return; }
+  G.stuckT = null;
+  if (G.tray.some(t => !t.used && canPlace(G.grid, t))) { $('#power').classList.remove('nudge'); return; }
+  if (G.pw.bomb + G.pw.laser + G.pw.swap > 0) { G.stuckT = now; G.tick = 0; $('#power').classList.add('nudge'); return; }
   endGame(false);
 }
 $('#power').addEventListener('click', e => {
@@ -419,12 +433,16 @@ $('#power').addEventListener('click', e => {
 function updateHud() {
   $('#best').textContent = G && G.mode === 'level' ? '★' + (stars[G.level] || 0) : best;
   $('#modeLbl').textContent = G && G.mode === 'level' ? 'Level ' + G.level : 'Score';
-  $('#lvlbox').classList.toggle('on', !!(G && G.def));
+  $('#lvlbox').classList.toggle('on', !!(G && (G.def || G.rev)));
+  if (G && G.rev) { $('#modeLbl').textContent = 'Picture'; $('#targetLbl').textContent = `Revealed ${G.revealed}/64 · Moves ${G.moves}`; $('#barFill').style.width = G.revealed / 64 * 100 + '%'; }
   if (G && G.def) { $('#targetLbl').textContent = 'Target ' + G.def.target + ' · Moves ' + G.moves; $('#barFill').style.width = Math.min(100, G.score / G.def.target * 100) + '%'; }
 }
 function place(p, r0, c0) {
   const col = pal()[p.ci];
-  for (const [r, c] of p.cells) { G.grid[r + r0][c + c0] = p.ci; G.pop[r + r0][c + c0] = now; }
+  for (const [r, c] of p.cells) {
+    G.grid[r + r0][c + c0] = p.ci; G.pop[r + r0][c + c0] = now;
+    if (G.rev && G.rev[r + r0][c + c0] === null) { G.rev[r + r0][c + c0] = now; G.revealed++; }
+  }
   p.used = true; G.moves++;
   let gain = p.cells.length;
   const { rows, cols } = fullLines(G.grid);
@@ -459,15 +477,17 @@ function place(p, r0, c0) {
   G.score += gain; bumpScore();
   if (G.tray.every(t => t.used)) newTray();
   updateHud();
-  if (G.def && G.score >= G.def.target) return endGame(true);
+  if ((G.def && G.score >= G.def.target) || G.revealed === 64) return endGame(true);
   checkStuck();
 }
 function endGame(won) {
   if (won) {
     G.won = true; G.endT = now;
-    const s = G.moves <= G.def.par ? 3 : G.moves <= G.def.par * 1.35 ? 2 : 1;
-    if (s > (stars[G.level] || 0)) { stars[G.level] = s; store.set('stars', stars); }
-    G.earned = s;
+    if (G.def) {
+      const s = G.moves <= G.def.par ? 3 : G.moves <= G.def.par * 1.35 ? 2 : 1;
+      if (s > (stars[G.level] || 0)) { stars[G.level] = s; store.set('stars', stars); }
+      G.earned = s;
+    }
     setTimeout(() => { confetti(); sfx.win(); vibe([30, 40, 60]); }, 500);
     setTimeout(showWin, 1500);
   } else {
@@ -488,12 +508,15 @@ function showOver() {
 }
 function showWin() {
   if (!G || !G.won) return;
-  $('#winTitle').textContent = 'Level ' + G.level + ' Complete!';
-  $('#winStat').textContent = `${G.score} pts in ${G.moves} moves (par ${G.def.par})`;
+  const pic = !G.def, back = document.querySelector('#win .row .b3');
+  $('#winTitle').textContent = pic ? 'Picture Complete!' : 'Level ' + G.level + ' Complete!';
+  $('#winStat').textContent = pic ? `Revealed in ${G.moves} moves · ${G.score} pts` : `${G.score} pts in ${G.moves} moves (par ${G.def.par})`;
+  $('#win .stars').style.display = pic ? 'none' : '';
+  back.dataset.go = pic ? 'picture' : 'levels'; back.textContent = pic ? 'New Picture' : 'Levels';
   const st = document.querySelectorAll('#win .stars i');
   st.forEach(s => s.classList.remove('on'));
   st.forEach((s, i) => { if (i < G.earned) setTimeout(() => { s.classList.add('on'); tone(660 + i * 220, .2, 'triangle', .1); }, 400 + i * 300); });
-  document.querySelector('#win [data-go=next]').style.display = G.level < LEVELS ? '' : 'none';
+  document.querySelector('#win [data-go=next]').style.display = !pic && G.level < LEVELS ? '' : 'none';
   show('win');
 }
 
@@ -553,7 +576,7 @@ addEventListener('keydown', e => { if (e.key === 'Escape' && G && !G.over && !G.
 function show(id) {
   screen = id;
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
-  if (id === 'menu' || id === 'levels' || id === 'settings') { $('#hud').classList.remove('on'); $('#power').classList.remove('on', 'nudge'); G = null; }
+  if (id === 'menu' || id === 'levels' || id === 'settings' || id === 'picture') { $('#hud').classList.remove('on'); $('#power').classList.remove('on', 'nudge'); G = null; }
   if (id === 'menu') $('#menuBest').textContent = best ? 'Best: ' + best : '';
   if (id === 'levels') buildLevels();
   if (id === 'settings') syncSettings();
@@ -589,6 +612,27 @@ document.addEventListener('click', e => {
   else if (go === 'next') startGame('level', G.level + 1);
   else show(go);
 });
+// picture mode: centre-crop the chosen image to a 512px square, 64px per cell
+const picCanvas = document.createElement('canvas'); picCanvas.width = picCanvas.height = 512;
+let picReady = false;
+function loadPic(src, save) {
+  const im = new Image();
+  im.onload = () => {
+    const s = Math.min(im.width, im.height);
+    picCanvas.getContext('2d').drawImage(im, (im.width - s) / 2, (im.height - s) / 2, s, s, 0, 0, 512, 512);
+    if (src.startsWith('blob:')) URL.revokeObjectURL(src);
+    picReady = true;
+    const url = picCanvas.toDataURL('image/jpeg', .82);
+    $('#picPrev').src = url; $('#picPrev').style.display = ''; $('#picPlay').disabled = false;
+    if (save) store.set('pic', url);
+  };
+  im.onerror = () => alert('Could not open that image. Try a JPG or PNG.');
+  im.src = src;
+}
+$('#picFile').onchange = e => { const f = e.target.files[0]; if (f) loadPic(URL.createObjectURL(f), true); e.target.value = ''; };
+$('#picPlay').onclick = () => { if (picReady) { sfx.click(); startGame('picture'); } };
+{ const saved = store.get('pic', null); if (saved) loadPic(saved, false); }
+
 $('#pauseBtn').onclick = () => { sfx.click(); pause(); };
 
 // ---------- render loop ----------
@@ -623,6 +667,11 @@ function drawGame(dt) {
   for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
     ctx.fillStyle = (r + c) % 2 ? 'rgba(255,255,255,.045)' : 'rgba(255,255,255,.07)';
     ctx.fillRect(bx + c * cell + 1, by + r * cell + 1, cell - 2, cell - 2);
+    if (G.rev && G.rev[r][c] !== null) { // revealed picture stays visible (dimmed) after its block clears
+      ctx.globalAlpha = .5; ctx.drawImage(picCanvas, c * 64, r * 64, 64, 64, bx + c * cell, by + r * cell, cell, cell); ctx.globalAlpha = 1;
+      const f = 1 - (now - G.rev[r][c]) / 500;
+      if (f > 0) { ctx.fillStyle = `rgba(255,255,255,${f * .8})`; ctx.fillRect(bx + c * cell, by + r * cell, cell, cell); }
+    }
   }
 
   // preview: ghost + lines that would clear take the piece's colour
@@ -639,11 +688,11 @@ function drawGame(dt) {
     const age = now - G.pop[r][c];
     if (age < 0) continue;
     const s = age < 300 ? .5 + .5 * ease.back(age / 300) : 1;
-    let col = pal()[v];
-    if (hl && (hl.rows.has(r) || hl.cols.has(c))) col = hl.col;
-    if (r >= overRow) col = '#5a5670';
+    let col = pal()[v], tile = G.rev ? [r, c] : null;
+    if (hl && (hl.rows.has(r) || hl.cols.has(c))) { col = hl.col; tile = null; }
+    if (r >= overRow) { col = '#5a5670'; tile = null; }
     const x = bx + c * cell, y = by + r * cell, d = cell * (1 - s) / 2;
-    drawBlock(x + d, y + d, cell * s, col);
+    drawBlock(x + d, y + d, cell * s, col, 1, tile);
   }
   if (ghost) {
     const pulse = .35 + Math.sin(now / 120) * .1;
@@ -670,7 +719,7 @@ function drawGame(dt) {
     if (k >= 1) return false;
     const s = 1 - ease.cubic(k);
     ctx.save(); ctx.translate(x + cell / 2, y + cell / 2); ctx.rotate(k * 2.2);
-    drawBlock(-cell * s / 2, -cell * s / 2, cell * s, k < .25 ? '#ffffff' : col);
+    drawBlock(-cell * s / 2, -cell * s / 2, cell * s, k < .25 ? '#ffffff' : col, 1, k >= .25 && G.rev ? [q.r, q.c] : null);
     ctx.restore();
     return true;
   });
@@ -689,6 +738,28 @@ function drawGame(dt) {
   });
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 
+  // picture complete: full image fades in over the board
+  if (G.won && G.rev) {
+    ctx.globalAlpha = clamp01((now - G.endT - 300) / 700);
+    ctx.drawImage(picCanvas, bx, by, bsize, bsize); ctx.globalAlpha = 1;
+  }
+  // out-of-moves countdown (frozen while paused)
+  if (G.stuckT !== null) {
+    if (screen) G.stuckT += dt * 1000;
+    const left = 3 - (now - G.stuckT) / 1000;
+    if (left <= 0) { G.stuckT = null; $('#power').classList.remove('nudge'); endGame(false); }
+    else {
+      const n = Math.ceil(left), k = left - Math.floor(left) || 1;
+      if (n !== G.tick) { G.tick = n; tone(n === 1 ? 660 : 880, .09, 'square', .07); vibe(15); }
+      ctx.fillStyle = 'rgba(8,3,20,.5)'; ctx.fillRect(bx, by, bsize, bsize);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.save(); ctx.translate(W / 2, by + bsize / 2 - 10); ctx.scale(1 + k * .5, 1 + k * .5); ctx.globalAlpha = .4 + (1 - k) * .6;
+      ctx.font = `900 ${cell * 2}px system-ui,sans-serif`; ctx.fillStyle = '#fff'; ctx.shadowColor = '#ff4f4f'; ctx.shadowBlur = 30;
+      ctx.fillText(n, 0, 0); ctx.restore();
+      ctx.font = `800 ${Math.max(16, cell * .38)}px system-ui,sans-serif`; ctx.fillStyle = '#fff';
+      ctx.fillText('Out of moves! Use a power-up?', W / 2, by + bsize / 2 + cell * 1.3);
+    }
+  }
   // tray
   G.tray.forEach((p, i) => {
     if (p.used || (drag && drag.i === i)) return;
