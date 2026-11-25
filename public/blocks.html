@@ -16,7 +16,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg1);color:#fff;font-fami
 .orb.o2{width:40vmax;height:40vmax;background:var(--a2);right:-15vmax;bottom:-10vmax;animation-delay:-6s}
 .orb.o3{width:25vmax;height:25vmax;background:var(--a3);left:40%;top:45%;opacity:.18;animation-delay:-11s}
 @keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(6vmax,4vmax) scale(1.1)}66%{transform:translate(-4vmax,6vmax) scale(.92)}}
-canvas{position:fixed;inset:0;display:block}
+#c{position:fixed;inset:0;display:block}
+canvas{display:block}
 /* HUD */
 #hud{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 12px) 16px 0;display:flex;align-items:flex-start;justify-content:space-between;pointer-events:none;opacity:0;transform:translateY(-20px);transition:.35s}
 #hud.on{opacity:1;transform:none}
@@ -42,26 +43,27 @@ h1 span{display:inline-block;animation:hop 2.4s ease-in-out infinite;background:
 @keyframes hop{0%,60%,100%{transform:none}30%{transform:translateY(-12px) rotate(-6deg)}}
 h2{font-size:30px;font-weight:900;text-align:center}
 .sub{opacity:.75;font-weight:600;text-align:center}
-.btn{width:100%;border:0;border-radius:18px;padding:16px;font-size:19px;font-weight:900;letter-spacing:1px;color:#fff;cursor:pointer;background:linear-gradient(180deg,var(--a1),color-mix(in srgb,var(--a1) 60%,#000));box-shadow:0 6px 0 color-mix(in srgb,var(--a1) 40%,#000),0 10px 24px rgba(0,0,0,.35);transition:transform .12s,box-shadow .12s;text-transform:uppercase}
-.btn:active{transform:translateY(5px);box-shadow:0 1px 0 color-mix(in srgb,var(--a1) 40%,#000)}
-.btn.b2{background:linear-gradient(180deg,var(--a2),color-mix(in srgb,var(--a2) 55%,#000));box-shadow:0 6px 0 color-mix(in srgb,var(--a2) 35%,#000),0 10px 24px rgba(0,0,0,.35)}
-.btn.b4{color:#1a0b3d;background:linear-gradient(180deg,var(--a3),color-mix(in srgb,var(--a3) 60%,#000));box-shadow:0 6px 0 color-mix(in srgb,var(--a3) 35%,#000),0 10px 24px rgba(0,0,0,.35)}
+.btn{width:100%;border:0;border-radius:14px;padding:16px;font-size:18px;font-weight:800;letter-spacing:1px;color:#fff;cursor:pointer;background:var(--a1);transition:transform .1s,filter .15s;text-transform:uppercase}
+.btn:hover{filter:brightness(1.08)}
+.btn:active{transform:scale(.97)}
+.btn.b2{background:var(--a2)}
+.btn.b4{background:var(--a3);color:#1a0b3d}
 .btn:disabled{opacity:.4}
-#picPrev{width:180px;height:180px;object-fit:cover;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
-.btn.b3{background:rgba(255,255,255,.12);box-shadow:0 6px 0 rgba(0,0,0,.3)}
+#picPrev{width:180px;height:180px;object-fit:cover;border-radius:12px}
+.btn.b3{background:rgba(255,255,255,.12)}
 .btn:focus-visible{outline:3px solid #fff;outline-offset:3px}
 .menu-btns{width:min(320px,100%);display:flex;flex-direction:column;gap:14px;margin-top:18px}
 .menu-btns .btn{animation:rise .6s backwards cubic-bezier(.2,.9,.3,1.3)}
-.menu-btns .btn:nth-child(2){animation-delay:.08s}.menu-btns .btn:nth-child(3){animation-delay:.16s}.menu-btns .btn:nth-child(4){animation-delay:.24s}
+.menu-btns .btn:nth-child(2){animation-delay:.08s}.menu-btns .btn:nth-child(3){animation-delay:.16s}.menu-btns .btn:nth-child(4){animation-delay:.24s}.menu-btns .btn:nth-child(5){animation-delay:.32s}
 @keyframes rise{from{opacity:0;transform:translateY(30px) scale(.9)}}
 .stat{font-size:15px;opacity:.85;font-weight:700}
 .big{font-size:56px;font-weight:900;text-shadow:0 0 20px var(--a2)}
 .badge{background:linear-gradient(90deg,var(--a3),var(--a1));color:#1a0b3d;font-weight:900;padding:6px 14px;border-radius:20px;animation:pulse 1s infinite}
 @keyframes pulse{50%{transform:scale(1.08)}}
 #levelGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;width:min(380px,100%);max-height:62vh;overflow:auto;padding:6px;touch-action:pan-y}
-.lv{aspect-ratio:1;border:0;border-radius:16px;font-size:20px;font-weight:900;color:#fff;cursor:pointer;background:linear-gradient(180deg,var(--a2),color-mix(in srgb,var(--a2) 45%,#000));box-shadow:0 4px 0 rgba(0,0,0,.35);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;animation:rise .4s backwards}
+.lv{aspect-ratio:1;border:0;border-radius:16px;font-size:20px;font-weight:900;color:#fff;cursor:pointer;background:var(--a2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;animation:rise .4s backwards}
 .lv small{font-size:10px;letter-spacing:-1px;color:var(--a3)}
-.lv.done{background:linear-gradient(180deg,var(--a1),color-mix(in srgb,var(--a1) 45%,#000))}
+.lv.done{background:var(--a1)}
 .lv.lock{background:rgba(255,255,255,.08);color:rgba(255,255,255,.35);cursor:default;box-shadow:none}
 .stars{display:flex;gap:10px;font-size:46px}
 .stars i{font-style:normal;color:var(--a3);filter:grayscale(1) brightness(.5);transform:scale(.6);transition:.4s cubic-bezier(.2,.9,.3,1.6)}
@@ -70,13 +72,27 @@ h2{font-size:30px;font-weight:900;text-align:center}
 .row .btn{flex:1}
 .set{display:flex;justify-content:space-between;align-items:center;width:100%;font-weight:800;font-size:17px}
 .set .btn{width:auto;min-width:120px;padding:10px 14px;font-size:15px}
-#power{position:fixed;left:0;right:0;bottom:0;padding:0 16px calc(env(safe-area-inset-bottom) + 14px);display:flex;justify-content:center;gap:16px;opacity:0;pointer-events:none;transform:translateY(20px);transition:.35s}
-#power.on{opacity:1;pointer-events:auto;transform:none}
-.pw{position:relative;width:64px;height:56px;border:0;border-radius:14px;background:rgba(255,255,255,.12);font-size:26px;cursor:pointer;box-shadow:0 4px 0 rgba(0,0,0,.35);transition:transform .15s,background .15s}
-.pw b{position:absolute;top:-7px;right:-7px;min-width:22px;height:22px;border-radius:11px;background:var(--a1);color:#fff;font-size:13px;line-height:22px;padding:0 5px;font-family:system-ui,sans-serif}
-.pw:disabled{opacity:.35;cursor:default}
-.pw.aim{background:var(--a2);transform:translateY(-6px) scale(1.08);box-shadow:0 0 22px var(--a2)}
-#power.nudge .pw:not(:disabled){animation:pulse .6s infinite}
+.scroll{width:min(380px,100%);max-height:76vh;overflow:auto;display:flex;flex-direction:column;gap:10px;touch-action:pan-y;padding:4px}
+.pal{display:flex;align-items:center;gap:6px;padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.08);border:2px solid transparent;color:#fff;font:800 15px system-ui,sans-serif;cursor:pointer;width:100%}
+.pal.on{border-color:#fff}
+.pal i{width:20px;height:20px;border-radius:5px}
+.pal span{margin-left:auto}
+.swrow{display:flex;gap:6px;justify-content:space-between}
+.skins{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.skin{position:relative}
+.skin .pick{width:100%;aspect-ratio:1;border:2px solid transparent;border-radius:12px;background:rgba(255,255,255,.08);cursor:pointer;padding:6px;color:#fff;font:800 12px system-ui,sans-serif}
+.skin.on .pick{border-color:#fff}
+.skin canvas{width:100%;height:100%}
+.skin .del{position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:12px;border:0;background:#ff4f6a;color:#fff;font-weight:900;cursor:pointer}
+#draw{gap:10px;justify-content:flex-start;padding-top:calc(env(safe-area-inset-top) + 18px)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;width:min(390px,100%)}
+.tb{min-width:44px;height:44px;border:0;border-radius:12px;background:rgba(255,255,255,.12);color:#fff;font:800 18px system-ui,sans-serif;cursor:pointer;padding:0 8px}
+.tb.on{background:var(--a2);color:#1a0b3d}
+.sw{width:36px;height:36px;border-radius:10px;border:3px solid rgba(255,255,255,.2);cursor:pointer;padding:0}
+.sw.on{border-color:#fff;transform:scale(1.12)}
+input[type=color]{width:44px;height:44px;border:0;border-radius:12px;background:none;padding:0;cursor:pointer}
+.dshape{display:flex;align-items:center;gap:12px;font-weight:800}
+#dc{touch-action:none;border-radius:12px;background:rgba(0,0,0,.3)}
 .back{position:fixed;top:calc(env(safe-area-inset-top) + 12px);left:16px;width:48px;height:48px;border-radius:14px;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:22px;font-weight:900;cursor:pointer}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
@@ -95,19 +111,13 @@ h2{font-size:30px;font-weight:900;text-align:center}
   <div class="side"><div class="lbl">Best</div><div id="best">0</div></div>
 </div>
 
-<div id="power">
-  <button class="pw" data-pw="bomb" aria-label="Bomb: clear a 3x3 area">💣<b>0</b></button>
-  <button class="pw" data-pw="laser" aria-label="Laser: clear a row and column">⚡<b>0</b></button>
-  <button class="pw" data-pw="swap" aria-label="Swap: new pieces">🔄<b>0</b></button>
-</div>
-
 <div class="screen on" id="menu">
   <h1 id="title"></h1>
-  <div class="sub">Drag · Drop · Blast</div>
   <div class="menu-btns">
     <button class="btn" data-go="classic">Classic</button>
     <button class="btn b2" data-go="levels">Levels</button>
     <button class="btn b4" data-go="picture">Picture</button>
+    <button class="btn b2" data-go="colors">Colors</button>
     <button class="btn b3" data-go="settings">Settings</button>
   </div>
   <div class="stat" id="menuBest"></div>
@@ -132,13 +142,47 @@ h2{font-size:30px;font-weight:900;text-align:center}
   </div>
 </div>
 
+<div class="screen" id="colors">
+  <button class="back" data-go="menu" aria-label="Back">‹</button>
+  <h2>Colors</h2>
+  <div class="scroll">
+    <div class="lbl">Palettes</div>
+    <div id="palList" class="scroll" style="max-height:none;overflow:visible;padding:0"></div>
+    <div class="lbl">Make your own (tap a colour to change it)</div>
+    <div class="swrow" id="customRow"></div>
+    <div class="lbl">Block designs</div>
+    <div class="skins" id="skinList"></div>
+    <button class="btn b4" data-go="draw">Draw Blocks</button>
+  </div>
+</div>
+
+<div class="screen" id="draw">
+  <button class="back" data-go="colors" aria-label="Back">‹</button>
+  <h2>Draw Blocks</h2>
+  <div class="dshape"><button class="tb" id="shPrev" aria-label="Previous shape">‹</button><span id="shName"></span><button class="tb" id="shNext" aria-label="Next shape">›</button></div>
+  <canvas id="dc"></canvas>
+  <div class="tools">
+    <button class="tb on" data-tool="pen" title="Pencil" aria-label="Pencil">✏️</button>
+    <button class="tb" data-tool="erase" title="Eraser" aria-label="Eraser">🧽</button>
+    <button class="tb" data-tool="fill" title="Fill" aria-label="Fill">🪣</button>
+    <button class="tb" data-tool="pick" title="Eyedropper" aria-label="Eyedropper">💧</button>
+    <button class="tb" id="tMirror" title="Mirror drawing" aria-label="Mirror drawing">⇋</button>
+    <button class="tb on" id="tGrid" title="Pixel grid" aria-label="Pixel grid">#</button>
+  </div>
+  <div class="tools">
+    <button class="tb on" data-size="1" aria-label="Brush size 1">1</button><button class="tb" data-size="2" aria-label="Brush size 2">2</button><button class="tb" data-size="3" aria-label="Brush size 3">3</button>
+    <button class="tb" id="tUndo" aria-label="Undo">↶</button><button class="tb" id="tRedo" aria-label="Redo">↷</button><button class="tb" id="tClear" aria-label="Clear">🗑</button>
+  </div>
+  <div class="tools" id="dSwatches"></div>
+  <button class="btn" id="dSave" style="width:min(390px,100%)">Save to Colors</button>
+</div>
+
 <div class="screen" id="settings">
   <button class="back" data-go="menu" aria-label="Back">‹</button>
   <div class="card">
     <h2>Settings</h2>
     <div class="set">Sound <button class="btn b2" id="sSound"></button></div>
     <div class="set">Vibration <button class="btn b2" id="sVibe"></button></div>
-    <div class="set">Theme <button class="btn" id="sTheme"></button></div>
     <div class="set">Progress <button class="btn b3" id="sReset">Reset</button></div>
   </div>
 </div>
@@ -191,13 +235,27 @@ let stars = store.get('stars', {}); // level -> 1..3
 // ---------- themes ----------
 const THEMES = [
   { name: 'Neon',   bg: ['#1a0b3d', '#3b0d5c', '#0b2a5c'], a: ['#ff4fd8', '#4fd8ff', '#ffd84f'], cols: ['#ff4fd8', '#4fd8ff', '#ffd84f', '#7dff6a', '#ff6b4f', '#a65cff', '#4fffc1'] },
+  { name: 'Pink',     bg: ['#2a0a1f', '#4a1238', '#3a0a2a'], a: ['#ff4f9a', '#ff8fc8', '#ffd6e8'], cols: ['#ff6fb5', '#ff8fc8', '#ffb3d9', '#ff4f9a', '#e86fff', '#ffc2e0', '#ff9eb5'] },
+  { name: 'Sky Blue', bg: ['#061a33', '#0b2f55', '#0a3a5c'], a: ['#2f9bff', '#7fd6ff', '#d6f4ff'], cols: ['#4fc3ff', '#7fd6ff', '#2f9bff', '#9ee3ff', '#5fb8ff', '#c2ecff', '#3fe0ff'] },
+  { name: 'Mint',     bg: ['#04241c', '#0a3a2c', '#08302e'], a: ['#1fbf88', '#7dffd0', '#e0fff3'], cols: ['#4fffc1', '#7dffd0', '#2fe0a0', '#b0ffe4', '#5fd8ff', '#c8ff8a', '#3fffa0'] },
+  { name: 'Lavender', bg: ['#1a1033', '#2a1a4f', '#201640'], a: ['#9a6bff', '#c9a8ff', '#f0e6ff'], cols: ['#b38aff', '#c9a8ff', '#9a6bff', '#e0ccff', '#ff9ee8', '#8ab4ff', '#d68aff'] },
+  { name: 'Mono',     bg: ['#111114', '#1c1c22', '#16161a'], a: ['#6f6f7d', '#9a9aa8', '#e0e0e6'], cols: ['#ffffff', '#e0e0e6', '#c2c2cc', '#a4a4b0', '#868694', '#d0d0d8', '#b0b0bb'] },
   { name: 'Candy',  bg: ['#3d0b2a', '#5c0d3b', '#5c2a1b'], a: ['#ff7aa8', '#7ac8ff', '#fff07a'], cols: ['#ff7aa8', '#ffb36b', '#fff07a', '#8affc1', '#7ac8ff', '#c58aff', '#ff8a8a'] },
   { name: 'Ocean',  bg: ['#04122e', '#0b2a4a', '#053d4a'], a: ['#2f7bff', '#2fd3ff', '#5ff2c4'], cols: ['#2fd3ff', '#2f7bff', '#5ff2c4', '#b0f0ff', '#7a5cff', '#ff9f5c', '#ffe45c'] },
   { name: 'Sunset', bg: ['#2b0a12', '#4a1420', '#3d230a'], a: ['#ff5c3a', '#ffb02e', '#ffe45c'], cols: ['#ff5c3a', '#ffb02e', '#ffe45c', '#ff3a7a', '#c13aff', '#3affb0', '#3ac8ff'] },
 ];
-const pal = () => THEMES[settings.theme].cols;
+if (!Array.isArray(settings.custom) || settings.custom.length !== 7) settings.custom = THEMES[0].cols.slice();
+const lum = h => { const n = parseInt(h.slice(1), 16); return (n >> 16) * .3 + (n >> 8 & 255) * .59 + (n & 255) * .11; };
+function theme() {
+  if (settings.theme !== 'custom') return THEMES[settings.theme] || THEMES[0];
+  const c = settings.custom, byL = c.slice().sort((x, y) => lum(x) - lum(y));
+  return { name: 'Mine', cols: c, a: [byL[1], byL[3], byL[6]], bg: [mix(byL[0], .86), mix(byL[2], .8), mix(byL[4], .84)] };
+}
+// darken a hex colour toward black by `k` (0..1)
+function mix(h, k) { const n = parseInt(h.slice(1), 16), m = v => Math.round(v * (1 - k)); return `rgb(${m(n >> 16)},${m(n >> 8 & 255)},${m(n & 255)})`; }
+const pal = () => theme().cols;
 function applyTheme() {
-  const t = THEMES[settings.theme], s = document.documentElement.style;
+  const t = theme(), s = document.documentElement.style;
   t.bg.forEach((c, i) => s.setProperty('--bg' + (i + 1), c));
   t.a.forEach((c, i) => s.setProperty('--a' + (i + 1), c));
   document.querySelector('meta[name=theme-color]').content = t.bg[0];
@@ -289,10 +347,6 @@ const sfx = {
   bad: () => tone(160, .18, 'sawtooth', .05, 0, 90),
   clear: (lines, combo) => { const base = 440 * Math.pow(2, Math.min(combo, 12) / 12); [1, 1.25, 1.5, 2, 2.5, 3].slice(0, 2 + lines).forEach((m, i) => tone(base * m, .22, 'triangle', .1, i * .06)); tone(90, .3, 'sine', .2, 0, 40); },
   over: () => [440, 370, 311, 220].forEach((f, i) => tone(f, .3, 'triangle', .1, i * .18)),
-  boom: () => { tone(110, .5, 'sawtooth', .18, 0, 30); tone(60, .6, 'sine', .3, 0, 25); },
-  laser: () => { tone(1400, .35, 'sawtooth', .07, 0, 180); tone(700, .35, 'square', .05, .05, 120); },
-  swap: () => [400, 600, 800].forEach((f, i) => tone(f, .1, 'triangle', .08, i * .05)),
-  gift: () => [880, 1175, 1568].forEach((f, i) => tone(f, .15, 'sine', .1, i * .07)),
   win: () => [523, 659, 784, 1046, 784, 1046].forEach((f, i) => tone(f, .25, 'triangle', .1, i * .1)),
 };
 const vibe = ms => { if (settings.vibe && navigator.vibrate) try { navigator.vibrate(ms); } catch {} };
@@ -303,7 +357,7 @@ function layout() {
   dpr = Math.min(2, window.devicePixelRatio || 1); W = innerWidth; H = innerHeight;
   cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const top = 120, bottom = 84; // HUD above, power-up bar below
+  const top = 120, bottom = 16;
   bsize = Math.min(W - 32, (H - top - bottom - 16) / 1.5, 520);
   cell = bsize / N; bx = (W - bsize) / 2;
   const trayH = cell * 3.6;
@@ -312,7 +366,7 @@ function layout() {
   trayCell = Math.min(cell * .55, (slotW - 14) / 5);
   trayY = by + bsize + trayH / 2;
 }
-addEventListener('resize', layout);
+addEventListener('resize', () => { layout(); if (screen === 'draw') renderDraw(true); });
 const slotCenter = i => [trayLeft + slotW * (i + .5), trayY];
 const trayPos = (p, i) => { const [cx, cy] = slotCenter(i); return [cx - p.w * trayCell / 2, cy - p.h * trayCell / 2]; };
 
@@ -329,15 +383,19 @@ function shade(hex, a) {
 function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 // flat square block: solid face, thin light top edge, thin dark bottom edge.
 // `tile` = [r,c] paints that slice of the player's picture instead of a colour.
-function drawBlock(x, y, s, col, a = 1, tile) {
+// `skin` = the player's 16x16 drawing, painted over the block colour (transparent pixels show the colour).
+function drawBlock(x, y, s, col, a = 1, tile, c = ctx, skin = skinImg) {
   const b = Math.max(1.5, s * .07);
-  ctx.globalAlpha = a;
-  if (tile) ctx.drawImage(picCanvas, tile[1] * 64, tile[0] * 64, 64, 64, x, y, s, s);
-  else { ctx.fillStyle = col; ctx.fillRect(x, y, s, s); }
-  ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(x, y, s, b);
-  ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(x, y + s - b, s, b);
-  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.strokeRect(x + .5, y + .5, s - 1, s - 1);
-  ctx.globalAlpha = 1;
+  c.globalAlpha = a;
+  if (tile) c.drawImage(picCanvas, tile[1] * 64, tile[0] * 64, 64, 64, x, y, s, s);
+  else {
+    c.fillStyle = col; c.fillRect(x, y, s, s);
+    if (skin) { c.imageSmoothingEnabled = false; c.drawImage(skin, x, y, s, s); c.imageSmoothingEnabled = true; }
+  }
+  c.fillStyle = 'rgba(255,255,255,.3)'; c.fillRect(x, y, s, b);
+  c.fillStyle = 'rgba(0,0,0,.22)'; c.fillRect(x, y + s - b, s, b);
+  c.lineWidth = 1; c.strokeStyle = 'rgba(0,0,0,.35)'; c.strokeRect(x + .5, y + .5, s - 1, s - 1);
+  c.globalAlpha = 1;
 }
 function drawPiece(p, x, y, s, a = 1, col) { const c = col || pal()[p.ci]; for (const [r, cc] of p.cells) drawBlock(x + cc * s, y + r * s, s, c, a); }
 
@@ -368,68 +426,16 @@ function newTray() {
 }
 function startGame(mode, level = 0) {
   const def = mode === 'level' ? levelDef(level) : null;
-  G = { mode, level, def, grid: def ? levelGrid(def) : emptyGrid(), pop: emptyGrid(), clearing: [], tray: [], score: 0, shown: 0, moves: 0, combo: 0, sinceClear: 0, over: false, won: false, endT: 0, paused: false, pw: { bomb: 1, laser: 1, swap: 1 }, aim: null, aimCell: null, stuckT: null,
+  G = { mode, level, def, grid: def ? levelGrid(def) : emptyGrid(), pop: emptyGrid(), clearing: [], tray: [], score: 0, shown: 0, moves: 0, combo: 0, sinceClear: 0, over: false, won: false, endT: 0, paused: false, 
     rev: mode === 'picture' ? emptyGrid() : null, revealed: 0 };
   for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (G.grid[r][c] !== null) G.pop[r][c] = now + (r + c) * 35;
   parts = []; popups = []; beams = []; drag = null;
-  newTray(); updateHud(); show(null); renderPower();
-  $('#hud').classList.add('on'); $('#power').classList.add('on');
+  newTray(); updateHud(); show(null);
+  $('#hud').classList.add('on');
 }
-
-// ---------- power-ups ----------
-const PW = { bomb: '💣', laser: '⚡', swap: '🔄' };
-function renderPower() {
-  if (!G) return;
-  document.querySelectorAll('[data-pw]').forEach(b => { const k = b.dataset.pw; b.querySelector('b').textContent = G.pw[k]; b.disabled = !G.pw[k]; b.classList.toggle('aim', G.aim === k); });
-}
-function award() {
-  const keys = Object.keys(PW), k = keys[Math.floor(Math.random() * keys.length)];
-  G.pw[k]++; renderPower(); sfx.gift();
-  popup('+1 ' + PW[k], W / 2, by + bsize / 2 + 56, '#fff', 30, 1500);
-}
-function aimCells(k, r, c) {
-  const out = [];
-  if (k === 'bomb') { for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const R = r + i, C = c + j; if (R >= 0 && C >= 0 && R < N && C < N) out.push([R, C]); } }
-  else for (let i = 0; i < N; i++) { out.push([r, i]); if (i !== r) out.push([i, c]); }
-  return out;
-}
-const cellAt = (x, y) => { const c = Math.floor((x - bx) / cell), r = Math.floor((y - by) / cell); return r >= 0 && c >= 0 && r < N && c < N ? { r, c } : null; };
 function bumpScore() { const sc = $('#score'); sc.classList.remove('bump'); void sc.offsetWidth; sc.classList.add('bump'); }
-function usePower(k, r, c) {
-  let n = 0; G.stuckT = null;
-  for (const [R, C] of aimCells(k, r, c)) if (G.grid[R][C] !== null) {
-    G.clearing.push({ r: R, c: C, ci: G.grid[R][C], t0: now + Math.hypot(R - r, C - c) * 40, burst: false });
-    G.grid[R][C] = null; n++;
-  }
-  G.pw[k]--; G.aim = null; G.aimCell = null;
-  const x = bx + (c + .5) * cell, y = by + (r + .5) * cell;
-  if (k === 'laser') { beams.push({ h: 1, i: r, t0: now, col: '#ffffff' }, { h: 0, i: c, t0: now, col: THEMES[settings.theme].a[1] }); sfx.laser(); }
-  else { burst(x, y, '#ffb02e', 50, 13); burst(x, y, '#ff4f4f', 30, 8); sfx.boom(); }
-  shake = 24; vibe(70);
-  if (n) { G.score += n * 5; popup('+' + n * 5, x, y, '#fff', 28); bumpScore(); }
-  $('#power').classList.remove('nudge');
-  renderPower(); updateHud();
-  if (G.def && G.score >= G.def.target) return endGame(true);
-  checkStuck();
-}
-function useSwap() {
-  G.pw.swap--; G.stuckT = null; newTray(); sfx.swap();
-  for (let i = 0; i < 3; i++) { const [x, y] = slotCenter(i); burst(x, y, pal()[i * 2], 14, 5); }
-  $('#power').classList.remove('nudge'); renderPower(); checkStuck();
-}
-// out of moves: with power-ups left, give a 3s countdown to use one (drawn in drawGame), else game over
-function checkStuck() {
-  G.stuckT = null;
-  if (G.tray.some(t => !t.used && canPlace(G.grid, t))) { $('#power').classList.remove('nudge'); return; }
-  if (G.pw.bomb + G.pw.laser + G.pw.swap > 0) { G.stuckT = now; G.tick = 0; $('#power').classList.add('nudge'); return; }
-  endGame(false);
-}
-$('#power').addEventListener('click', e => {
-  const b = e.target.closest('[data-pw]'); if (!b || !G || G.over || G.won || screen) return;
-  const k = b.dataset.pw; if (!G.pw[k]) return;
-  sfx.click();
-  if (k === 'swap') useSwap(); else { G.aim = G.aim === k ? null : k; G.aimCell = null; renderPower(); }
-});
+function checkStuck() { if (!G.tray.some(t => !t.used && canPlace(G.grid, t))) endGame(false); }
+
 function updateHud() {
   $('#best').textContent = G && G.mode === 'level' ? '★' + (stars[G.level] || 0) : best;
   $('#modeLbl').textContent = G && G.mode === 'level' ? 'Level ' + G.level : 'Score';
@@ -461,14 +467,13 @@ function place(p, r0, c0) {
     const pts = (lines * 10 + (lines - 1) * 20 * lines) * Math.max(1, G.combo);
     gain += pts;
     const empty = G.grid.every(row => row.every(v => v === null));
-    if (empty) { gain += 300; popup('BOARD CLEAR! +300', W / 2, by + bsize / 2 + 50, THEMES[settings.theme].a[2], 30, 1600); confetti(); }
+    if (empty) { gain += 300; popup('BOARD CLEAR! +300', W / 2, by + bsize / 2 + 50, theme().a[2], 30, 1600); confetti(); }
     const words = ['', 'Nice!', 'Great!', 'Amazing!', 'Incredible!', 'UNREAL!', 'GODLIKE!'];
     popup(words[Math.min(lines, 6)], W / 2, by + bsize / 2 - 30, col, 34 + lines * 6, 1300);
-    if (G.combo > 1) popup('COMBO x' + G.combo, W / 2, by + bsize / 2 + 14, THEMES[settings.theme].a[1], 26 + Math.min(G.combo, 8) * 2, 1300);
+    if (G.combo > 1) popup('COMBO x' + G.combo, W / 2, by + bsize / 2 + 14, theme().a[1], 26 + Math.min(G.combo, 8) * 2, 1300);
     popup('+' + pts, cx, cy, '#fff', 26);
     shake = Math.min(22, 5 + lines * 4 + G.combo);
     sfx.clear(lines, G.combo); vibe(lines > 1 ? [20, 30, 40] : 25);
-    if (lines >= 3 || G.combo % 3 === 0) setTimeout(() => G && award(), 350);
   } else {
     if (++G.sinceClear >= 3) G.combo = 0;
     sfx.place(); vibe(8);
@@ -532,14 +537,8 @@ function dragTarget() {
   const c = Math.round((px - bx) / cell), r = Math.round((py - by) / cell);
   return fits(G.grid, p.cells, r, c) ? { r, c } : null;
 }
-let aimDown = false;
 cv.addEventListener('pointerdown', e => {
   if (!G || G.over || G.won || screen) return;
-  if (G.aim) {
-    const cc = cellAt(e.clientX, e.clientY);
-    if (cc) { G.aimCell = cc; aimDown = true; try { cv.setPointerCapture(e.pointerId); } catch {} return; }
-    G.aim = null; renderPower(); // tapped off-board: cancel aiming
-  }
   const i = slotAt(e.clientX, e.clientY); if (i < 0) return;
   const p = G.tray[i]; if (!p || p.used) return;
   drag = { i, x: e.clientX, y: e.clientY, off: e.pointerType === 'mouse' ? 0 : cell * 1.8, t0: now };
@@ -547,17 +546,8 @@ cv.addEventListener('pointerdown', e => {
   try { cv.setPointerCapture(e.pointerId); } catch {}
   sfx.pick();
 });
-cv.addEventListener('pointermove', e => {
-  if (G && G.aim) G.aimCell = cellAt(e.clientX, e.clientY);
-  if (drag) { drag.x = e.clientX; drag.y = e.clientY; drag.tgt = dragTarget(); }
-});
+cv.addEventListener('pointermove', e => { if (drag) { drag.x = e.clientX; drag.y = e.clientY; drag.tgt = dragTarget(); } });
 const release = e => {
-  if (aimDown) {
-    aimDown = false;
-    const cc = cellAt(e.clientX, e.clientY);
-    if (e.type === 'pointerup' && cc && G && G.aim) usePower(G.aim, cc.r, cc.c);
-    return;
-  }
   if (!drag) return;
   const p = G.tray[drag.i], t = dragTarget();
   if (t) place(p, t.r, t.c);
@@ -576,10 +566,12 @@ addEventListener('keydown', e => { if (e.key === 'Escape' && G && !G.over && !G.
 function show(id) {
   screen = id;
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
-  if (id === 'menu' || id === 'levels' || id === 'settings' || id === 'picture') { $('#hud').classList.remove('on'); $('#power').classList.remove('on', 'nudge'); G = null; }
+  if (id === 'menu' || id === 'levels' || id === 'settings' || id === 'picture' || id === 'colors' || id === 'draw') { $('#hud').classList.remove('on'); G = null; }
   if (id === 'menu') $('#menuBest').textContent = best ? 'Best: ' + best : '';
   if (id === 'levels') buildLevels();
   if (id === 'settings') syncSettings();
+  if (id === 'colors') buildColors();
+  if (id === 'draw') openDraw();
 }
 function pause() { if (G) { show('pause'); } }
 function resume() { show(null); }
@@ -595,12 +587,10 @@ $('#levelGrid').addEventListener('click', e => { const b = e.target.closest('[da
 function syncSettings() {
   $('#sSound').textContent = settings.sound ? 'On' : 'Off';
   $('#sVibe').textContent = settings.vibe ? 'On' : 'Off';
-  $('#sTheme').textContent = THEMES[settings.theme].name;
 }
 const saveSettings = () => { store.set('settings', settings); syncSettings(); };
 $('#sSound').onclick = () => { settings.sound = !settings.sound; saveSettings(); sfx.click(); };
 $('#sVibe').onclick = () => { settings.vibe = !settings.vibe; saveSettings(); vibe(30); sfx.click(); };
-$('#sTheme').onclick = () => { settings.theme = (settings.theme + 1) % THEMES.length; applyTheme(); saveSettings(); sfx.click(); };
 $('#sReset').onclick = () => { if (confirm('Reset best score and level stars?')) { best = 0; stars = {}; store.set('best', 0); store.set('stars', {}); sfx.click(); } };
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-go]'); if (!b) return;
@@ -633,6 +623,170 @@ $('#picFile').onchange = e => { const f = e.target.files[0]; if (f) loadPic(URL.
 $('#picPlay').onclick = () => { if (picReady) { sfx.click(); startGame('picture'); } };
 { const saved = store.get('pic', null); if (saved) loadPic(saved, false); }
 
+// ---------- colours & block designs ----------
+let skins = store.get('skins', []); // player drawings: 16x16 PNG data URLs
+if (!Array.isArray(skins)) skins = [];
+if (typeof settings.skin !== 'number') settings.skin = -1;
+let skinImg = null;
+function imgOf(url, cb) { const im = new Image(); im.onload = () => cb(im); im.src = url; }
+function loadSkin() { skinImg = null; const u = skins[settings.skin]; if (u) imgOf(u, im => skinImg = im); }
+const saveSet = () => store.set('settings', settings);
+function buildPalList() {
+  const all = THEMES.map((t, i) => [i, t]).concat([['custom', { name: 'My palette', cols: settings.custom }]]);
+  $('#palList').innerHTML = all.map(([i, t]) => `<button class="pal ${settings.theme === i ? 'on' : ''}" data-pal="${i}">${t.cols.map(c => `<i style="background:${c}"></i>`).join('')}<span>${t.name}</span></button>`).join('');
+}
+function buildColors() {
+  buildPalList();
+  $('#customRow').innerHTML = settings.custom.map((c, i) => `<input type="color" value="${c}" data-ci="${i}" aria-label="My palette colour ${i + 1}">`).join('');
+  const list = $('#skinList');
+  list.innerHTML = `<div class="skin ${settings.skin < 0 ? 'on' : ''}"><button class="pick" data-skin="-1">Plain</button></div>` +
+    skins.map((u, i) => `<div class="skin ${settings.skin === i ? 'on' : ''}"><button class="pick" data-skin="${i}" aria-label="Design ${i + 1}"><canvas width="48" height="48"></canvas></button><button class="del" data-del="${i}" aria-label="Delete design ${i + 1}">×</button></div>`).join('');
+  list.querySelectorAll('canvas').forEach((c, i) => imgOf(skins[i], im => drawBlock(0, 0, 48, pal()[i % 7], 1, null, c.getContext('2d'), im)));
+}
+$('#palList').addEventListener('click', e => {
+  const b = e.target.closest('[data-pal]'); if (!b) return;
+  sfx.click(); settings.theme = b.dataset.pal === 'custom' ? 'custom' : +b.dataset.pal; applyTheme(); saveSet(); buildColors();
+});
+// rebuild only the palette list while picking, so the open colour picker isn't destroyed
+$('#customRow').addEventListener('input', e => {
+  const i = e.target.dataset.ci; if (i == null) return;
+  settings.custom[+i] = e.target.value; settings.theme = 'custom'; applyTheme(); saveSet(); buildPalList();
+});
+$('#skinList').addEventListener('click', e => {
+  const d = e.target.closest('[data-del]');
+  if (d) {
+    const i = +d.dataset.del; if (!confirm('Delete this design?')) return;
+    skins.splice(i, 1); store.set('skins', skins);
+    if (settings.skin === i) settings.skin = -1; else if (settings.skin > i) settings.skin--;
+    saveSet(); loadSkin(); buildColors(); return;
+  }
+  const b = e.target.closest('[data-skin]'); if (!b) return;
+  sfx.click(); settings.skin = +b.dataset.skin; saveSet(); loadSkin(); buildColors();
+});
+
+// ---------- block drawing editor ----------
+// One 16x16 tile is the source of truth; every cell of the shown shape mirrors it,
+// so whatever you draw on any cell is exactly how each block looks in game.
+const T = 16, tileC = document.createElement('canvas'); tileC.width = tileC.height = T;
+const tctx = tileC.getContext('2d', { willReadFrequently: true });
+const dc = $('#dc'), dctx = dc.getContext('2d');
+const DSHAPES = [['Square', [[0,0],[0,1],[1,0],[1,1]]], ['Single', [[0,0]]], ['L', [[0,0],[1,0],[2,0],[2,1]]], ['T', [[0,0],[0,1],[0,2],[1,1]]],
+  ['Line', [[0,0],[0,1],[0,2]]], ['Big Square', [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]]]];
+const D = { shape: 0, tool: 'pen', size: 1, color: '#ffffff', mirror: false, grid: true, undo: [], redo: [], last: null, down: false, cp: 0, ox: 0, oy: 0, size_px: 0 };
+function openDraw() {
+  tctx.clearRect(0, 0, T, T); D.undo = []; D.redo = [];
+  const u = skins[settings.skin];
+  if (u) imgOf(u, im => { tctx.drawImage(im, 0, 0); renderDraw(); });
+  buildSwatches(); renderDraw(true);
+}
+function buildSwatches() {
+  const cols = [...new Set([...pal(), '#ffffff', '#000000'])];
+  $('#dSwatches').innerHTML = cols.map(c => `<button class="sw ${c === D.color ? 'on' : ''}" data-col="${c}" style="background:${c}" aria-label="Colour ${c}"></button>`).join('') +
+    `<input type="color" id="dCol" value="${D.color}" aria-label="Any colour">`;
+}
+function renderDraw(resize) {
+  const cells = DSHAPES[D.shape][1], w = Math.max(...cells.map(c => c[1])) + 1, h = Math.max(...cells.map(c => c[0])) + 1;
+  if (resize) {
+    D.size_px = Math.max(160, Math.min(W - 32, H - 450, 340));
+    dc.width = dc.height = D.size_px * dpr; dc.style.width = dc.style.height = D.size_px + 'px';
+    D.cp = Math.floor((D.size_px - 16) / Math.max(w, h) / T) * T; // multiple of 16 keeps pixels crisp
+    D.ox = (D.size_px - w * D.cp) / 2; D.oy = (D.size_px - h * D.cp) / 2;
+    $('#shName').textContent = DSHAPES[D.shape][0];
+  }
+  dctx.setTransform(dpr, 0, 0, dpr, 0, 0); dctx.clearRect(0, 0, D.size_px, D.size_px);
+  for (const [r, c] of cells) {
+    const x = D.ox + c * D.cp, y = D.oy + r * D.cp;
+    drawBlock(x, y, D.cp, pal()[D.shape % 7], 1, null, dctx, tileC);
+    if (!D.grid) continue;
+    dctx.strokeStyle = 'rgba(255,255,255,.14)'; dctx.lineWidth = 1; dctx.beginPath();
+    for (let k = 1; k < T; k++) { const o = Math.round(k * D.cp / T) + .5; dctx.moveTo(x + o, y); dctx.lineTo(x + o, y + D.cp); dctx.moveTo(x, y + o); dctx.lineTo(x + D.cp, y + o); }
+    dctx.stroke();
+  }
+}
+function pixAt(e) { // -> [px, py, cellIndex] in tile space, or null when off the shape
+  const b = dc.getBoundingClientRect(), x = e.clientX - b.left - D.ox, y = e.clientY - b.top - D.oy;
+  const c = Math.floor(x / D.cp), r = Math.floor(y / D.cp);
+  const k = DSHAPES[D.shape][1].findIndex(([a, q]) => a === r && q === c);
+  if (k < 0) return null;
+  return [Math.min(T - 1, Math.floor((x - c * D.cp) / D.cp * T)), Math.min(T - 1, Math.floor((y - r * D.cp) / D.cp * T)), k];
+}
+function snapshot() { D.undo.push(tctx.getImageData(0, 0, T, T)); if (D.undo.length > 60) D.undo.shift(); D.redo = []; }
+function plot(px, py) {
+  const o = Math.floor((D.size - 1) / 2), pts = D.mirror ? [[px, py], [T - 1 - px, py]] : [[px, py]];
+  for (const [x, y] of pts) {
+    if (D.tool === 'erase') tctx.clearRect(x - o, y - o, D.size, D.size);
+    else { tctx.fillStyle = D.color; tctx.fillRect(x - o, y - o, D.size, D.size); }
+  }
+}
+function line(a, b) {
+  const n = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]), 1);
+  for (let i = 0; i <= n; i++) plot(Math.round(a[0] + (b[0] - a[0]) * i / n), Math.round(a[1] + (b[1] - a[1]) * i / n));
+}
+function flood(px, py) {
+  const img = tctx.getImageData(0, 0, T, T), d = img.data, at = (x, y) => (y * T + x) * 4;
+  const t0 = Array.from(d.slice(at(px, py), at(px, py) + 4));
+  const n = parseInt(D.color.slice(1), 16), fc = [n >> 16, n >> 8 & 255, n & 255, 255];
+  if (t0.every((v, i) => v === fc[i])) return;
+  const st = [[px, py]];
+  while (st.length) {
+    const [x, y] = st.pop(); if (x < 0 || y < 0 || x >= T || y >= T) continue;
+    const i = at(x, y); if (d[i] !== t0[0] || d[i + 1] !== t0[1] || d[i + 2] !== t0[2] || d[i + 3] !== t0[3]) continue;
+    d.set(fc, i); st.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+  }
+  tctx.putImageData(img, 0, 0);
+}
+function setTool(t) { D.tool = t; document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t)); }
+dc.addEventListener('pointerdown', e => {
+  const p = pixAt(e); if (!p) return;
+  if (D.tool === 'pick') {
+    const d = tctx.getImageData(p[0], p[1], 1, 1).data;
+    if (d[3]) { D.color = '#' + [d[0], d[1], d[2]].map(v => v.toString(16).padStart(2, '0')).join(''); setTool('pen'); buildSwatches(); }
+    return;
+  }
+  snapshot();
+  if (D.tool === 'fill') { flood(p[0], p[1]); if (D.mirror) flood(T - 1 - p[0], p[1]); renderDraw(); return; }
+  D.down = true; D.last = p; plot(p[0], p[1]); renderDraw();
+  try { dc.setPointerCapture(e.pointerId); } catch {}
+});
+dc.addEventListener('pointermove', e => {
+  if (!D.down) return;
+  const p = pixAt(e); if (!p) { D.last = null; return; }
+  if (D.last && D.last[2] === p[2]) line(D.last, p); else plot(p[0], p[1]); // no lines jumping between cells
+  D.last = p; renderDraw();
+});
+const penUp = () => { D.down = false; D.last = null; };
+dc.addEventListener('pointerup', penUp); dc.addEventListener('pointercancel', penUp);
+document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => { sfx.click(); setTool(b.dataset.tool); });
+document.querySelectorAll('[data-size]').forEach(b => b.onclick = () => { sfx.click(); D.size = +b.dataset.size; document.querySelectorAll('[data-size]').forEach(x => x.classList.toggle('on', x === b)); });
+$('#tMirror').onclick = () => { sfx.click(); D.mirror = !D.mirror; $('#tMirror').classList.toggle('on', D.mirror); };
+$('#tGrid').onclick = () => { sfx.click(); D.grid = !D.grid; $('#tGrid').classList.toggle('on', D.grid); renderDraw(); };
+function undoRedo(from, to) { if (!from.length) return; to.push(tctx.getImageData(0, 0, T, T)); tctx.putImageData(from.pop(), 0, 0); renderDraw(); }
+$('#tUndo').onclick = () => { sfx.click(); undoRedo(D.undo, D.redo); };
+$('#tRedo').onclick = () => { sfx.click(); undoRedo(D.redo, D.undo); };
+$('#tClear').onclick = () => { sfx.click(); snapshot(); tctx.clearRect(0, 0, T, T); renderDraw(); };
+$('#shPrev').onclick = () => { sfx.click(); D.shape = (D.shape + DSHAPES.length - 1) % DSHAPES.length; renderDraw(true); };
+$('#shNext').onclick = () => { sfx.click(); D.shape = (D.shape + 1) % DSHAPES.length; renderDraw(true); };
+$('#dSwatches').addEventListener('click', e => {
+  const b = e.target.closest('[data-col]'); if (!b) return;
+  D.color = b.dataset.col; if (D.tool !== 'fill') setTool('pen'); buildSwatches();
+});
+$('#dSwatches').addEventListener('input', e => {
+  if (e.target.id !== 'dCol') return;
+  D.color = e.target.value; document.querySelectorAll('.sw').forEach(s => s.classList.remove('on')); if (D.tool !== 'fill') setTool('pen');
+});
+$('#dSave').onclick = () => {
+  if (skins.length >= 30) return alert('You already have 30 designs. Delete one in Colors first.');
+  skins.push(tileC.toDataURL('image/png')); store.set('skins', skins);
+  settings.skin = skins.length - 1; saveSet(); loadSkin(); sfx.win(); show('colors');
+};
+addEventListener('keydown', e => {
+  if (screen !== 'draw' || !(e.ctrlKey || e.metaKey)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'z') { e.preventDefault(); e.shiftKey ? undoRedo(D.redo, D.undo) : undoRedo(D.undo, D.redo); }
+  else if (k === 'y') { e.preventDefault(); undoRedo(D.redo, D.undo); }
+});
+loadSkin();
+
 $('#pauseBtn').onclick = () => { sfx.click(); pause(); };
 
 // ---------- render loop ----------
@@ -659,7 +813,7 @@ function drawGame(dt) {
   ctx.save();
   if (shake > .3) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);
   // board
-  const glow = THEMES[settings.theme].a[0];
+  const glow = theme().a[0];
   ctx.shadowColor = glow; ctx.shadowBlur = 30 + Math.sin(now / 600) * 10;
   ctx.fillStyle = 'rgba(10,4,28,.8)'; rr(bx - 8, by - 8, bsize + 16, bsize + 16, 10); ctx.fill();
   ctx.shadowBlur = 0;
@@ -704,13 +858,6 @@ function drawGame(dt) {
     hl.cols.forEach(c => ctx.fillRect(bx + c * cell, by, cell, bsize));
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
-  if (G.aim && G.aimCell) {
-    const k = G.aim, { r, c } = G.aimCell, col = k === 'bomb' ? '#ff5c3a' : '#4fd8ff';
-    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .35 + Math.sin(now / 80) * .15; ctx.fillStyle = col;
-    for (const [R, C] of aimCells(k, r, c)) ctx.fillRect(bx + C * cell, by + R * cell, cell, cell);
-    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(bx + c * cell + 2, by + r * cell + 2, cell - 4, cell - 4);
-  }
   // clearing cells: wait (wave delay), flash, spin & shrink, burst
   G.clearing = G.clearing.filter(q => {
     const k = (now - q.t0) / 380, x = bx + q.c * cell, y = by + q.r * cell, col = pal()[q.ci];
@@ -742,23 +889,6 @@ function drawGame(dt) {
   if (G.won && G.rev) {
     ctx.globalAlpha = clamp01((now - G.endT - 300) / 700);
     ctx.drawImage(picCanvas, bx, by, bsize, bsize); ctx.globalAlpha = 1;
-  }
-  // out-of-moves countdown (frozen while paused)
-  if (G.stuckT !== null) {
-    if (screen) G.stuckT += dt * 1000;
-    const left = 3 - (now - G.stuckT) / 1000;
-    if (left <= 0) { G.stuckT = null; $('#power').classList.remove('nudge'); endGame(false); }
-    else {
-      const n = Math.ceil(left), k = left - Math.floor(left) || 1;
-      if (n !== G.tick) { G.tick = n; tone(n === 1 ? 660 : 880, .09, 'square', .07); vibe(15); }
-      ctx.fillStyle = 'rgba(8,3,20,.5)'; ctx.fillRect(bx, by, bsize, bsize);
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.save(); ctx.translate(W / 2, by + bsize / 2 - 10); ctx.scale(1 + k * .5, 1 + k * .5); ctx.globalAlpha = .4 + (1 - k) * .6;
-      ctx.font = `900 ${cell * 2}px system-ui,sans-serif`; ctx.fillStyle = '#fff'; ctx.shadowColor = '#ff4f4f'; ctx.shadowBlur = 30;
-      ctx.fillText(n, 0, 0); ctx.restore();
-      ctx.font = `800 ${Math.max(16, cell * .38)}px system-ui,sans-serif`; ctx.fillStyle = '#fff';
-      ctx.fillText('Out of moves! Use a power-up?', W / 2, by + bsize / 2 + cell * 1.3);
-    }
   }
   // tray
   G.tray.forEach((p, i) => {
