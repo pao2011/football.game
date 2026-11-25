@@ -67,6 +67,13 @@ h2{font-size:30px;font-weight:900;text-align:center}
 .row .btn{flex:1}
 .set{display:flex;justify-content:space-between;align-items:center;width:100%;font-weight:800;font-size:17px}
 .set .btn{width:auto;min-width:120px;padding:10px 14px;font-size:15px}
+#power{position:fixed;left:0;right:0;bottom:0;padding:0 16px calc(env(safe-area-inset-bottom) + 14px);display:flex;justify-content:center;gap:16px;opacity:0;pointer-events:none;transform:translateY(20px);transition:.35s}
+#power.on{opacity:1;pointer-events:auto;transform:none}
+.pw{position:relative;width:64px;height:56px;border:0;border-radius:14px;background:rgba(255,255,255,.12);font-size:26px;cursor:pointer;box-shadow:0 4px 0 rgba(0,0,0,.35);transition:transform .15s,background .15s}
+.pw b{position:absolute;top:-7px;right:-7px;min-width:22px;height:22px;border-radius:11px;background:var(--a1);color:#fff;font-size:13px;line-height:22px;padding:0 5px;font-family:system-ui,sans-serif}
+.pw:disabled{opacity:.35;cursor:default}
+.pw.aim{background:var(--a2);transform:translateY(-6px) scale(1.08);box-shadow:0 0 22px var(--a2)}
+#power.nudge .pw:not(:disabled){animation:pulse .6s infinite}
 .back{position:fixed;top:calc(env(safe-area-inset-top) + 12px);left:16px;width:48px;height:48px;border-radius:14px;border:0;background:rgba(255,255,255,.12);color:#fff;font-size:22px;font-weight:900;cursor:pointer}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
@@ -83,6 +90,12 @@ h2{font-size:30px;font-weight:900;text-align:center}
     <div id="lvlbox"><div class="lbl" id="targetLbl"></div><div id="bar"><div id="barFill"></div></div></div>
   </div>
   <div class="side"><div class="lbl">Best</div><div id="best">0</div></div>
+</div>
+
+<div id="power">
+  <button class="pw" data-pw="bomb" aria-label="Bomb: clear a 3x3 area">💣<b>0</b></button>
+  <button class="pw" data-pw="laser" aria-label="Laser: clear a row and column">⚡<b>0</b></button>
+  <button class="pw" data-pw="swap" aria-label="Swap: new pieces">🔄<b>0</b></button>
 </div>
 
 <div class="screen on" id="menu">
@@ -148,7 +161,7 @@ h2{font-size:30px;font-weight:900;text-align:center}
 'use strict';
 const $ = s => document.querySelector(s);
 const cv = $('#c'), ctx = cv.getContext('2d');
-const N = 8, LEVELS = 30;
+const N = 8, LEVELS = 60;
 
 // ---------- storage (may be unavailable: private mode, previews) ----------
 const store = {
@@ -220,15 +233,17 @@ function fullLines(g, cells = [], r0 = 0, c0 = 0) {
 // ---------- levels ----------
 function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function levelDef(n) {
-  const target = 150 + n * 120 + n * n * 5;
-  return { n, target, fill: Math.min(30, 3 + Math.floor(n * 0.9)), par: Math.ceil(target / 24), mirror: n % 3 === 0 };
+  const target = 150 + n * 70 + n * n;
+  // symmetry: 0 random, 1 left/right mirror, 2 four-way mirror
+  return { n, target, fill: Math.min(32, 3 + Math.floor(n * 0.6)), par: Math.ceil(target / 24), sym: n % 5 === 0 ? 2 : n % 3 === 0 ? 1 : 0 };
 }
 function levelGrid(def) {
   const rng = mulberry(def.n * 7919), g = emptyGrid();
   let placed = 0, guard = 0;
-  while (placed < def.fill && guard++ < 500) {
-    const r = Math.floor(rng() * N), c = Math.floor(rng() * (def.mirror ? N / 2 : N)), ci = Math.floor(rng() * 7);
-    const spots = def.mirror ? [[r, c], [r, N - 1 - c]] : [[r, c]];
+  while (placed < def.fill && guard++ < 800) {
+    const r = Math.floor(rng() * (def.sym === 2 ? N / 2 : N)), c = Math.floor(rng() * (def.sym ? N / 2 : N)), ci = Math.floor(rng() * 7);
+    const m = N - 1;
+    const spots = def.sym === 2 ? [[r, c], [r, m - c], [m - r, c], [m - r, m - c]] : def.sym ? [[r, c], [r, m - c]] : [[r, c]];
     if (spots.some(([a, b]) => g[a][b] !== null)) continue;
     spots.forEach(([a, b]) => g[a][b] = ci);
     const fl = fullLines(g);
@@ -258,6 +273,10 @@ const sfx = {
   bad: () => tone(160, .18, 'sawtooth', .05, 0, 90),
   clear: (lines, combo) => { const base = 440 * Math.pow(2, Math.min(combo, 12) / 12); [1, 1.25, 1.5, 2, 2.5, 3].slice(0, 2 + lines).forEach((m, i) => tone(base * m, .22, 'triangle', .1, i * .06)); tone(90, .3, 'sine', .2, 0, 40); },
   over: () => [440, 370, 311, 220].forEach((f, i) => tone(f, .3, 'triangle', .1, i * .18)),
+  boom: () => { tone(110, .5, 'sawtooth', .18, 0, 30); tone(60, .6, 'sine', .3, 0, 25); },
+  laser: () => { tone(1400, .35, 'sawtooth', .07, 0, 180); tone(700, .35, 'square', .05, .05, 120); },
+  swap: () => [400, 600, 800].forEach((f, i) => tone(f, .1, 'triangle', .08, i * .05)),
+  gift: () => [880, 1175, 1568].forEach((f, i) => tone(f, .15, 'sine', .1, i * .07)),
   win: () => [523, 659, 784, 1046, 784, 1046].forEach((f, i) => tone(f, .25, 'triangle', .1, i * .1)),
 };
 const vibe = ms => { if (settings.vibe && navigator.vibrate) try { navigator.vibrate(ms); } catch {} };
@@ -268,11 +287,11 @@ function layout() {
   dpr = Math.min(2, window.devicePixelRatio || 1); W = innerWidth; H = innerHeight;
   cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const top = 120;
-  bsize = Math.min(W - 32, (H - top - 16) / 1.5, 520);
+  const top = 120, bottom = 84; // HUD above, power-up bar below
+  bsize = Math.min(W - 32, (H - top - bottom - 16) / 1.5, 520);
   cell = bsize / N; bx = (W - bsize) / 2;
   const trayH = cell * 3.6;
-  by = top + Math.max(0, (H - top - bsize - trayH) / 2);
+  by = top + Math.max(0, (H - top - bottom - bsize - trayH) / 2);
   slotW = Math.min(W, bsize + 40) / 3; trayLeft = (W - slotW * 3) / 2;
   trayCell = Math.min(cell * .55, (slotW - 14) / 5);
   trayY = by + bsize + trayH / 2;
@@ -292,14 +311,20 @@ function shade(hex, a) {
   return shadeCache[key] = `rgb(${m(n >> 16)},${m(n >> 8 & 255)},${m(n & 255)})`;
 }
 function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function quad(a, b, c, d, e, f, g, h, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(c, d); ctx.lineTo(e, f); ctx.lineTo(g, h); ctx.closePath(); ctx.fill(); }
+// solid square block with a bevel: lit top/left, shaded bottom/right, glossy face
 function drawBlock(x, y, s, col, a = 1) {
-  const p = s * .05, w = s - p * 2, r = s * .2;
+  const b = s * .15, X = x + s, Y = y + s;
   ctx.globalAlpha = a;
-  const g = ctx.createLinearGradient(x, y, x, y + s);
-  g.addColorStop(0, shade(col, .4)); g.addColorStop(.5, col); g.addColorStop(1, shade(col, -.35));
-  ctx.fillStyle = g; rr(x + p, y + p, w, w, r); ctx.fill();
-  ctx.lineWidth = Math.max(1, s * .06); ctx.strokeStyle = shade(col, -.5); ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,.4)'; rr(x + p * 2.6, y + p * 2.2, w - p * 3.2, w * .28, r * .6); ctx.fill();
+  quad(x, y, X, y, X - b, y + b, x + b, y + b, shade(col, .5));
+  quad(x, y, x + b, y + b, x + b, Y - b, x, Y, shade(col, .22));
+  quad(X, y, X, Y, X - b, Y - b, X - b, y + b, shade(col, -.25));
+  quad(x, Y, x + b, Y - b, X - b, Y - b, X, Y, shade(col, -.45));
+  const g = ctx.createLinearGradient(x, y + b, X, Y - b);
+  g.addColorStop(0, shade(col, .18)); g.addColorStop(1, shade(col, -.1));
+  ctx.fillStyle = g; ctx.fillRect(x + b, y + b, s - 2 * b, s - 2 * b);
+  ctx.fillStyle = 'rgba(255,255,255,.22)'; ctx.fillRect(x + b, y + b, (s - 2 * b) * .45, (s - 2 * b) * .18);
+  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.strokeRect(x + .5, y + .5, s - 1, s - 1);
   ctx.globalAlpha = 1;
 }
 function drawPiece(p, x, y, s, a = 1, col) { const c = col || pal()[p.ci]; for (const [r, cc] of p.cells) drawBlock(x + cc * s, y + r * s, s, c, a); }
@@ -331,12 +356,66 @@ function newTray() {
 }
 function startGame(mode, level = 0) {
   const def = mode === 'level' ? levelDef(level) : null;
-  G = { mode, level, def, grid: def ? levelGrid(def) : emptyGrid(), pop: emptyGrid(), clearing: [], tray: [], score: 0, shown: 0, moves: 0, combo: 0, sinceClear: 0, over: false, won: false, endT: 0, paused: false };
+  G = { mode, level, def, grid: def ? levelGrid(def) : emptyGrid(), pop: emptyGrid(), clearing: [], tray: [], score: 0, shown: 0, moves: 0, combo: 0, sinceClear: 0, over: false, won: false, endT: 0, paused: false, pw: { bomb: 1, laser: 1, swap: 1 }, aim: null, aimCell: null };
   for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (G.grid[r][c] !== null) G.pop[r][c] = now + (r + c) * 35;
   parts = []; popups = []; beams = []; drag = null;
-  newTray(); updateHud(); show(null);
-  $('#hud').classList.add('on');
+  newTray(); updateHud(); show(null); renderPower();
+  $('#hud').classList.add('on'); $('#power').classList.add('on');
 }
+
+// ---------- power-ups ----------
+const PW = { bomb: '💣', laser: '⚡', swap: '🔄' };
+function renderPower() {
+  if (!G) return;
+  document.querySelectorAll('[data-pw]').forEach(b => { const k = b.dataset.pw; b.querySelector('b').textContent = G.pw[k]; b.disabled = !G.pw[k]; b.classList.toggle('aim', G.aim === k); });
+}
+function award() {
+  const keys = Object.keys(PW), k = keys[Math.floor(Math.random() * keys.length)];
+  G.pw[k]++; renderPower(); sfx.gift();
+  popup('+1 ' + PW[k], W / 2, by + bsize / 2 + 56, '#fff', 30, 1500);
+}
+function aimCells(k, r, c) {
+  const out = [];
+  if (k === 'bomb') { for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const R = r + i, C = c + j; if (R >= 0 && C >= 0 && R < N && C < N) out.push([R, C]); } }
+  else for (let i = 0; i < N; i++) { out.push([r, i]); if (i !== r) out.push([i, c]); }
+  return out;
+}
+const cellAt = (x, y) => { const c = Math.floor((x - bx) / cell), r = Math.floor((y - by) / cell); return r >= 0 && c >= 0 && r < N && c < N ? { r, c } : null; };
+function bumpScore() { const sc = $('#score'); sc.classList.remove('bump'); void sc.offsetWidth; sc.classList.add('bump'); }
+function usePower(k, r, c) {
+  let n = 0;
+  for (const [R, C] of aimCells(k, r, c)) if (G.grid[R][C] !== null) {
+    G.clearing.push({ r: R, c: C, ci: G.grid[R][C], t0: now + Math.hypot(R - r, C - c) * 40, burst: false });
+    G.grid[R][C] = null; n++;
+  }
+  G.pw[k]--; G.aim = null; G.aimCell = null;
+  const x = bx + (c + .5) * cell, y = by + (r + .5) * cell;
+  if (k === 'laser') { beams.push({ h: 1, i: r, t0: now, col: '#ffffff' }, { h: 0, i: c, t0: now, col: THEMES[settings.theme].a[1] }); sfx.laser(); }
+  else { burst(x, y, '#ffb02e', 50, 13); burst(x, y, '#ff4f4f', 30, 8); sfx.boom(); }
+  shake = 24; vibe(70);
+  if (n) { G.score += n * 5; popup('+' + n * 5, x, y, '#fff', 28); bumpScore(); }
+  $('#power').classList.remove('nudge');
+  renderPower(); updateHud();
+  if (G.def && G.score >= G.def.target) return endGame(true);
+  checkStuck();
+}
+function useSwap() {
+  G.pw.swap--; newTray(); sfx.swap();
+  for (let i = 0; i < 3; i++) { const [x, y] = slotCenter(i); burst(x, y, pal()[i * 2], 14, 5); }
+  $('#power').classList.remove('nudge'); renderPower(); checkStuck();
+}
+// out of moves only ends the game once no power-up is left to rescue it
+function checkStuck() {
+  if (G.tray.some(t => !t.used && canPlace(G.grid, t))) return;
+  if (G.pw.bomb + G.pw.laser + G.pw.swap > 0) { popup('No room! Use a power-up', W / 2, by + bsize / 2, '#fff', 24, 1800); $('#power').classList.add('nudge'); return; }
+  endGame(false);
+}
+$('#power').addEventListener('click', e => {
+  const b = e.target.closest('[data-pw]'); if (!b || !G || G.over || G.won || screen) return;
+  const k = b.dataset.pw; if (!G.pw[k]) return;
+  sfx.click();
+  if (k === 'swap') useSwap(); else { G.aim = G.aim === k ? null : k; G.aimCell = null; renderPower(); }
+});
 function updateHud() {
   $('#best').textContent = G && G.mode === 'level' ? '★' + (stars[G.level] || 0) : best;
   $('#modeLbl').textContent = G && G.mode === 'level' ? 'Level ' + G.level : 'Score';
@@ -371,17 +450,17 @@ function place(p, r0, c0) {
     popup('+' + pts, cx, cy, '#fff', 26);
     shake = Math.min(22, 5 + lines * 4 + G.combo);
     sfx.clear(lines, G.combo); vibe(lines > 1 ? [20, 30, 40] : 25);
+    if (lines >= 3 || G.combo % 3 === 0) setTimeout(() => G && award(), 350);
   } else {
     if (++G.sinceClear >= 3) G.combo = 0;
     sfx.place(); vibe(8);
     burst(cx, cy, col, 6, 3);
   }
-  G.score += gain;
-  const sc = $('#score'); sc.classList.remove('bump'); void sc.offsetWidth; sc.classList.add('bump');
+  G.score += gain; bumpScore();
   if (G.tray.every(t => t.used)) newTray();
   updateHud();
   if (G.def && G.score >= G.def.target) return endGame(true);
-  if (!G.tray.some(t => !t.used && canPlace(G.grid, t))) endGame(false);
+  checkStuck();
 }
 function endGame(won) {
   if (won) {
@@ -430,8 +509,14 @@ function dragTarget() {
   const c = Math.round((px - bx) / cell), r = Math.round((py - by) / cell);
   return fits(G.grid, p.cells, r, c) ? { r, c } : null;
 }
+let aimDown = false;
 cv.addEventListener('pointerdown', e => {
   if (!G || G.over || G.won || screen) return;
+  if (G.aim) {
+    const cc = cellAt(e.clientX, e.clientY);
+    if (cc) { G.aimCell = cc; aimDown = true; try { cv.setPointerCapture(e.pointerId); } catch {} return; }
+    G.aim = null; renderPower(); // tapped off-board: cancel aiming
+  }
   const i = slotAt(e.clientX, e.clientY); if (i < 0) return;
   const p = G.tray[i]; if (!p || p.used) return;
   drag = { i, x: e.clientX, y: e.clientY, off: e.pointerType === 'mouse' ? 0 : cell * 1.8, t0: now };
@@ -439,8 +524,17 @@ cv.addEventListener('pointerdown', e => {
   try { cv.setPointerCapture(e.pointerId); } catch {}
   sfx.pick();
 });
-cv.addEventListener('pointermove', e => { if (drag) { drag.x = e.clientX; drag.y = e.clientY; drag.tgt = dragTarget(); } });
+cv.addEventListener('pointermove', e => {
+  if (G && G.aim) G.aimCell = cellAt(e.clientX, e.clientY);
+  if (drag) { drag.x = e.clientX; drag.y = e.clientY; drag.tgt = dragTarget(); }
+});
 const release = e => {
+  if (aimDown) {
+    aimDown = false;
+    const cc = cellAt(e.clientX, e.clientY);
+    if (e.type === 'pointerup' && cc && G && G.aim) usePower(G.aim, cc.r, cc.c);
+    return;
+  }
   if (!drag) return;
   const p = G.tray[drag.i], t = dragTarget();
   if (t) place(p, t.r, t.c);
@@ -459,7 +553,7 @@ addEventListener('keydown', e => { if (e.key === 'Escape' && G && !G.over && !G.
 function show(id) {
   screen = id;
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
-  if (id === 'menu' || id === 'levels' || id === 'settings') { $('#hud').classList.remove('on'); G = null; }
+  if (id === 'menu' || id === 'levels' || id === 'settings') { $('#hud').classList.remove('on'); $('#power').classList.remove('on', 'nudge'); G = null; }
   if (id === 'menu') $('#menuBest').textContent = best ? 'Best: ' + best : '';
   if (id === 'levels') buildLevels();
   if (id === 'settings') syncSettings();
@@ -523,11 +617,13 @@ function drawGame(dt) {
   // board
   const glow = THEMES[settings.theme].a[0];
   ctx.shadowColor = glow; ctx.shadowBlur = 30 + Math.sin(now / 600) * 10;
-  ctx.fillStyle = 'rgba(10,4,28,.7)'; rr(bx - 10, by - 10, bsize + 20, bsize + 20, 22); ctx.fill();
+  ctx.fillStyle = 'rgba(10,4,28,.8)'; rr(bx - 8, by - 8, bsize + 16, bsize + 16, 10); ctx.fill();
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 2; ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,.05)';
-  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) { rr(bx + c * cell + 2, by + r * cell + 2, cell - 4, cell - 4, cell * .18); ctx.fill(); }
+  ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 2; ctx.stroke();
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    ctx.fillStyle = (r + c) % 2 ? 'rgba(255,255,255,.045)' : 'rgba(255,255,255,.07)';
+    ctx.fillRect(bx + c * cell + 1, by + r * cell + 1, cell - 2, cell - 2);
+  }
 
   // preview: ghost + lines that would clear take the piece's colour
   let ghost = null, hl = null;
@@ -558,6 +654,13 @@ function drawGame(dt) {
     hl.rows.forEach(r => ctx.fillRect(bx, by + r * cell, bsize, cell));
     hl.cols.forEach(c => ctx.fillRect(bx + c * cell, by, cell, bsize));
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
+  if (G.aim && G.aimCell) {
+    const k = G.aim, { r, c } = G.aimCell, col = k === 'bomb' ? '#ff5c3a' : '#4fd8ff';
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .35 + Math.sin(now / 80) * .15; ctx.fillStyle = col;
+    for (const [R, C] of aimCells(k, r, c)) ctx.fillRect(bx + C * cell, by + R * cell, cell, cell);
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeRect(bx + c * cell + 2, by + r * cell + 2, cell - 4, cell - 4);
   }
   // clearing cells: wait (wave delay), flash, spin & shrink, burst
   G.clearing = G.clearing.filter(q => {
